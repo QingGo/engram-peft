@@ -10,7 +10,10 @@ class EngramConfig:
 
     ngram_sizes: List[int] = field(default_factory=lambda: [2, 3])
     hash_heads: int = 8
-    memory_capacity_per_head: Optional[List[int]] = None
+    # 词表容量按 N-gram 阶数设置，值默认取 V3 词表的五倍 (如 [129280*5, 129280*5])
+    memory_capacity_per_ngram: List[int] = field(
+        default_factory=lambda: [129280 * 5, 129280 * 5]
+    )
     embedding_dim_per_head: int = 128
     hidden_dim: int = 2560
     num_branches: int = 1
@@ -20,9 +23,15 @@ class EngramConfig:
     seed: int = 42
 
     def __post_init__(self) -> None:
-        """Set default dilation to max(ngram_sizes) if not provided."""
+        """Set default values if not provided."""
         if self.dilation is None:
             self.dilation = max(self.ngram_sizes) if self.ngram_sizes else 1
+
+        # Ensure capacity list matches ngram_sizes count
+        if len(self.memory_capacity_per_ngram) != len(self.ngram_sizes):
+            # Fallback to default if mismatch
+            default_cap = 129280 * 5
+            self.memory_capacity_per_ngram = [default_cap] * len(self.ngram_sizes)
 
     @property
     def total_embedding_dim(self) -> int:

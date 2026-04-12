@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 from engram_peft.layer import ContextAwareGating, EngramLayer
 from engram_peft.config import EngramConfig
 from engram_peft.compression import TokenizerCompressor
+from engram_peft.hashing import calculate_global_primes
 
 
 def test_context_aware_gating_initialization() -> None:
@@ -177,7 +178,14 @@ def test_engram_layer_forward() -> None:
     compressor.lookup = torch.arange(100)  # Mock lookup table
     compressor.compressed_vocab_size = 100
 
-    layer = EngramLayer(config, layer_id=1, compressor=compressor)
+    primes = calculate_global_primes(
+        layer_ids=[1],
+        ngram_sizes=config.ngram_sizes,
+        hash_heads=config.hash_heads,
+        memory_capacity_per_ngram=config.memory_capacity_per_ngram,
+    )[1]
+
+    layer = EngramLayer(config, layer_id=1, primes=primes, compressor=compressor)
 
     batch_size = 2
     seq_len = 8
@@ -199,7 +207,13 @@ def test_engram_layer_indices_priority() -> None:
     config = EngramConfig(
         ngram_sizes=[2], hash_heads=1, embedding_dim_per_head=16, hidden_dim=32
     )
-    layer = EngramLayer(config, layer_id=1)
+    primes = calculate_global_primes(
+        layer_ids=[1],
+        ngram_sizes=config.ngram_sizes,
+        hash_heads=config.hash_heads,
+        memory_capacity_per_ngram=config.memory_capacity_per_ngram,
+    )[1]
+    layer = EngramLayer(config, layer_id=1, primes=primes)
 
     batch_size = 1
     seq_len = 4
@@ -226,7 +240,13 @@ def test_engram_layer_sparse_gradients() -> None:
     config = EngramConfig(
         ngram_sizes=[2], hash_heads=1, embedding_dim_per_head=16, hidden_dim=32
     )
-    layer = EngramLayer(config, layer_id=1)
+    primes = calculate_global_primes(
+        layer_ids=[1],
+        ngram_sizes=config.ngram_sizes,
+        hash_heads=config.hash_heads,
+        memory_capacity_per_ngram=config.memory_capacity_per_ngram,
+    )[1]
+    layer = EngramLayer(config, layer_id=1, primes=primes)
 
     batch_size = 1
     seq_len = 2
@@ -264,7 +284,13 @@ def test_engram_layer_output_shape() -> None:
         hidden_dim=32,
         num_branches=4,
     )
-    layer = EngramLayer(config, layer_id=1)
+    primes = calculate_global_primes(
+        layer_ids=[1],
+        ngram_sizes=config.ngram_sizes,
+        hash_heads=config.hash_heads,
+        memory_capacity_per_ngram=config.memory_capacity_per_ngram,
+    )[1]
+    layer = EngramLayer(config, layer_id=1, primes=primes)
 
     batch_size = 2
     seq_len = 5

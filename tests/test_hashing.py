@@ -2,7 +2,7 @@ import torch
 import numpy as np
 from scipy.stats import chisquare  # type: ignore[import-untyped]
 from sympy import isprime  # type: ignore[import-untyped]
-from engram_peft.hashing import MultiHeadHash
+from engram_peft.hashing import MultiHeadHash, calculate_global_primes
 
 
 def test_prime_table_sizes() -> None:
@@ -11,18 +11,46 @@ def test_prime_table_sizes() -> None:
     """
     ngram_sizes = [2, 3, 4]
     hash_heads = 4
-    mhh = MultiHeadHash(layer_id=1, ngram_sizes=ngram_sizes, hash_heads=hash_heads)
+    memory_capacity_per_ngram = [1000, 2000, 3000]
+    primes_dict = calculate_global_primes(
+        layer_ids=[1],
+        ngram_sizes=ngram_sizes,
+        hash_heads=hash_heads,
+        memory_capacity_per_ngram=memory_capacity_per_ngram,
+    )
+    mhh = MultiHeadHash(
+        layer_id=1,
+        primes=primes_dict[1],
+        ngram_sizes=ngram_sizes,
+        hash_heads=hash_heads,
+    )
 
     for p in mhh.primes:
         assert isprime(p), f"Table size {p} is not prime"
 
-    # Test with custom capacities
-    custom_caps = [100, 200, 300, 400, 500, 600, 700, 800]
-    mhh_custom = MultiHeadHash(
-        layer_id=1, ngram_sizes=[2], hash_heads=8, memory_capacity_per_head=custom_caps
+
+def test_global_prime_uniqueness() -> None:
+    """
+    测试用例 7：验证全局质数唯一性
+    """
+    layer_ids = [1, 15]
+    ngram_sizes = [2, 3]
+    hash_heads = 8
+    memory_capacity_per_ngram = [10000, 20000]
+
+    primes_dict = calculate_global_primes(
+        layer_ids=layer_ids,
+        ngram_sizes=ngram_sizes,
+        hash_heads=hash_heads,
+        memory_capacity_per_ngram=memory_capacity_per_ngram,
     )
-    for p in mhh_custom.primes:
-        assert isprime(p), f"Custom table size {p} is not prime"
+
+    all_primes = []
+    for layer_id in layer_ids:
+        all_primes.extend(primes_dict[layer_id])
+
+    assert len(all_primes) == len(set(all_primes)), "Primes are not globally unique"
+    assert len(all_primes) == len(layer_ids) * len(ngram_sizes) * hash_heads
 
 
 def test_reproducibility() -> None:
@@ -30,8 +58,27 @@ def test_reproducibility() -> None:
     测试用例 2：验证相同输入产生相同哈希（可复现性）
     """
     seed = 42
-    mhh1 = MultiHeadHash(layer_id=1, seed=seed)
-    mhh2 = MultiHeadHash(layer_id=1, seed=seed)
+    ngram_sizes = [2, 3]
+    hash_heads = 8
+    memory_capacity_per_ngram = [10000, 20000]
+    primes_dict = calculate_global_primes(
+        [1], ngram_sizes, hash_heads, memory_capacity_per_ngram
+    )
+
+    mhh1 = MultiHeadHash(
+        layer_id=1,
+        primes=primes_dict[1],
+        ngram_sizes=ngram_sizes,
+        hash_heads=hash_heads,
+        seed=seed,
+    )
+    mhh2 = MultiHeadHash(
+        layer_id=1,
+        primes=primes_dict[1],
+        ngram_sizes=ngram_sizes,
+        hash_heads=hash_heads,
+        seed=seed,
+    )
 
     # Use .long() to ensure it's a LongTensor
     tokens = torch.randint(0, 10000, (4, 32)).long()
@@ -57,10 +104,19 @@ def test_uniform_distribution() -> None:
     测试用例 3：验证哈希分布均匀（卡方检验 p>0.05）
     """
     # Use a smaller prime for better statistics with fewer samples
-    p = 1009
+    p_base = 1009
+    ngram_sizes = [2]
+    hash_heads = 1
+    primes_dict = calculate_global_primes([1], ngram_sizes, hash_heads, [p_base])
+
     mhh = MultiHeadHash(
-        layer_id=1, ngram_sizes=[2], hash_heads=1, memory_capacity_per_head=[p], seed=42
+        layer_id=1,
+        primes=primes_dict[1],
+        ngram_sizes=ngram_sizes,
+        hash_heads=hash_heads,
+        seed=42,
     )
+    p = mhh.primes[0]
 
     # Generate many unique N-grams
     num_samples = 20000
@@ -87,7 +143,16 @@ def test_batch_processing() -> None:
     """
     测试用例 4：验证 batch 处理正确
     """
-    mhh = MultiHeadHash(layer_id=1, ngram_sizes=[2, 3], hash_heads=2)
+    ngram_sizes = [2, 3]
+    hash_heads = 2
+    primes_dict = calculate_global_primes([1], ngram_sizes, hash_heads, [1000, 2000])
+
+    mhh = MultiHeadHash(
+        layer_id=1,
+        primes=primes_dict[1],
+        ngram_sizes=ngram_sizes,
+        hash_heads=hash_heads,
+    )
 
     batch_size = 4
     seq_len = 16
@@ -111,11 +176,16 @@ def test_ngram_suffix_correctness() -> None:
     """
     测试用例 5：验证 N-gram 后缀提取和手动计算的一致性
     """
+    p_base = 1009
+    ngram_sizes = [2]
+    hash_heads = 1
+    primes_dict = calculate_global_primes([1], ngram_sizes, hash_heads, [p_base])
+
     mhh = MultiHeadHash(
         layer_id=1,
-        ngram_sizes=[2],
-        hash_heads=1,
-        memory_capacity_per_head=[1009],
+        primes=primes_dict[1],
+        ngram_sizes=ngram_sizes,
+        hash_heads=hash_heads,
         seed=42,
     )
 
@@ -157,8 +227,24 @@ def test_layer_specific_hashing() -> None:
     测试用例 6：验证不同层的哈希函数不同
     """
     seed = 42
-    mhh_layer1 = MultiHeadHash(layer_id=1, seed=seed)
-    mhh_layer2 = MultiHeadHash(layer_id=2, seed=seed)
+    ngram_sizes = [2, 3]
+    hash_heads = 8
+    primes_dict = calculate_global_primes([1, 2], ngram_sizes, hash_heads, [1000, 2000])
+
+    mhh_layer1 = MultiHeadHash(
+        layer_id=1,
+        primes=primes_dict[1],
+        ngram_sizes=ngram_sizes,
+        hash_heads=hash_heads,
+        seed=seed,
+    )
+    mhh_layer2 = MultiHeadHash(
+        layer_id=2,
+        primes=primes_dict[2],
+        ngram_sizes=ngram_sizes,
+        hash_heads=hash_heads,
+        seed=seed,
+    )
 
     tokens = torch.randint(0, 10000, (1, 32)).long()
 

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Optional, cast, Dict, Tuple
+from typing import Optional, cast, Dict, Tuple, List
 from engram_peft.config import EngramConfig
 from engram_peft.compression import TokenizerCompressor
 from engram_peft.hashing import MultiHeadHash
@@ -189,6 +189,7 @@ class EngramLayer(nn.Module):
         self,
         config: EngramConfig,
         layer_id: int,
+        primes: List[int],
         compressor: Optional[TokenizerCompressor] = None,
     ):
         """
@@ -197,6 +198,7 @@ class EngramLayer(nn.Module):
         Args:
             config: EngramConfig containing hyperparameters.
             layer_id: The ID of this layer.
+            primes: List of pre-calculated primes for this layer's heads.
             compressor: Optional TokenizerCompressor for token mapping.
         """
         super().__init__()
@@ -207,9 +209,9 @@ class EngramLayer(nn.Module):
         # 2. Multi-Head Hashing
         self.multi_head_hash = MultiHeadHash(
             layer_id=layer_id,
+            primes=primes,
             ngram_sizes=config.ngram_sizes,
             hash_heads=config.hash_heads,
-            memory_capacity_per_head=config.memory_capacity_per_head,
             seed=config.seed,
             tokenizer_vocab_size=(
                 compressor.compressed_vocab_size if compressor else 129280
