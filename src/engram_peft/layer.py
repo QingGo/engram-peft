@@ -110,8 +110,14 @@ class ContextAwareGating(nn.Module):
 
         # Step 4: Calculate gating α_t = σ( (h_t_norm · k_t_norm) / sqrt(D) )
         # dot product over the last dimension D
-        dot_product = (h_t_norm * k_t_norm).sum(dim=-1)
-        alpha_t = torch.sigmoid(dot_product / (self.hidden_dim**0.5))
+        dot_product = (h_t_norm * k_t_norm).sum(dim=-1) / (self.hidden_dim**0.5)
+
+        # Stability trick from official demo:
+        # gate = gate.abs().clamp_min(1e-6).sqrt() * gate.sign()
+        stable_dot_product = (
+            dot_product.abs().clamp_min(1e-6).sqrt() * dot_product.sign()
+        )
+        alpha_t = torch.sigmoid(stable_dot_product)
 
         # Step 5: Gating modulation: ṽ_t = α_t · v_t
         if self.num_branches > 1:
@@ -180,25 +186,34 @@ class EngramLayer(nn.Module):
     """
 
     def __init__(
-        self, config: EngramConfig, compressor: Optional[TokenizerCompressor] = None
+        self,
+        config: EngramConfig,
+        layer_id: int,
+        compressor: Optional[TokenizerCompressor] = None,
     ):
         """
         Initialize the EngramLayer.
 
         Args:
             config: EngramConfig containing hyperparameters.
+            layer_id: The ID of this layer.
             compressor: Optional TokenizerCompressor for token mapping.
         """
         super().__init__()
         self.config = config
+        self.layer_id = layer_id
         self.compressor = compressor
 
         # 2. Multi-Head Hashing
         self.multi_head_hash = MultiHeadHash(
+            layer_id=layer_id,
             ngram_sizes=config.ngram_sizes,
             hash_heads=config.hash_heads,
             memory_capacity_per_head=config.memory_capacity_per_head,
             seed=config.seed,
+            tokenizer_vocab_size=(
+                compressor.compressed_vocab_size if compressor else 129280
+            ),
         )
 
         # 3. K independent embedding tables
@@ -224,10 +239,10 @@ class EngramLayer(nn.Module):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        compressed_ids: Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        compressed_ids: Optional[torch.Tensor] = None,
         hidden_states: torch.Tensor = cast(torch.Tensor, None),
-        engram_hash_indices: Optional[Dict[Tuple[int, int], torch.LongTensor]] = None,
+        engram_hash_indices: Optional[Dict[Tuple[int, int], torch.Tensor]] = None,
     ) -> torch.Tensor:
         """
         Forward pass of the EngramLayer.
@@ -256,25 +271,18 @@ class EngramLayer(nn.Module):
                         "TokenizerCompressor is required if only input_ids are provided."
                     )
                 # Use the pre-computed lookup table for fast mapping
-                compressed_ids = cast(
-                    torch.LongTensor,
-                    self.compressor.lookup.to(input_ids.device)[input_ids],
-                )
+                compressed_ids = self.compressor.lookup.to(input_ids.device)[input_ids]
 
             # Compute hashes using MultiHeadHash
             # At this point, compressed_ids is guaranteed not to be None
-            engram_hash_indices = self.multi_head_hash.compute_hashes(
-                cast(torch.LongTensor, compressed_ids)
-            )
+            engram_hash_indices = self.multi_head_hash.compute_hashes(compressed_ids)
 
         # Step 2: Retrieve vectors from K independent embedding tables
         all_embeddings = []
         for n in self.config.ngram_sizes:
             for k in range(self.config.hash_heads):
                 indices = engram_hash_indices[(n, k)]
-                # Ensure indices are on the same device as the embedding table
-                # Cast to LongTensor to satisfy mypy
-                indices_on_device = cast(torch.LongTensor, indices.to(hidden_states.device))
+                indices_on_device = indices.to(hidden_states.device)
                 emb_module = self.embedding_tables[f"{n}_{k}"]
                 # Cast to nn.Embedding to access forward method correctly if needed
                 emb = cast(nn.Embedding, emb_module)(indices_on_device)

@@ -31,8 +31,11 @@ def test_context_aware_gating_initialization() -> None:
         k_t = module.w_k(e_t)
         h_t_norm = module.norm_h(h_t)
         k_t_norm = module.norm_k(k_t)
-        dot_product = (h_t_norm * k_t_norm).sum(dim=-1)
-        alpha_t = torch.sigmoid(dot_product / (hidden_dim**0.5))
+        dot_product = (h_t_norm * k_t_norm).sum(dim=-1) / (hidden_dim**0.5)
+        stable_dot_product = (
+            dot_product.abs().clamp_min(1e-6).sqrt() * dot_product.sign()
+        )
+        alpha_t = torch.sigmoid(stable_dot_product)
         v_tilde = alpha_t.unsqueeze(-1) * v_t
 
         output = module(e_t, h_t)
@@ -68,8 +71,9 @@ def test_context_aware_gating_values() -> None:
         h_norm = module.norm_h(input[1])
         k_raw = module.w_k(input[0])
         k_norm = module.norm_k(k_raw)
-        dot = (h_norm * k_norm).sum(dim=-1)
-        alpha = torch.sigmoid(dot / (module.hidden_dim**0.5))
+        dot = (h_norm * k_norm).sum(dim=-1) / (module.hidden_dim**0.5)
+        stable_dot = dot.abs().clamp_min(1e-6).sqrt() * dot.sign()
+        alpha = torch.sigmoid(stable_dot)
         alphas.append(alpha)
 
     handle = module.register_forward_hook(hook_fn)
@@ -171,8 +175,9 @@ def test_engram_layer_forward() -> None:
     # Mock TokenizerCompressor
     compressor = MagicMock(spec=TokenizerCompressor)
     compressor.lookup = torch.arange(100)  # Mock lookup table
+    compressor.compressed_vocab_size = 100
 
-    layer = EngramLayer(config, compressor)
+    layer = EngramLayer(config, layer_id=1, compressor=compressor)
 
     batch_size = 2
     seq_len = 8
@@ -194,7 +199,7 @@ def test_engram_layer_indices_priority() -> None:
     config = EngramConfig(
         ngram_sizes=[2], hash_heads=1, embedding_dim_per_head=16, hidden_dim=32
     )
-    layer = EngramLayer(config)
+    layer = EngramLayer(config, layer_id=1)
 
     batch_size = 1
     seq_len = 4
@@ -221,7 +226,7 @@ def test_engram_layer_sparse_gradients() -> None:
     config = EngramConfig(
         ngram_sizes=[2], hash_heads=1, embedding_dim_per_head=16, hidden_dim=32
     )
-    layer = EngramLayer(config)
+    layer = EngramLayer(config, layer_id=1)
 
     batch_size = 1
     seq_len = 2
@@ -259,7 +264,7 @@ def test_engram_layer_output_shape() -> None:
         hidden_dim=32,
         num_branches=4,
     )
-    layer = EngramLayer(config)
+    layer = EngramLayer(config, layer_id=1)
 
     batch_size = 2
     seq_len = 5

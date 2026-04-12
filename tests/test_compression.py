@@ -13,70 +13,67 @@ class TestTokenizerCompressor(unittest.TestCase):
         # Create a mock tokenizer
         self.mock_tokenizer = MagicMock(spec=PreTrainedTokenizer)
 
-        # Define a vocab of 1000 unique tokens
-        self.vocab_size = 1000
+        # Define a vocab of 10 unique tokens for testing grouping
+        self.vocab_size = 10
         self.mock_tokenizer.__len__.return_value = self.vocab_size
 
-        # Simple mapping for convert_ids_to_tokens
-        # We'll make some tokens that normalize to the same thing to test grouping
-        # But for the compression ratio test, we'll mostly use unique ones
-        def convert_ids_to_tokens(token_id: int) -> str | None:
-            if token_id < 0 or token_id >= self.vocab_size:
-                return None
+        # Simple mapping for decode and convert_ids_to_tokens
+        def decode(token_ids: list[int], skip_special_tokens: bool = False) -> str:
+            tid = token_ids[0]
+            # Create some tokens that will normalize to the same thing
+            if tid == 0:
+                return "Apple"
+            if tid == 1:
+                return "apple"
+            if tid == 2:
+                return "  apple  "
+            return f"token_{tid}"
+
+        def convert_ids_to_tokens(token_id: int) -> str:
             return f"token_{token_id}"
 
+        self.mock_tokenizer.decode.side_effect = decode
         self.mock_tokenizer.convert_ids_to_tokens.side_effect = convert_ids_to_tokens
-        self.mock_tokenizer.convert_tokens_to_string.side_effect = lambda x: x[0]
 
         self.temp_dir = tempfile.mkdtemp()
 
     def tearDown(self) -> None:
         shutil.rmtree(self.temp_dir)
 
-    def test_compression_ratio(self) -> None:
-        # With 1000 unique tokens and 23% ratio, it should truncate to 770
-        compressor = TokenizerCompressor(self.mock_tokenizer, compression_ratio=0.23)
+    def test_compression_logic(self) -> None:
+        # Test that Apple, apple, and "  apple  " all map to the same ID
+        compressor = TokenizerCompressor(self.mock_tokenizer)
 
-        # The number of unique compressed IDs should be around (1 - 0.23) * 1000 = 770
-        unique_compressed_ids = len(set(compressor.mapping.values()))
-        ratio = 1 - (unique_compressed_ids / self.vocab_size)
+        # tid 0, 1, 2 should all normalize to "apple"
+        id0 = compressor.mapping[0]
+        id1 = compressor.mapping[1]
+        id2 = compressor.mapping[2]
 
-        # Verify ratio is around 23% (0.23)
-        # Since we use 1000 tokens, it should be exactly 0.23
-        self.assertAlmostEqual(ratio, 0.23, places=2)
-        self.assertTrue(0.22 <= ratio <= 0.24)
+        self.assertEqual(id0, id1)
+        self.assertEqual(id1, id2)
+
+        # Other tokens should have different IDs
+        id3 = compressor.mapping[3]
+        self.assertNotEqual(id0, id3)
 
     def test_normalization(self) -> None:
         compressor = TokenizerCompressor(self.mock_tokenizer)
 
-        # Test NFKC and lowercasing
-        # 'Á' is \u00c1. NFKC of 'Á' is 'Á'. lowercase is 'á'.
-        # Wait, NFKC might decompose some things, but for 'Á' it's usually stable.
-        # Let's use a more complex example if needed, but 'Á' -> 'á' is a good start.
-        self.assertEqual(compressor._normalize_text("Á"), "á")
-        self.assertEqual(compressor._normalize_text("ﬁ"), "fi")
-        self.assertEqual(compressor._normalize_text("Hello"), "hello")
+        # Test NFKC, StripAccents, and lowercasing via the internal normalizer
+        def norm(text: str) -> str:
+            return str(compressor.normalizer.normalize_str(text))
+
+        # 'Á' -> StripAccents -> 'A' -> Lowercase -> 'a'
+        self.assertEqual(norm("Á"), "a")
+        self.assertEqual(norm("ﬁ"), "fi")
+        self.assertEqual(norm("Hello"), "hello")
 
         # Test space variants
-        self.assertEqual(
-            compressor._normalize_text("  \t\n  "), " "
-        )  # Merges to single space
-        self.assertEqual(
-            compressor._normalize_text("Hello  \t\n  World"), "hello world"
-        )
-
-        # Test standard normalization
-        # \u212b is ANGSTROM SIGN. NFKC of \u212b is \u00c5 (LATIN CAPITAL LETTER A WITH RING ABOVE)
-        # Then lowercase makes it \u00e5
-        self.assertEqual(compressor._normalize_text("\u212b"), "\u00e5")
-
-    def test_space_merging(self) -> None:
-        compressor = TokenizerCompressor(self.mock_tokenizer)
-        self.assertEqual(compressor._normalize_text("word1    word2"), "word1 word2")
-        self.assertEqual(compressor._normalize_text("\tword1\nword2\r"), "word1 word2")
+        self.assertEqual(norm("  \t\n  "), " ")
+        self.assertEqual(norm("Hello  \t\n  World"), "hello world")
 
     def test_save_load(self) -> None:
-        compressor = TokenizerCompressor(self.mock_tokenizer, compression_ratio=0.1)
+        compressor = TokenizerCompressor(self.mock_tokenizer)
         compressor.save_pretrained(self.temp_dir)
 
         # Load it back
@@ -84,9 +81,6 @@ class TestTokenizerCompressor(unittest.TestCase):
             self.temp_dir, self.mock_tokenizer
         )
 
-        self.assertEqual(
-            compressor.compression_ratio, loaded_compressor.compression_ratio
-        )
         self.assertEqual(compressor.vocab_size, loaded_compressor.vocab_size)
         self.assertEqual(
             compressor.compressed_vocab_size, loaded_compressor.compressed_vocab_size
@@ -94,14 +88,17 @@ class TestTokenizerCompressor(unittest.TestCase):
         self.assertEqual(compressor.mapping, loaded_compressor.mapping)
 
     def test_compress_tensor(self) -> None:
-        compressor = TokenizerCompressor(self.mock_tokenizer, compression_ratio=0.5)
+        compressor = TokenizerCompressor(self.mock_tokenizer)
 
-        input_ids = torch.tensor([0, 1, 10, 100, 999], dtype=torch.long)
+        input_ids = torch.tensor([0, 1, 2, 3], dtype=torch.long)
         compressed_ids = compressor.compress(input_ids)
 
         self.assertEqual(compressed_ids.shape, input_ids.shape)
-        self.assertEqual(compressed_ids[0].item(), compressor.mapping[0])
-        self.assertEqual(compressed_ids[4].item(), compressor.mapping[999])
+        # 0, 1, 2 should be the same
+        self.assertEqual(compressed_ids[0].item(), compressed_ids[1].item())
+        self.assertEqual(compressed_ids[1].item(), compressed_ids[2].item())
+        # 3 should be different
+        self.assertNotEqual(compressed_ids[0].item(), compressed_ids[3].item())
 
 
 if __name__ == "__main__":

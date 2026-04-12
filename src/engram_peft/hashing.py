@@ -1,53 +1,58 @@
-import torch
 import random
-from typing import List, Dict, Tuple, Optional, TypedDict
+from typing import Dict, List, Optional, Tuple, TypedDict
+
+import numpy as np
+import torch
 from sympy import isprime, nextprime  # type: ignore[import-untyped]
 
 
 class HashParams(TypedDict):
     p: int
-    a: int
-    b: int
-    weights: torch.Tensor
-    head_seed: int
+    multipliers: torch.Tensor
 
 
 class MultiHeadHash:
     """
     Implements Multi-Head Hashing as described in the paper section 2.2.
     For each N-gram order n, we employ K distinct hash heads.
-    Each head maps a compressed context (N-gram) to an index in an embedding table.
-    The hash is implemented as a multiplicative hash: (a * x + b) % prime.
+    Aligned with the official Engram demo implementation:
+    1. Uses Multiplicative-XOR hash.
+    2. Supports layer-specific seeds.
     """
 
     def __init__(
         self,
+        layer_id: int,
         ngram_sizes: List[int] = [2, 3],
         hash_heads: int = 8,
         memory_capacity_per_head: Optional[List[int]] = None,
         seed: int = 42,
+        tokenizer_vocab_size: int = 129280,  # Default for DeepSeek-V3
     ):
         """
         Initialize the MultiHeadHash.
 
         Args:
+            layer_id: The ID of the current layer (for layer-specific hashing).
             ngram_sizes: List of N-gram orders to consider.
             hash_heads: Number of hash heads per N-gram order.
             memory_capacity_per_head: List of target sizes for each hash head's embedding table.
-                                     If None, defaults to 282809 for all heads.
             seed: Random seed for generating hash parameters.
+            tokenizer_vocab_size: Size of the compressed vocabulary.
         """
+        self.layer_id = layer_id
         self.ngram_sizes = ngram_sizes
         self.hash_heads = hash_heads
         self.seed = seed
+        self.tokenizer_vocab_size = tokenizer_vocab_size
 
         num_total_heads = len(ngram_sizes) * hash_heads
         if memory_capacity_per_head is None:
-            # 282809 is the prime size mentioned in the paper, derived from 2,262,400 / 8 heads
+            # 282809 is a prime size mentioned in the paper for some configurations
+            # Defaulting to a reasonable prime if not provided
             self.memory_capacities = [282809] * num_total_heads
         else:
             if len(memory_capacity_per_head) != num_total_heads:
-                # If only one value is provided, repeat it
                 if len(memory_capacity_per_head) == 1:
                     self.memory_capacities = memory_capacity_per_head * num_total_heads
                 else:
@@ -57,129 +62,92 @@ class MultiHeadHash:
             else:
                 self.memory_capacities = memory_capacity_per_head
 
-        # Ensure all table sizes are primes
-        # We need a prime for each head.
-        self.primes = []
+        # Generate unique primes for each head
+        self.primes: List[int] = []
+        seen_primes = set()
         for cap in self.memory_capacities:
-            # Generate a unique prime for each head starting from the target capacity
-            # Using a list to satisfy the _generate_prime_candidates requirement
-            prime_list = self._generate_prime_candidates(cap)
-            # Take a prime that hasn't been used yet if possible, or just the first one
-            # To ensure uniqueness if needed, we could advance, but nextprime is deterministic.
-            # For simplicity, we'll just use the first prime >= cap.
-            # If the user wants distinct primes for each head, we can use different offsets.
-            self.primes.append(prime_list[0])
+            p_val = nextprime(cap - 1)
+            if p_val is None:
+                # Fallback or error handling
+                p = cap  # very unlikely with nextprime
+            else:
+                p = int(p_val)
 
-        # Generate (a, b) parameters for each (ngram_size, head_idx)
-        # We use a deterministic process based on the global seed and head index.
+            while p in seen_primes:
+                p_val = nextprime(p)
+                if p_val is None:
+                    p += 1
+                else:
+                    p = int(p_val)
+            seen_primes.add(p)
+            self.primes.append(p)
+
+        # Generate layer-specific multipliers
+        # Following demo: base_seed = seed + PRIME_1 * layer_id
+        PRIME_1 = 10007
+        base_seed = int(seed + PRIME_1 * int(layer_id))
+        g = np.random.default_rng(base_seed)
+
+        # half_bound calculation from demo
+        max_long = np.iinfo(np.int64).max
+        M_max = int(max_long // self.tokenizer_vocab_size)
+        half_bound = max(1, M_max // 2)
+
+        # Generate multipliers for each ngram order
+        max_ngram = max(ngram_sizes)
+        r = g.integers(low=0, high=half_bound, size=(max_ngram,), dtype=np.int64)
+        # multipliers = r * 2 + 1 (ensures odd numbers)
+        self.all_multipliers = torch.from_numpy(r * 2 + 1)
+
         self.hash_params: Dict[Tuple[int, int], HashParams] = {}
         prime_idx = 0
         for n in ngram_sizes:
             for k in range(hash_heads):
                 p = self.primes[prime_idx]
-                # Each head gets its own a, b coefficients.
-                # Use a new RNG per head seeded by (global_seed, n, k) for stability.
-                head_seed = hash((seed, n, k))
-                rng = random.Random(head_seed)
-                a = rng.randint(1, p - 1)
-                b = rng.randint(0, p - 1)
-
-                # Precompute weights for the vectorized computation in compute_hashes.
-                # If x = sum(token_i * (base ** (n-1-i))), then
-                # (a * x + b) % p = (sum(token_i * (a * base ** (n-1-i) % p)) + b) % p
-                # We'll use base = 2**32 as a way to "treat N-gram as a big integer".
-                base = 2**32
-                weights = []
-                for i in range(n):
-                    # weight_i = (a * (base ** (n-1-i))) % p
-                    w = (a * pow(base, n - 1 - i, p)) % p
-                    weights.append(w)
-
                 self.hash_params[(n, k)] = {
                     "p": p,
-                    "a": a,
-                    "b": b,
-                    "weights": torch.tensor(weights, dtype=torch.long),
-                    "head_seed": head_seed,
+                    "multipliers": self.all_multipliers[:n],
                 }
                 prime_idx += 1
 
-    def _generate_prime_candidates(self, target_size: int) -> List[int]:
-        """
-        Generate a list of prime candidates starting from target_size.
-        """
-        primes = []
-        curr = target_size
-        # Just return the first prime >= target_size as a list of one element
-        # as per the requirement for a "list of primes".
-        if isprime(curr):
-            primes.append(int(curr))
-        else:
-            p = nextprime(curr)
-            primes.append(int(p))  # type: ignore
-        return primes
-
-    def _multiplicative_xor_hash(
-        self, ngram: Tuple[int, ...], seed: int, prime: int
-    ) -> int:
-        """
-        Implementation of the multiplicative hash: (a * x + b) % prime.
-        Treats the N-gram tuple as a big integer by concatenating bits (base 2^32).
-
-        Args:
-            ngram: Tuple of token IDs.
-            seed: Seed used to generate a and b.
-            prime: The prime modulus (table size).
-        """
-        rng = random.Random(seed)
-        a = rng.randint(1, prime - 1)
-        b = rng.randint(0, prime - 1)
-
-        # Treat N-gram as a big integer (base 2^32)
-        x = 0
-        for token in ngram:
-            x = (x << 32) | (int(token) & 0xFFFFFFFF)
-
-        return (a * x + b) % prime
-
     def compute_hashes(
-        self, compressed_token_ids: torch.LongTensor
-    ) -> Dict[Tuple[int, int], torch.LongTensor]:
+        self, compressed_token_ids: torch.Tensor
+    ) -> Dict[Tuple[int, int], torch.Tensor]:
         """
-        Computes the hash indices for all N-grams and heads.
-
-        Args:
-            compressed_token_ids: Tensor of shape [batch_size, seq_len] containing token IDs.
-
-        Returns:
-            A dictionary mapping (ngram_size, head_idx) to a tensor of shape [batch_size, seq_len].
+        Computes the hash indices using Multiplicative-XOR logic.
+        mix = (tokens[0] * m[0]) ^ (tokens[1] * m[1]) ^ ...
         """
         batch_size, seq_len = compressed_token_ids.shape
         device = compressed_token_ids.device
-        results: Dict[Tuple[int, int], torch.LongTensor] = {}
+        results: Dict[Tuple[int, int], torch.Tensor] = {}
+
+        # Pad tokens to handle beginning of sequence
+        max_n = max(self.ngram_sizes)
+        padding = torch.zeros((batch_size, max_n - 1), dtype=torch.long, device=device)
+        # Use a pad token ID if available, here we just use 0 as a simple fallback
+        padded_tokens = torch.cat([padding, compressed_token_ids], dim=1)
 
         for n in self.ngram_sizes:
-            # Extract N-grams for each position t.
-            # The suffix N-gram at position t is (x'_{t-n+1}, ..., x'_t).
-            # We pad the beginning of the sequence with 0s to handle t < n-1.
-            padding = torch.zeros((batch_size, n - 1), dtype=torch.long, device=device)
-            padded_tokens = torch.cat([padding, compressed_token_ids], dim=1)
-
+            # Extract N-grams ending at each position
             # ngrams shape: [batch_size, seq_len, n]
-            # Each row i, t contains the N-gram ending at position t.
-            ngrams = padded_tokens.unfold(1, n, 1)
+            ngrams = padded_tokens[:, : seq_len + n - 1].unfold(1, n, 1)
+
+            # multipliers: [n]
+            m = self.all_multipliers[:n].to(device)
+
+            # Compute mix = XOR_i(token_i * m_i)
+            # token_i * m_i can overflow int64, which is expected for hashing
+            weighted_tokens = ngrams * m  # [batch_size, seq_len, n]
+
+            # PyTorch doesn't have a direct bitwise_xor reduce, so we do it manually
+            mix = weighted_tokens[..., 0]
+            for i in range(1, n):
+                mix = torch.bitwise_xor(mix, weighted_tokens[..., i])
 
             for k in range(self.hash_heads):
-                params = self.hash_params[(n, k)]
-                p = params["p"]
-                b = params["b"]
-                weights = params["weights"].to(device)
-
-                # Compute (sum(token_i * weight_i) + b) % p
-                # [batch_size, seq_len, n] * [n] -> [batch_size, seq_len]
-                h = torch.sum(ngrams * weights, dim=-1)
-                h = (h + b) % p
-
-                results[(n, k)] = h.long()  # type: ignore
+                p = self.hash_params[(n, k)]["p"]
+                # (mix % p) can be negative if mix is negative, so we do (mix % p + p) % p
+                h = (mix % p + p) % p
+                results[(n, k)] = h.long()
 
         return results
