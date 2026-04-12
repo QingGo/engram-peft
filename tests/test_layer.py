@@ -30,8 +30,8 @@ def test_context_aware_gating_initialization() -> None:
         # 手动计算预期输出 v_tilde
         v_t = module.w_v(e_t)
         k_t = module.w_k(e_t)
-        h_t_norm = module.norm_h(h_t)
-        k_t_norm = module.norm_k(k_t)
+        h_t_norm = module.norm_h[0](h_t)
+        k_t_norm = module.norm_k[0](k_t)
         dot_product = (h_t_norm * k_t_norm).sum(dim=-1) / (hidden_dim**0.5)
         stable_dot_product = (
             dot_product.abs().clamp_min(1e-6).sqrt() * dot_product.sign()
@@ -69,9 +69,9 @@ def test_context_aware_gating_values() -> None:
 
     def hook_fn(module: ContextAwareGating, input: Any, output: Any) -> None:
         # alpha_t 计算后的 dot_product
-        h_norm = module.norm_h(input[1])
+        h_norm = module.norm_h[0](input[1])
         k_raw = module.w_k(input[0])
-        k_norm = module.norm_k(k_raw)
+        k_norm = module.norm_k[0](k_raw)
         dot = (h_norm * k_norm).sum(dim=-1) / (module.hidden_dim**0.5)
         stable_dot = dot.abs().clamp_min(1e-6).sqrt() * dot.sign()
         alpha = torch.sigmoid(stable_dot)
@@ -221,15 +221,11 @@ def test_engram_layer_indices_priority() -> None:
 
     # Precompute hash indices
     # We'll use a specific index and verify the output depends on it
-    ngram_size = 2
-    head_idx = 0
-    indices = torch.zeros((batch_size, seq_len), dtype=torch.long)
-    indices[0, 0] = 5  # Set a specific index
-
-    engram_hash_indices = {(ngram_size, head_idx): indices}
+    indices = torch.zeros((batch_size, seq_len, 1), dtype=torch.long)
+    indices[0, 0, 0] = 5  # Set a specific index
 
     # This should work even without input_ids/compressed_ids
-    output = layer(hidden_states=hidden_states, engram_hash_indices=engram_hash_indices)
+    output = layer(hidden_states=hidden_states, engram_hash_indices=indices)
     assert output.shape == hidden_states.shape
 
 
@@ -253,19 +249,17 @@ def test_engram_layer_sparse_gradients() -> None:
     hidden_states = torch.randn(batch_size, seq_len, config.hidden_dim)
 
     # Only use index 0 and 1
-    indices = torch.tensor([[0, 1]], dtype=torch.long)
-    engram_hash_indices = {(2, 0): indices}
+    indices = torch.tensor([[[0], [1]]], dtype=torch.long)  # [B, L, total_heads]
 
-    output = layer(hidden_states=hidden_states, engram_hash_indices=engram_hash_indices)
+    output = layer(hidden_states=hidden_states, engram_hash_indices=indices)
     loss = output.pow(2).sum()
     loss.backward()
 
-    emb_module = layer.embedding_tables["2_0"]
-    embedding = cast(nn.Embedding, emb_module)
-    grad = embedding.weight.grad
+    # Access the single embedding table
+    grad = layer.embedding.weight.grad
     assert grad is not None
 
-    # Only rows 0 and 1 should have non-zero gradients
+    # Only rows 0 and 1 should have non-zero gradients (assuming offset is 0 for first head)
     assert torch.any(grad[0] != 0)
     assert torch.any(grad[1] != 0)
     if grad.shape[0] > 2:
@@ -298,8 +292,9 @@ def test_engram_layer_output_shape() -> None:
         batch_size, seq_len, config.num_branches, config.hidden_dim
     )
 
-    indices = torch.zeros((batch_size, seq_len), dtype=torch.long)
-    engram_hash_indices = {(2, 0): indices, (2, 1): indices}
+    # Create hash indices tensor with shape [B, L, total_heads]
+    total_heads = config.hash_heads * len(config.ngram_sizes)
+    indices = torch.zeros((batch_size, seq_len, total_heads), dtype=torch.long)
 
-    output = layer(hidden_states=hidden_states, engram_hash_indices=engram_hash_indices)
+    output = layer(hidden_states=hidden_states, engram_hash_indices=indices)
     assert output.shape == hidden_states.shape

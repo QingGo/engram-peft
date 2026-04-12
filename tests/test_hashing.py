@@ -86,17 +86,16 @@ def test_reproducibility() -> None:
     hashes1 = mhh1.compute_hashes(tokens)
     hashes2 = mhh2.compute_hashes(tokens)
 
-    for key in hashes1:
-        assert torch.equal(
-            hashes1[key], hashes2[key]
-        ), f"Hashes for {key} are not equal across instances with same seed"
+    # Verify same input produces same hash across instances
+    assert torch.equal(
+        hashes1, hashes2
+    ), "Hashes are not equal across instances with same seed"
 
     # Verify same instance produces same hash for same input
     hashes1_again = mhh1.compute_hashes(tokens)
-    for key in hashes1:
-        assert torch.equal(
-            hashes1[key], hashes1_again[key]
-        ), f"Hashes for {key} are not consistent within same instance"
+    assert torch.equal(
+        hashes1, hashes1_again
+    ), "Hashes are not consistent within same instance"
 
 
 def test_uniform_distribution() -> None:
@@ -125,7 +124,8 @@ def test_uniform_distribution() -> None:
     tokens[0] = torch.arange(num_samples).long()
 
     hashes = mhh.compute_hashes(tokens)
-    h_values = hashes[(2, 0)].flatten().cpu().numpy()
+    # For ngram_size=2 and hash_heads=1, the first head is at index 0
+    h_values = hashes[:, :, 0].flatten().cpu().numpy()
 
     # Count frequencies
     counts = np.bincount(h_values, minlength=p)
@@ -159,17 +159,20 @@ def test_batch_processing() -> None:
     tokens = torch.randint(0, 1000, (batch_size, seq_len)).long()
 
     hashes = mhh.compute_hashes(tokens)
+    total_heads = len(ngram_sizes) * hash_heads
+    assert hashes.shape == (
+        batch_size,
+        seq_len,
+        total_heads,
+    ), f"Incorrect shape: {hashes.shape}"
 
-    for (n, k), h_tensor in hashes.items():
-        assert h_tensor.shape == (batch_size, seq_len), f"Incorrect shape for {(n, k)}"
-
-        # Verify each sequence in batch is processed independently
-        for b in range(batch_size):
-            single_token = tokens[b : b + 1].long()
-            single_hash = mhh.compute_hashes(single_token)[(n, k)]
-            assert torch.equal(
-                h_tensor[b : b + 1], single_hash
-            ), f"Batch element {b} differs from independent processing for {(n, k)}"
+    # Verify each sequence in batch is processed independently
+    for b in range(batch_size):
+        single_token = tokens[b : b + 1].long()
+        single_hash = mhh.compute_hashes(single_token)
+        assert torch.equal(
+            hashes[b : b + 1], single_hash
+        ), f"Batch element {b} differs from independent processing"
 
 
 def test_ngram_suffix_correctness() -> None:
@@ -196,7 +199,8 @@ def test_ngram_suffix_correctness() -> None:
     # t=2: ngram=(20, 30)
     tokens = torch.tensor([[10, 20, 30]], dtype=torch.long).long()
     hashes = mhh.compute_hashes(tokens)
-    h_values = hashes[(2, 0)].flatten().tolist()
+    # For ngram_size=2 and hash_heads=1, the first head is at index 0
+    h_values = hashes[:, :, 0].flatten().tolist()
 
     # Manually compute using Multiplicative-XOR logic
     # mix = XOR_i(token_i * multiplier_i)
@@ -251,8 +255,5 @@ def test_layer_specific_hashing() -> None:
     hashes1 = mhh_layer1.compute_hashes(tokens)
     hashes2 = mhh_layer2.compute_hashes(tokens)
 
-    for key in hashes1:
-        # Different layers should produce different hashes for the same input
-        assert not torch.equal(
-            hashes1[key], hashes2[key]
-        ), f"Hashes for {key} should be different across layers"
+    # Different layers should produce different hashes for the same input
+    assert not torch.equal(hashes1, hashes2), "Hashes should be different across layers"

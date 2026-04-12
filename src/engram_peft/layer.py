@@ -47,9 +47,13 @@ class ContextAwareGating(nn.Module):
         # We use a single linear layer to project to all branches at once
         self.w_k = nn.Linear(embedding_dim, num_branches * hidden_dim, bias=False)
 
-        # Step 3: RMSNorm for h_t and k_t
-        self.norm_h = nn.RMSNorm(hidden_dim)
-        self.norm_k = nn.RMSNorm(hidden_dim)
+        # Step 3: Branch-specific RMSNorm for h_t and k_t
+        self.norm_h = nn.ModuleList(
+            [nn.RMSNorm(hidden_dim) for _ in range(num_branches)]
+        )
+        self.norm_k = nn.ModuleList(
+            [nn.RMSNorm(hidden_dim) for _ in range(num_branches)]
+        )
 
         # Step 6: Depthwise causal convolution
         # parameters are shared across branches if num_branches > 1
@@ -64,8 +68,10 @@ class ContextAwareGating(nn.Module):
             bias=True,
         )
 
-        # Step 8: RMSNorm before convolution
-        self.norm_v_tilde = nn.RMSNorm(hidden_dim)
+        # Step 8: Branch-specific RMSNorm before convolution
+        self.norm_v_tilde = nn.ModuleList(
+            [nn.RMSNorm(hidden_dim) for _ in range(num_branches)]
+        )
 
         # Initialize convolution to zero to preserve identity mapping (Y = v_tilde initially)
         self.reset_parameters()
@@ -104,9 +110,18 @@ class ContextAwareGating(nn.Module):
             k_t = k_t_raw  # [B, L, D]
             # h_t is [B, L, D]
 
-        # Step 3: RMSNorm h_t and k_t
-        h_t_norm = self.norm_h(h_t)
-        k_t_norm = self.norm_k(k_t)
+        # Step 3: Branch-specific RMSNorm h_t and k_t
+        if self.num_branches > 1:
+            h_t_norm_list = []
+            k_t_norm_list = []
+            for i in range(self.num_branches):
+                h_t_norm_list.append(self.norm_h[i](h_t[:, :, i, :]))
+                k_t_norm_list.append(self.norm_k[i](k_t[:, :, i, :]))
+            h_t_norm = torch.stack(h_t_norm_list, dim=2)
+            k_t_norm = torch.stack(k_t_norm_list, dim=2)
+        else:
+            h_t_norm = self.norm_h[0](h_t)
+            k_t_norm = self.norm_k[0](k_t)
 
         # Step 4: Calculate gating α_t = σ( (h_t_norm · k_t_norm) / sqrt(D) )
         # dot product over the last dimension D
@@ -130,21 +145,24 @@ class ContextAwareGating(nn.Module):
             v_tilde = alpha_t.unsqueeze(-1) * v_t  # [B, L, D]
 
         # Step 6 & 7: Depthwise causal convolution
-        # Prepare input for Conv1d: [N, C, L]
+        # Step 8: Branch-specific RMSNorm(ṽ) before convolution
         if self.num_branches > 1:
+            # Apply branch-specific RMSNorm
+            v_tilde_norm_list = []
+            for i in range(self.num_branches):
+                v_tilde_norm_list.append(self.norm_v_tilde[i](v_tilde[:, :, i, :]))
+            v_tilde_norm = torch.stack(v_tilde_norm_list, dim=2)
+
             # [B, L, M, D] -> [B, M, D, L] -> [B*M, D, L]
-            x = (
-                v_tilde.permute(0, 2, 3, 1)
+            x_norm = (
+                v_tilde_norm.permute(0, 2, 3, 1)
                 .reshape(batch_size * self.num_branches, self.hidden_dim, seq_len)
                 .contiguous()
             )
         else:
+            v_tilde_norm = self.norm_v_tilde[0](v_tilde)
             # [B, L, D] -> [B, D, L]
-            x = v_tilde.permute(0, 2, 1).contiguous()
-
-        # Step 8: RMSNorm(ṽ) before convolution
-        # RMSNorm expects [..., D], x is [N, D, L]
-        x_norm = self.norm_v_tilde(x.transpose(1, 2)).transpose(1, 2)
+            x_norm = v_tilde_norm.permute(0, 2, 1).contiguous()
 
         # Manual padding for causal convolution
         padding_size = (self.kernel_size - 1) * self.dilation
@@ -218,17 +236,18 @@ class EngramLayer(nn.Module):
             ),
         )
 
-        # 3. K independent embedding tables
-        # Use ModuleDict to store and register multiple embedding tables
-        self.embedding_tables = nn.ModuleDict()
-        for n in config.ngram_sizes:
-            for k in range(config.hash_heads):
-                # Use the prime capacity computed by multi_head_hash for this head
-                capacity = self.multi_head_hash.hash_params[(n, k)]["p"]
-                emb = nn.Embedding(capacity, config.embedding_dim_per_head)
-                # Weight initialization: mean 0, std 0.02
-                nn.init.normal_(emb.weight, mean=0.0, std=0.02)
-                self.embedding_tables[f"{n}_{k}"] = emb
+        # 3. Single shared embedding table with offsets
+        # Matches Demo's MultiHeadEmbedding logic
+        offsets = [0]
+        for p in primes[:-1]:
+            offsets.append(offsets[-1] + p)
+
+        self.register_buffer("offsets", torch.tensor(offsets, dtype=torch.long))
+
+        total_capacity = sum(primes)
+        self.embedding = nn.Embedding(total_capacity, config.embedding_dim_per_head)
+        # Weight initialization: mean 0, std 0.02
+        nn.init.normal_(self.embedding.weight, mean=0.0, std=0.02)
 
         # 4. Context-Aware Gating
         self.gating = ContextAwareGating(
@@ -244,7 +263,7 @@ class EngramLayer(nn.Module):
         input_ids: Optional[torch.Tensor] = None,
         compressed_ids: Optional[torch.Tensor] = None,
         hidden_states: torch.Tensor = cast(torch.Tensor, None),
-        engram_hash_indices: Optional[Dict[Tuple[int, int], torch.Tensor]] = None,
+        engram_hash_indices: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Forward pass of the EngramLayer.
@@ -253,7 +272,7 @@ class EngramLayer(nn.Module):
             input_ids: [batch_size, seq_len] Original token IDs.
             compressed_ids: [batch_size, seq_len] Compressed token IDs.
             hidden_states: [batch_size, seq_len, hidden_dim] or [B, L, M, D].
-            engram_hash_indices: Optional precomputed hash indices to speed up.
+            engram_hash_indices: Optional precomputed hash indices [B, L, total_heads].
 
         Returns:
             torch.Tensor: Modified hidden states with Engram contributions.
@@ -279,20 +298,18 @@ class EngramLayer(nn.Module):
             # At this point, compressed_ids is guaranteed not to be None
             engram_hash_indices = self.multi_head_hash.compute_hashes(compressed_ids)
 
-        # Step 2: Retrieve vectors from K independent embedding tables
-        all_embeddings = []
-        for n in self.config.ngram_sizes:
-            for k in range(self.config.hash_heads):
-                indices = engram_hash_indices[(n, k)]
-                indices_on_device = indices.to(hidden_states.device)
-                emb_module = self.embedding_tables[f"{n}_{k}"]
-                # Cast to nn.Embedding to access forward method correctly if needed
-                emb = cast(nn.Embedding, emb_module)(indices_on_device)
-                all_embeddings.append(emb)
+        # Step 2: Retrieve vectors from single shared embedding table
+        # engram_hash_indices: [B, L, total_heads]
+        indices_on_device = engram_hash_indices.to(hidden_states.device)
+        shifted_indices = indices_on_device + cast(torch.Tensor, self.offsets)
+
+        # [B, L, total_heads, d_per_head]
+        all_embeddings_tensor = self.embedding(shifted_indices)
 
         # Step 3: Concatenate all N-gram and hash head vectors: e_t = ||_{n} ||_{k} e_{t,n,k}
         # [batch_size, seq_len, total_embedding_dim]
-        e_t = torch.cat(all_embeddings, dim=-1)
+        # Flatten the last two dimensions: total_heads * d_per_head = total_embedding_dim
+        e_t = all_embeddings_tensor.flatten(start_dim=-2)
 
         # Step 4: Context-Aware Gating modulation
         # y has the same shape as hidden_states

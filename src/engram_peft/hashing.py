@@ -122,15 +122,16 @@ class MultiHeadHash:
                 }
                 prime_idx += 1
 
-    def compute_hashes(
-        self, compressed_token_ids: torch.Tensor
-    ) -> Dict[Tuple[int, int], torch.Tensor]:
+    def compute_hashes(self, compressed_token_ids: torch.Tensor) -> torch.Tensor:
         """
         Computes the hash indices using Multiplicative-XOR logic.
+
+        Returns:
+            torch.Tensor: [batch_size, seq_len, total_heads] where total_heads = len(ngram_sizes) * hash_heads
         """
         batch_size, seq_len = compressed_token_ids.shape
         device = compressed_token_ids.device
-        results: Dict[Tuple[int, int], torch.Tensor] = {}
+        all_head_hashes = []
 
         max_n = max(self.ngram_sizes)
         padding = torch.zeros((batch_size, max_n - 1), dtype=torch.long, device=device)
@@ -148,6 +149,7 @@ class MultiHeadHash:
             for k in range(self.hash_heads):
                 p = self.hash_params[(n, k)]["p"]
                 h = (mix % p + p) % p
-                results[(n, k)] = h.long()
+                all_head_hashes.append(h.long())
 
-        return results
+        # [B, L, total_heads]
+        return torch.stack(all_head_hashes, dim=-1)
