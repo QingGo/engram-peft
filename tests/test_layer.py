@@ -1,6 +1,10 @@
 import torch
-from typing import List, Any
-from engram_peft.layer import ContextAwareGating
+import torch.nn as nn
+from typing import List, Any, cast
+from unittest.mock import MagicMock
+from engram_peft.layer import ContextAwareGating, EngramLayer
+from engram_peft.config import EngramConfig
+from engram_peft.compression import TokenizerCompressor
 
 
 def test_context_aware_gating_initialization() -> None:
@@ -134,7 +138,7 @@ def test_context_aware_gating_gradients() -> None:
 
 def test_context_aware_gating_shapes() -> None:
     """
-    测试用例 5：验证输出形状与输入形状完全相同
+    测试用例 5-1：验证 ContextAwareGating 输出形状与输入形状完全相同
     """
     # 单分支
     module1 = ContextAwareGating(embedding_dim=1280, hidden_dim=2560, num_branches=1)
@@ -150,3 +154,121 @@ def test_context_aware_gating_shapes() -> None:
     e2 = torch.randn(2, 16, 1280)
     h2 = torch.randn(2, 16, num_branches, 2560)
     assert module2(e2, h2).shape == h2.shape
+
+
+def test_engram_layer_forward() -> None:
+    """
+    测试用例 5：验证完整 EngramLayer 的前向传播
+    """
+    config = EngramConfig(
+        ngram_sizes=[2, 3],
+        hash_heads=4,
+        embedding_dim_per_head=16,
+        hidden_dim=32,
+        num_branches=1,
+    )
+
+    # Mock TokenizerCompressor
+    compressor = MagicMock(spec=TokenizerCompressor)
+    compressor.lookup = torch.arange(100)  # Mock lookup table
+
+    layer = EngramLayer(config, compressor)
+
+    batch_size = 2
+    seq_len = 8
+    input_ids = torch.randint(0, 100, (batch_size, seq_len))
+    hidden_states = torch.randn(batch_size, seq_len, config.hidden_dim)
+
+    output = layer(input_ids=input_ids, hidden_states=hidden_states)
+
+    assert output.shape == hidden_states.shape
+    assert not torch.allclose(
+        output, hidden_states
+    ), "Output should be modified by EngramLayer"
+
+
+def test_engram_layer_indices_priority() -> None:
+    """
+    测试用例 6：验证 engram_hash_indices 优先使用
+    """
+    config = EngramConfig(
+        ngram_sizes=[2], hash_heads=1, embedding_dim_per_head=16, hidden_dim=32
+    )
+    layer = EngramLayer(config)
+
+    batch_size = 1
+    seq_len = 4
+    hidden_states = torch.randn(batch_size, seq_len, config.hidden_dim)
+
+    # Precompute hash indices
+    # We'll use a specific index and verify the output depends on it
+    ngram_size = 2
+    head_idx = 0
+    indices = torch.zeros((batch_size, seq_len), dtype=torch.long)
+    indices[0, 0] = 5  # Set a specific index
+
+    engram_hash_indices = {(ngram_size, head_idx): indices}
+
+    # This should work even without input_ids/compressed_ids
+    output = layer(hidden_states=hidden_states, engram_hash_indices=engram_hash_indices)
+    assert output.shape == hidden_states.shape
+
+
+def test_engram_layer_sparse_gradients() -> None:
+    """
+    测试用例 7：验证嵌入表的梯度只在被检索的行上更新
+    """
+    config = EngramConfig(
+        ngram_sizes=[2], hash_heads=1, embedding_dim_per_head=16, hidden_dim=32
+    )
+    layer = EngramLayer(config)
+
+    batch_size = 1
+    seq_len = 2
+    hidden_states = torch.randn(batch_size, seq_len, config.hidden_dim)
+
+    # Only use index 0 and 1
+    indices = torch.tensor([[0, 1]], dtype=torch.long)
+    engram_hash_indices = {(2, 0): indices}
+
+    output = layer(hidden_states=hidden_states, engram_hash_indices=engram_hash_indices)
+    loss = output.pow(2).sum()
+    loss.backward()
+
+    emb_module = layer.embedding_tables["2_0"]
+    embedding = cast(nn.Embedding, emb_module)
+    grad = embedding.weight.grad
+    assert grad is not None
+
+    # Only rows 0 and 1 should have non-zero gradients
+    assert torch.any(grad[0] != 0)
+    assert torch.any(grad[1] != 0)
+    if grad.shape[0] > 2:
+        assert torch.all(grad[2:] == 0)
+
+
+def test_engram_layer_output_shape() -> None:
+    """
+    测试用例 8：验证输出形状与输入 hidden_states 形状完全相同
+    """
+    # Test multi-branch case
+    config = EngramConfig(
+        ngram_sizes=[2],
+        hash_heads=2,
+        embedding_dim_per_head=16,
+        hidden_dim=32,
+        num_branches=4,
+    )
+    layer = EngramLayer(config)
+
+    batch_size = 2
+    seq_len = 5
+    hidden_states = torch.randn(
+        batch_size, seq_len, config.num_branches, config.hidden_dim
+    )
+
+    indices = torch.zeros((batch_size, seq_len), dtype=torch.long)
+    engram_hash_indices = {(2, 0): indices, (2, 1): indices}
+
+    output = layer(hidden_states=hidden_states, engram_hash_indices=engram_hash_indices)
+    assert output.shape == hidden_states.shape

@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Optional, cast
+from typing import Optional, cast, Dict, Tuple
+from engram_peft.config import EngramConfig
+from engram_peft.compression import TokenizerCompressor
+from engram_peft.hashing import MultiHeadHash
 
 
 class ContextAwareGating(nn.Module):
@@ -163,3 +166,127 @@ class ContextAwareGating(nn.Module):
             y = y.permute(0, 2, 1).contiguous()
 
         return cast(torch.Tensor, y + v_tilde)
+
+
+class EngramLayer(nn.Module):
+    """
+    Complete Engram Layer as described in Section 2.1-2.3 of the Engram paper.
+
+    1. Extracts suffix N-grams (via TokenizerCompressor and MultiHeadHash)
+    2. Computes indices via Multi-Head Hashing
+    3. Retrieves vectors from K independent embedding tables
+    4. Applies Context-Aware Gating modulation
+    5. Residual connection to Transformer Block hidden states
+    """
+
+    def __init__(
+        self, config: EngramConfig, compressor: Optional[TokenizerCompressor] = None
+    ):
+        """
+        Initialize the EngramLayer.
+
+        Args:
+            config: EngramConfig containing hyperparameters.
+            compressor: Optional TokenizerCompressor for token mapping.
+        """
+        super().__init__()
+        self.config = config
+        self.compressor = compressor
+
+        # 2. Multi-Head Hashing
+        self.multi_head_hash = MultiHeadHash(
+            ngram_sizes=config.ngram_sizes,
+            hash_heads=config.hash_heads,
+            memory_capacity_per_head=config.memory_capacity_per_head,
+            seed=config.seed,
+        )
+
+        # 3. K independent embedding tables
+        # Use ModuleDict to store and register multiple embedding tables
+        self.embedding_tables = nn.ModuleDict()
+        for n in config.ngram_sizes:
+            for k in range(config.hash_heads):
+                # Use the prime capacity computed by multi_head_hash for this head
+                capacity = self.multi_head_hash.hash_params[(n, k)]["p"]
+                emb = nn.Embedding(capacity, config.embedding_dim_per_head)
+                # Weight initialization: mean 0, std 0.02
+                nn.init.normal_(emb.weight, mean=0.0, std=0.02)
+                self.embedding_tables[f"{n}_{k}"] = emb
+
+        # 4. Context-Aware Gating
+        self.gating = ContextAwareGating(
+            embedding_dim=config.total_embedding_dim,
+            hidden_dim=config.hidden_dim,
+            num_branches=config.num_branches,
+            kernel_size=config.kernel_size,
+            dilation=config.dilation,
+        )
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        compressed_ids: Optional[torch.LongTensor] = None,
+        hidden_states: torch.Tensor = cast(torch.Tensor, None),
+        engram_hash_indices: Optional[Dict[Tuple[int, int], torch.LongTensor]] = None,
+    ) -> torch.Tensor:
+        """
+        Forward pass of the EngramLayer.
+
+        Args:
+            input_ids: [batch_size, seq_len] Original token IDs.
+            compressed_ids: [batch_size, seq_len] Compressed token IDs.
+            hidden_states: [batch_size, seq_len, hidden_dim] or [B, L, M, D].
+            engram_hash_indices: Optional precomputed hash indices to speed up.
+
+        Returns:
+            torch.Tensor: Modified hidden states with Engram contributions.
+        """
+        if hidden_states is None:
+            raise ValueError("hidden_states must be provided.")
+
+        # Step 1: Get hash indices (Priority: engram_hash_indices > compressed_ids > input_ids)
+        if engram_hash_indices is None:
+            if compressed_ids is None:
+                if input_ids is None:
+                    raise ValueError(
+                        "Either input_ids, compressed_ids, or engram_hash_indices must be provided."
+                    )
+                if self.compressor is None:
+                    raise ValueError(
+                        "TokenizerCompressor is required if only input_ids are provided."
+                    )
+                # Use the pre-computed lookup table for fast mapping
+                compressed_ids = cast(
+                    torch.LongTensor,
+                    self.compressor.lookup.to(input_ids.device)[input_ids],
+                )
+
+            # Compute hashes using MultiHeadHash
+            # At this point, compressed_ids is guaranteed not to be None
+            engram_hash_indices = self.multi_head_hash.compute_hashes(
+                cast(torch.LongTensor, compressed_ids)
+            )
+
+        # Step 2: Retrieve vectors from K independent embedding tables
+        all_embeddings = []
+        for n in self.config.ngram_sizes:
+            for k in range(self.config.hash_heads):
+                indices = engram_hash_indices[(n, k)]
+                # Ensure indices are on the same device as the embedding table
+                # Cast to LongTensor to satisfy mypy
+                indices_on_device = cast(torch.LongTensor, indices.to(hidden_states.device))
+                emb_module = self.embedding_tables[f"{n}_{k}"]
+                # Cast to nn.Embedding to access forward method correctly if needed
+                emb = cast(nn.Embedding, emb_module)(indices_on_device)
+                all_embeddings.append(emb)
+
+        # Step 3: Concatenate all N-gram and hash head vectors: e_t = ||_{n} ||_{k} e_{t,n,k}
+        # [batch_size, seq_len, total_embedding_dim]
+        e_t = torch.cat(all_embeddings, dim=-1)
+
+        # Step 4: Context-Aware Gating modulation
+        # y has the same shape as hidden_states
+        y = self.gating(e_t, hidden_states)
+
+        # Step 5: Residual connection: hidden_states + Y
+        return cast(torch.Tensor, hidden_states + y)
