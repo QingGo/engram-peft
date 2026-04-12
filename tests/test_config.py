@@ -7,7 +7,7 @@ from engram_peft.config import EngramConfig
 
 
 class TestEngramConfig(unittest.TestCase):
-    def test_default_config_matches_paper(self):
+    def test_default_config_matches_paper(self) -> None:
         """测试用例 1：验证默认配置与论文附录A完全一致"""
         config = EngramConfig()
 
@@ -29,7 +29,7 @@ class TestEngramConfig(unittest.TestCase):
         self.assertEqual(config.seed, 0)
         self.assertEqual(config.model_type, "engram")
 
-    def test_save_load_config(self):
+    def test_save_load_config(self) -> None:
         """测试用例 2：验证 save/load 功能正常"""
         config = EngramConfig(
             engram_vocab_size_per_ngram=[1000, 1000, 1000],
@@ -53,7 +53,7 @@ class TestEngramConfig(unittest.TestCase):
                 loaded_config.conv_dilation, 4
             )  # Falls back to new max_ngram_size
 
-    def test_custom_config_override(self):
+    def test_custom_config_override(self) -> None:
         """测试用例 3：验证自定义配置正确覆盖默认值"""
         config = EngramConfig(
             learning_rate_multiplier=10.0,
@@ -71,7 +71,7 @@ class TestEngramConfig(unittest.TestCase):
         self.assertEqual(config.embedding_dim, 1280)
         self.assertEqual(config.n_head_per_ngram, 8)
 
-    def test_transformers_compatibility(self):
+    def test_transformers_compatibility(self) -> None:
         """测试用例 4：验证与 transformers 的 PretrainedConfig 生态兼容"""
         config = EngramConfig(
             embedding_dim=512,

@@ -4,7 +4,7 @@ from typing import List, Any, cast
 from unittest.mock import MagicMock
 from engram_peft.layer import ContextAwareGating, EngramLayer
 from engram_peft.config import EngramConfig
-from engram_peft.compression import TokenizerCompressor
+from engram_peft.compression import CompressedTokenizer
 from engram_peft.hashing import calculate_global_primes
 
 
@@ -174,8 +174,8 @@ def test_engram_layer_forward() -> None:
         engram_vocab_size_per_ngram=[100, 100],
     )
 
-    # Mock TokenizerCompressor
-    compressor = MagicMock(spec=TokenizerCompressor)
+    # Mock CompressedTokenizer
+    compressor = MagicMock(spec=CompressedTokenizer)
     compressor.lookup = torch.arange(100)  # Mock lookup table
     compressor.compressed_vocab_size = 100
 
@@ -300,9 +300,7 @@ def test_engram_layer_output_shape() -> None:
 
     batch_size = 2
     seq_len = 5
-    hidden_states = torch.randn(
-        batch_size, seq_len, config.hc_mult, config.hidden_dim
-    )
+    hidden_states = torch.randn(batch_size, seq_len, config.hc_mult, config.hidden_dim)
 
     # Create hash indices tensor with shape [B, L, total_heads]
     total_heads = config.n_head_per_ngram * (config.max_ngram_size - 1)

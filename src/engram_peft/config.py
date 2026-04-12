@@ -91,7 +91,7 @@ class EngramConfig(PretrainedConfig):
                 setattr(self, k, v)
 
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any], **kwargs) -> "EngramConfig":
+    def from_dict(cls, config_dict: Dict[str, Any], **kwargs: Any) -> "EngramConfig":
         """Instantiates an EngramConfig from a python dictionary."""
         return super().from_dict(config_dict, **kwargs)
 
@@ -110,14 +110,34 @@ class EngramConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(
-        cls, pretrained_model_name_or_path: str, **kwargs
+        cls,
+        pretrained_model_name_or_path: str | os.PathLike[Any],
+        cache_dir: str | os.PathLike[Any] | None = None,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: str | bool | None = None,
+        revision: str = "main",
+        **kwargs: Any,
     ) -> "EngramConfig":
         """Loads from JSON file/pretrained repo."""
-        return super().from_pretrained(pretrained_model_name_or_path, **kwargs)
+        return super().from_pretrained(
+            pretrained_model_name_or_path,
+            cache_dir=cache_dir,
+            force_download=force_download,
+            local_files_only=local_files_only,
+            token=token,
+            revision=revision,
+            **kwargs,
+        )
 
-    def save_pretrained(self, save_directory: str, **kwargs):
+    def save_pretrained(
+        self,
+        save_directory: str | os.PathLike[Any],
+        push_to_hub: bool = False,
+        **kwargs: Any,
+    ) -> None:
         """Saves as JSON file."""
         import os
 
         os.makedirs(save_directory, exist_ok=True)
-        super().save_pretrained(save_directory, **kwargs)
+        super().save_pretrained(save_directory, push_to_hub=push_to_hub, **kwargs)

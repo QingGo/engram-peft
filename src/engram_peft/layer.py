@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional, cast, Dict, Tuple, List
 from engram_peft.config import EngramConfig
-from engram_peft.compression import TokenizerCompressor
+from engram_peft.compression import CompressedTokenizer
 from engram_peft.hashing import MultiHeadHash
 
 
@@ -196,7 +196,7 @@ class EngramLayer(nn.Module):
     """
     Complete Engram Layer as described in Section 2.1-2.3 of the Engram paper.
 
-    1. Extracts suffix N-grams (via TokenizerCompressor and MultiHeadHash)
+    1. Extracts suffix N-grams (via CompressedTokenizer and MultiHeadHash)
     2. Computes indices via Multi-Head Hashing
     3. Retrieves vectors from K independent embedding tables
     4. Applies Context-Aware Gating modulation
@@ -208,7 +208,7 @@ class EngramLayer(nn.Module):
         config: EngramConfig,
         layer_id: int,
         primes: List[int],
-        compressor: Optional[TokenizerCompressor] = None,
+        compressor: Optional[CompressedTokenizer] = None,
     ):
         """
         Initialize the EngramLayer.
@@ -217,7 +217,7 @@ class EngramLayer(nn.Module):
             config: EngramConfig containing hyperparameters.
             layer_id: The ID of this layer.
             primes: List of pre-calculated primes for this layer's heads.
-            compressor: Optional TokenizerCompressor for token mapping.
+            compressor: Optional CompressedTokenizer for token mapping.
         """
         super().__init__()
         self.config = config
@@ -228,11 +228,19 @@ class EngramLayer(nn.Module):
         self.hash_heads = config.n_head_per_ngram
         self.num_branches = config.hc_mult
         self.kernel_size = config.conv_kernel_size
-        self.dilation = config.conv_dilation if config.conv_dilation is not None else config.max_ngram_size
-        self.hidden_dim = getattr(config, "hidden_size", getattr(config, "hidden_dim", 2560))
-        
+        self.dilation = (
+            config.conv_dilation
+            if config.conv_dilation is not None
+            else config.max_ngram_size
+        )
+        self.hidden_dim = getattr(
+            config, "hidden_size", getattr(config, "hidden_dim", 2560)
+        )
+
         self.total_embedding_dim = config.embedding_dim
-        self.embedding_dim_per_head = self.total_embedding_dim // (len(self.ngram_sizes) * self.hash_heads)
+        self.embedding_dim_per_head = self.total_embedding_dim // (
+            len(self.ngram_sizes) * self.hash_heads
+        )
 
         # 2. Multi-Head Hashing
         self.multi_head_hash = MultiHeadHash(
@@ -299,7 +307,7 @@ class EngramLayer(nn.Module):
                     )
                 if self.compressor is None:
                     raise ValueError(
-                        "TokenizerCompressor is required if only input_ids are provided."
+                        "CompressedTokenizer is required if only input_ids are provided."
                     )
                 # Use the pre-computed lookup table for fast mapping
                 compressed_ids = self.compressor.lookup.to(input_ids.device)[input_ids]

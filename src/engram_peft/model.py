@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from engram_peft.config import EngramConfig
 from engram_peft.layer import EngramLayer
-from engram_peft.compression import TokenizerCompressor
+from engram_peft.compression import CompressedTokenizer
 from engram_peft.hashing import calculate_global_primes
 
 
@@ -19,19 +19,21 @@ class EngramModel(nn.Module):
         # 1. Initialize compressor if needed
         self.compressor = None
         if tokenizer is not None:
-            self.compressor = TokenizerCompressor(tokenizer)
+            self.compressor = CompressedTokenizer(tokenizer)
 
         # 2. Calculate global primes for all layers
+        # Convert max_ngram_size to list of ngram_sizes
+        ngram_sizes = list(range(2, config.max_ngram_size + 1))
         self.primes_per_layer = calculate_global_primes(
-            layer_ids=config.layer_ids,
-            ngram_sizes=config.ngram_sizes,
-            hash_heads=config.hash_heads,
-            memory_capacity_per_ngram=config.memory_capacity_per_ngram,
+            layer_ids=config.target_layers,
+            ngram_sizes=ngram_sizes,
+            hash_heads=config.n_head_per_ngram,
+            engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
         )
 
         # 3. Initialize Engram layers
         self.engram_layers = nn.ModuleDict()
-        for layer_id in config.layer_ids:
+        for layer_id in config.target_layers:
             self.engram_layers[str(layer_id)] = EngramLayer(
                 config=config,
                 layer_id=layer_id,
