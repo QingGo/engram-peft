@@ -224,12 +224,22 @@ class EngramLayer(nn.Module):
         self.layer_id = layer_id
         self.compressor = compressor
 
+        self.ngram_sizes = list(range(2, config.max_ngram_size + 1))
+        self.hash_heads = config.n_head_per_ngram
+        self.num_branches = config.hc_mult
+        self.kernel_size = config.conv_kernel_size
+        self.dilation = config.conv_dilation if config.conv_dilation is not None else config.max_ngram_size
+        self.hidden_dim = getattr(config, "hidden_size", getattr(config, "hidden_dim", 2560))
+        
+        self.total_embedding_dim = config.embedding_dim
+        self.embedding_dim_per_head = self.total_embedding_dim // (len(self.ngram_sizes) * self.hash_heads)
+
         # 2. Multi-Head Hashing
         self.multi_head_hash = MultiHeadHash(
             layer_id=layer_id,
             primes=primes,
-            ngram_sizes=config.ngram_sizes,
-            hash_heads=config.hash_heads,
+            ngram_sizes=self.ngram_sizes,
+            hash_heads=self.hash_heads,
             seed=config.seed,
             tokenizer_vocab_size=(
                 compressor.compressed_vocab_size if compressor else 129280
@@ -245,17 +255,17 @@ class EngramLayer(nn.Module):
         self.register_buffer("offsets", torch.tensor(offsets, dtype=torch.long))
 
         total_capacity = sum(primes)
-        self.embedding = nn.Embedding(total_capacity, config.embedding_dim_per_head)
+        self.embedding = nn.Embedding(total_capacity, self.embedding_dim_per_head)
         # Weight initialization: mean 0, std 0.02
         nn.init.normal_(self.embedding.weight, mean=0.0, std=0.02)
 
         # 4. Context-Aware Gating
         self.gating = ContextAwareGating(
-            embedding_dim=config.total_embedding_dim,
-            hidden_dim=config.hidden_dim,
-            num_branches=config.num_branches,
-            kernel_size=config.kernel_size,
-            dilation=config.dilation,
+            embedding_dim=self.total_embedding_dim,
+            hidden_dim=self.hidden_dim,
+            num_branches=self.num_branches,
+            kernel_size=self.kernel_size,
+            dilation=self.dilation,
         )
 
     def forward(

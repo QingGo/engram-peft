@@ -11,12 +11,12 @@ def test_prime_table_sizes() -> None:
     """
     ngram_sizes = [2, 3, 4]
     hash_heads = 4
-    memory_capacity_per_ngram = [1000, 2000, 3000]
+    engram_vocab_size_per_ngram = [1000, 2000, 3000]
     primes_dict = calculate_global_primes(
         layer_ids=[1],
         ngram_sizes=ngram_sizes,
         hash_heads=hash_heads,
-        memory_capacity_per_ngram=memory_capacity_per_ngram,
+        engram_vocab_size_per_ngram=engram_vocab_size_per_ngram,
     )
     mhh = MultiHeadHash(
         layer_id=1,
@@ -36,13 +36,13 @@ def test_global_prime_uniqueness() -> None:
     layer_ids = [1, 15]
     ngram_sizes = [2, 3]
     hash_heads = 8
-    memory_capacity_per_ngram = [10000, 20000]
+    engram_vocab_size_per_ngram = [10000, 20000]
 
     primes_dict = calculate_global_primes(
         layer_ids=layer_ids,
         ngram_sizes=ngram_sizes,
         hash_heads=hash_heads,
-        memory_capacity_per_ngram=memory_capacity_per_ngram,
+        engram_vocab_size_per_ngram=engram_vocab_size_per_ngram,
     )
 
     all_primes = []
@@ -60,9 +60,9 @@ def test_reproducibility() -> None:
     seed = 42
     ngram_sizes = [2, 3]
     hash_heads = 8
-    memory_capacity_per_ngram = [10000, 20000]
+    engram_vocab_size_per_ngram = [10000, 20000]
     primes_dict = calculate_global_primes(
-        [1], ngram_sizes, hash_heads, memory_capacity_per_ngram
+        [1], ngram_sizes, hash_heads, engram_vocab_size_per_ngram
     )
 
     mhh1 = MultiHeadHash(

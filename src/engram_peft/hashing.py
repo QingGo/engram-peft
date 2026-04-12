@@ -14,7 +14,7 @@ def calculate_global_primes(
     layer_ids: List[int],
     ngram_sizes: List[int],
     hash_heads: int,
-    memory_capacity_per_ngram: List[int],
+    engram_vocab_size_per_ngram: List[int],
 ) -> Dict[int, List[int]]:
     """
     Calculates unique prime table sizes for all layers and heads.
@@ -24,7 +24,7 @@ def calculate_global_primes(
         layer_ids: List of all layers where Engram is applied.
         ngram_sizes: List of N-gram orders (e.g. [2, 3]).
         hash_heads: Number of hash heads per N-gram order.
-        memory_capacity_per_ngram: Target base capacity for each N-gram order.
+        engram_vocab_size_per_ngram: Target base capacity for each N-gram order.
 
     Returns:
         A dictionary mapping layer_id to a flat list of primes for all its heads.
@@ -36,7 +36,7 @@ def calculate_global_primes(
         all_layer_primes = []
         for i, _ in enumerate(ngram_sizes):
             # For each ngram order, start from its specific base capacity
-            base_vocab_size = memory_capacity_per_ngram[i]
+            base_vocab_size = engram_vocab_size_per_ngram[i]
             current_prime_search_start = base_vocab_size - 1
 
             for _ in range(hash_heads):

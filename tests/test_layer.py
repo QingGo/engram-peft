@@ -166,11 +166,12 @@ def test_engram_layer_forward() -> None:
     测试用例 5：验证完整 EngramLayer 的前向传播
     """
     config = EngramConfig(
-        ngram_sizes=[2, 3],
-        hash_heads=4,
-        embedding_dim_per_head=16,
+        max_ngram_size=3,
+        n_head_per_ngram=4,
+        embedding_dim=128,
         hidden_dim=32,
-        num_branches=1,
+        hc_mult=1,
+        engram_vocab_size_per_ngram=[100, 100],
     )
 
     # Mock TokenizerCompressor
@@ -180,9 +181,9 @@ def test_engram_layer_forward() -> None:
 
     primes = calculate_global_primes(
         layer_ids=[1],
-        ngram_sizes=config.ngram_sizes,
-        hash_heads=config.hash_heads,
-        memory_capacity_per_ngram=config.memory_capacity_per_ngram,
+        ngram_sizes=list(range(2, config.max_ngram_size + 1)),
+        hash_heads=config.n_head_per_ngram,
+        engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
     )[1]
 
     layer = EngramLayer(config, layer_id=1, primes=primes, compressor=compressor)
@@ -205,13 +206,18 @@ def test_engram_layer_indices_priority() -> None:
     测试用例 6：验证 engram_hash_indices 优先使用
     """
     config = EngramConfig(
-        ngram_sizes=[2], hash_heads=1, embedding_dim_per_head=16, hidden_dim=32
+        max_ngram_size=2,
+        n_head_per_ngram=1,
+        embedding_dim=16,
+        hidden_dim=32,
+        engram_vocab_size_per_ngram=[100],
+        hc_mult=1,
     )
     primes = calculate_global_primes(
         layer_ids=[1],
-        ngram_sizes=config.ngram_sizes,
-        hash_heads=config.hash_heads,
-        memory_capacity_per_ngram=config.memory_capacity_per_ngram,
+        ngram_sizes=list(range(2, config.max_ngram_size + 1)),
+        hash_heads=config.n_head_per_ngram,
+        engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
     )[1]
     layer = EngramLayer(config, layer_id=1, primes=primes)
 
@@ -234,13 +240,18 @@ def test_engram_layer_sparse_gradients() -> None:
     测试用例 7：验证嵌入表的梯度只在被检索的行上更新
     """
     config = EngramConfig(
-        ngram_sizes=[2], hash_heads=1, embedding_dim_per_head=16, hidden_dim=32
+        max_ngram_size=2,
+        n_head_per_ngram=1,
+        embedding_dim=16,
+        hidden_dim=32,
+        engram_vocab_size_per_ngram=[100],
+        hc_mult=1,
     )
     primes = calculate_global_primes(
         layer_ids=[1],
-        ngram_sizes=config.ngram_sizes,
-        hash_heads=config.hash_heads,
-        memory_capacity_per_ngram=config.memory_capacity_per_ngram,
+        ngram_sizes=list(range(2, config.max_ngram_size + 1)),
+        hash_heads=config.n_head_per_ngram,
+        engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
     )[1]
     layer = EngramLayer(config, layer_id=1, primes=primes)
 
@@ -272,28 +283,29 @@ def test_engram_layer_output_shape() -> None:
     """
     # Test multi-branch case
     config = EngramConfig(
-        ngram_sizes=[2],
-        hash_heads=2,
-        embedding_dim_per_head=16,
+        max_ngram_size=2,
+        n_head_per_ngram=2,
+        embedding_dim=32,
         hidden_dim=32,
-        num_branches=4,
+        hc_mult=4,
+        engram_vocab_size_per_ngram=[100],
     )
     primes = calculate_global_primes(
         layer_ids=[1],
-        ngram_sizes=config.ngram_sizes,
-        hash_heads=config.hash_heads,
-        memory_capacity_per_ngram=config.memory_capacity_per_ngram,
+        ngram_sizes=list(range(2, config.max_ngram_size + 1)),
+        hash_heads=config.n_head_per_ngram,
+        engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
     )[1]
     layer = EngramLayer(config, layer_id=1, primes=primes)
 
     batch_size = 2
     seq_len = 5
     hidden_states = torch.randn(
-        batch_size, seq_len, config.num_branches, config.hidden_dim
+        batch_size, seq_len, config.hc_mult, config.hidden_dim
     )
 
     # Create hash indices tensor with shape [B, L, total_heads]
-    total_heads = config.hash_heads * len(config.ngram_sizes)
+    total_heads = config.n_head_per_ngram * (config.max_ngram_size - 1)
     indices = torch.zeros((batch_size, seq_len, total_heads), dtype=torch.long)
 
     output = layer(hidden_states=hidden_states, engram_hash_indices=indices)
