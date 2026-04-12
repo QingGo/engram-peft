@@ -1,0 +1,46 @@
+[project]
+name = "engram-peft"
+version = "0.1.0"
+description = "Engram-PEFT: Efficient Parameter-Efficient Fine-Tuning with Engram"
+readme = "README.md"
+authors = [
+    { name = "QingGo", email = "zyqingjohn@qq.com" }
+]
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.4.0",
+    "transformers>=4.45.0",
+    "datasets>=2.20.0",
+    "safetensors>=0.4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
+    "black>=24.0.0",
+    "isort>=5.13.0",
+    "mypy>=1.10.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = ["engram_peft"]
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+
+[tool.isort]
+profile = "black"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
