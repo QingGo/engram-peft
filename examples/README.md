@@ -42,3 +42,26 @@ uv run python examples/end_to_end.py
 
 ### Memory Usage
 For `TinyLlama-1.1B`, the training typically requires less than 8GB of VRAM with the provided settings (batch size 4, gradient accumulation 2), making it suitable for consumer GPUs like the RTX 3060/3070 and above.
+
+---
+
+## CPU-Optimized Example: `end_to_end_cpu.py`
+
+This script is designed for environments **without a GPU** or for users who want a **fast, lightweight demonstration** (< 5 minutes).
+
+### Features
+- **Ultra-Tiny Model**: Uses a custom "nanochat-style" Transformer with < 10M parameters.
+- **Pure CPU Support**: Optimized configuration that runs efficiently on consumer CPUs.
+- **No External Weights**: Initializes from scratch, requiring no large downloads.
+- **Full PEFT Workflow**: Includes injection, training (100 steps), saving, and dynamic inference.
+
+### Running the Example
+```bash
+uv run python examples/end_to_end_cpu.py
+```
+
+### Performance Expectations
+- **Device**: CPU (Auto-detected).
+- **Time**: ~2-3 minutes for 100 steps.
+- **Memory**: < 1GB RAM.
+- **Output**: Generates text and prints mean activation values for the Context-Aware Gating (CAG) branches.
