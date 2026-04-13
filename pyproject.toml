@@ -64,6 +64,10 @@ dev = [
     "pytest>=8.0.0",
     "scipy>=1.15.3",
     "seaborn>=0.13.2",
+    "setuptools>=82.0.1",
     "sympy>=1.14.0",
+    "torchinfo>=1.8.0",
+    "torchview>=0.2.7",
+    "torchviz>=0.0.3",
     "types-seaborn>=0.13.2.20260408",
 ]
