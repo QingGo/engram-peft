@@ -182,7 +182,9 @@ class MultiHeadEmbedding(nn.Module):
     Retrieves vectors from K independent virtual embedding tables using offset indices.
     """
 
-    def __init__(self, primes: List[int], embedding_dim_per_head: int):
+    def __init__(
+        self, primes: List[int], embedding_dim_per_head: int, sparse: bool = True
+    ):
         super().__init__()
         offsets = [0]
         for p in primes[:-1]:
@@ -190,7 +192,9 @@ class MultiHeadEmbedding(nn.Module):
         self.register_buffer("offsets", torch.tensor(offsets, dtype=torch.long))
 
         total_capacity = sum(primes)
-        self.embedding = nn.Embedding(total_capacity, embedding_dim_per_head)
+        self.embedding = nn.Embedding(
+            total_capacity, embedding_dim_per_head, sparse=sparse
+        )
         nn.init.normal_(self.embedding.weight, mean=0.0, std=0.02)
 
     def forward(self, hash_indices: torch.Tensor) -> torch.Tensor:

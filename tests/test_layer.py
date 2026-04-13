@@ -250,12 +250,14 @@ def test_engram_layer_sparse_gradients() -> None:
     # Access the single embedding table
     grad = layer.multi_head_embedding.embedding.weight.grad
     assert grad is not None
+    # Convert to dense for easier checking as Some operations don't support SparseCPU
+    grad_dense = grad.to_dense()
 
     # Only rows 0 and 1 should have non-zero gradients (assuming offset is 0 for first head)
-    assert torch.any(grad[0] != 0)
-    assert torch.any(grad[1] != 0)
-    if grad.shape[0] > 2:
-        assert torch.all(grad[2:] == 0)
+    assert torch.any(grad_dense[0] != 0)
+    assert torch.any(grad_dense[1] != 0)
+    if grad_dense.shape[0] > 2:
+        assert torch.all(grad_dense[2:] == 0)
 
 
 def test_engram_layer_output_shape() -> None:

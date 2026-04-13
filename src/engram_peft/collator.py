@@ -72,7 +72,6 @@ class EngramDataCollator(DataCollatorForLanguageModeling):
         # Step 2: Handle tokenizer compression if enabled and compressor is provided
         # If config says compression is enabled but no compressor is provided,
         # we fallback to raw IDs but warning might be useful. The prompt suggests:
-        # "如果没有 compressor，先压缩 input_ids".
         if self.compressor is not None:
             hash_input_ids = self.compressor.compress(input_ids)
         else:
