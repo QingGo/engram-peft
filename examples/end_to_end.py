@@ -97,7 +97,9 @@ def train_engram() -> PreTrainedTokenizer:
 
     from datasets import Dataset
 
-    train_dataset = Dataset.from_list(train_data).map(tokenize_function, batched=True)
+    train_dataset = Dataset.from_list(train_data).map(
+        tokenize_function, batched=True, remove_columns=["text"]
+    )
 
     # Collator precomputes hash indices on CPU
     collator = EngramDataCollator(tokenizer=tokenizer, config=config)  # type: ignore[arg-type]
@@ -125,7 +127,7 @@ def train_engram() -> PreTrainedTokenizer:
         save_strategy="no",
         fp16=True,
         report_to="none",
-        remove_unused_columns=False,  # Important: collator adds new keys
+        remove_unused_columns=True,
     )
 
     # Trainer Execution

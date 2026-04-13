@@ -66,7 +66,7 @@ class EngramModel(nn.Module):
             )
 
         self._hook_handles: List[Any] = []
-        self._current_hash_indices: Optional[Dict[int, Any]] = None
+        self._current_hash_indices: Optional[Union[Dict[int, Any], torch.Tensor]] = None
         self._engram_enabled = True
 
         # Attach hooks immediately
@@ -92,8 +92,18 @@ class EngramModel(nn.Module):
                 return args
 
             hidden_states = args[0]
-            indices_np = self._current_hash_indices[layer_id]
-            engram_hash_indices = torch.from_numpy(indices_np).to(hidden_states.device)
+            if isinstance(self._current_hash_indices, dict):
+                indices_np = self._current_hash_indices[layer_id]
+                engram_hash_indices = torch.from_numpy(indices_np).to(hidden_states.device)
+            else:
+                # Assume it's the stacked tensor [B, L, num_layers, total_heads]
+                try:
+                    layer_idx = self.config.target_layers.index(layer_id)
+                    engram_hash_indices = self._current_hash_indices[:, :, layer_idx, :].to(
+                        hidden_states.device
+                    )
+                except (ValueError, IndexError):
+                    return args
 
             engram_layer = cast(EngramLayer, self.engram_layers[str(layer_id)])
             modified_hidden_states = engram_layer(
@@ -136,22 +146,31 @@ class EngramModel(nn.Module):
         self._hook_handles = []
         self._engram_enabled = False
 
-    def forward(self, input_ids: Optional[torch.Tensor] = None, **kwargs: Any) -> Any:
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        engram_hash_indices: Optional[torch.Tensor] = None,
+        **kwargs: Any,
+    ) -> Any:
         """
         Forward pass delegating to base_model. Intercepts input_ids to precompute
         hash indices globally before the transformer blocks process them.
         """
-        if self._engram_enabled and input_ids is not None:
-            # Precompute global hash indices
-            if self.compressor:
-                c_ids = self.compressor.compress(input_ids)
-                # Ensure it's numpy before hashing
-                if isinstance(c_ids, torch.Tensor):
-                    c_ids = c_ids.cpu().numpy()
-                self._current_hash_indices = self.hash_mapping.hash(c_ids)
-            else:
-                input_ids_np = input_ids.cpu().numpy()
-                self._current_hash_indices = self.hash_mapping.hash(input_ids_np)
+        if self._engram_enabled:
+            if engram_hash_indices is not None:
+                # Use precomputed indices from collator
+                self._current_hash_indices = engram_hash_indices
+            elif input_ids is not None:
+                # Precompute global hash indices
+                if self.compressor:
+                    c_ids = self.compressor.compress(input_ids)
+                    # Ensure it's numpy before hashing
+                    if isinstance(c_ids, torch.Tensor):
+                        c_ids = c_ids.cpu().numpy()
+                    self._current_hash_indices = self.hash_mapping.hash(c_ids)
+                else:
+                    input_ids_np = input_ids.cpu().numpy()
+                    self._current_hash_indices = self.hash_mapping.hash(input_ids_np)
         else:
             self._current_hash_indices = None
 
