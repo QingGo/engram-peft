@@ -2,10 +2,77 @@ import torch
 import torch.nn as nn
 from typing import List, Any, cast
 from unittest.mock import MagicMock
-from engram_peft.layer import ContextAwareGating, EngramLayer
+from engram_peft.layer import ContextAwareGating, EngramLayer, ShortConv
 from engram_peft.config import EngramConfig
 from engram_peft.compression import CompressedTokenizer
 from engram_peft.hashing import NgramHashMapping
+
+
+def test_shortconv_initialization() -> None:
+    """测试用例 1：验证初始状态下输出等于输入 (卷积零初始化验证，L1距离 < 1e-6)"""
+    hidden_size = 64
+    hc_mult = 4
+    module = ShortConv(hidden_size=hidden_size, hc_mult=hc_mult)
+    x = torch.randn(2, 10, hc_mult, hidden_size)
+    out = module(x)
+    l1_dist = torch.abs(out - x).max().item()
+    assert (
+        l1_dist < 1e-6
+    ), f"Initial output should equal input, but L1 distance is {l1_dist}"
+
+
+def test_shortconv_output_shape() -> None:
+    """测试用例 2：验证输出形状与输入形状完全相同"""
+    hidden_size = 32
+    hc_mult = 2
+    module = ShortConv(hidden_size=hidden_size, hc_mult=hc_mult)
+    x = torch.randn(4, 15, hc_mult, hidden_size)
+    out = module(x)
+    assert out.shape == x.shape, f"Expected {x.shape}, got {out.shape}"
+
+
+def test_shortconv_gradients() -> None:
+    """测试用例 3：验证前向/反向传播无错误"""
+    hidden_size = 16
+    hc_mult = 1
+    module = ShortConv(hidden_size=hidden_size, hc_mult=hc_mult)
+    x = torch.randn(2, 5, hc_mult, hidden_size, requires_grad=True)
+    out = module(x)
+    loss = out.pow(2).sum()
+    loss.backward()
+
+    assert x.grad is not None, "Input should have gradients."
+    assert module.conv.weight.grad is not None, "Conv weight should have gradients."
+
+
+def test_shortconv_mhc_branches() -> None:
+    """测试用例 4：验证mHC分支处理正确 (各分支互相独立计算)"""
+    hidden_size = 8
+    hc_mult = 4
+    module = ShortConv(hidden_size=hidden_size, hc_mult=hc_mult)
+    x = torch.randn(2, 5, hc_mult, hidden_size)
+
+    # 验证独立性，修改一个分支的输入，不应该影响其他分支输出
+    x_modified = x.clone()
+    x_modified[:, :, 0, :] += 1.0
+
+    out = module(x)
+    out_modified = module(x_modified)
+
+    # 分支0改变了
+    assert not torch.allclose(out[:, :, 0, :], out_modified[:, :, 0, :])
+    # 其余分支未受影响 (尽管卷积目前是权重全0，由于 residual 和独立 normalization，如果卷积全0其余分支显然不受影响)
+    # 我们为卷积随意赋非0权重以确保卷积阶段分支也是独立的 (groups=total_channels 是深度可分离的)
+    with torch.no_grad():
+        nn.init.normal_(module.conv.weight)
+
+    out_nonzero = module(x)
+    out_nonzero_modified = module(x_modified)
+
+    for branch_idx in range(1, hc_mult):
+        assert torch.allclose(
+            out_nonzero[:, :, branch_idx, :], out_nonzero_modified[:, :, branch_idx, :]
+        ), f"Branch {branch_idx} was incorrectly affected by branch 0 modification."
 
 
 def test_context_aware_gating_initialization() -> None:

@@ -6,6 +6,104 @@ from engram_peft.config import EngramConfig
 from engram_peft.compression import CompressedTokenizer
 
 
+class ShortConv(nn.Module):
+    """
+    ShortConv module as described in the Engram paper.
+
+    Y = SiLU( Conv1D( RMSNorm(Ṽ) ) ) + Ṽ
+    Applies independent RMSNorm per branch, depthwise causal convolution,
+    and optional SiLU activation, followed by a residual connection.
+    """
+
+    def __init__(
+        self,
+        hidden_size: int,
+        kernel_size: int = 4,
+        dilation: int = 3,
+        norm_eps: float = 1e-5,
+        hc_mult: int = 4,
+        activation: bool = True,
+    ):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.kernel_size = kernel_size
+        self.dilation = dilation
+        self.hc_mult = hc_mult
+        self.activation = activation
+
+        # Step 1: Independent RMSNorm for each branch
+        self.norms = nn.ModuleList(
+            [nn.RMSNorm(hidden_size, eps=norm_eps) for _ in range(hc_mult)]
+        )
+
+        # 深度wise卷积 (groups=total_channels)
+        total_channels = hc_mult * hidden_size
+        self.conv = nn.Conv1d(
+            in_channels=total_channels,
+            out_channels=total_channels,
+            kernel_size=kernel_size,
+            stride=1,
+            padding=0,
+            dilation=dilation,
+            groups=total_channels,
+            bias=True,
+        )
+
+        # Weight/bias initialization: must be zeros
+        nn.init.zeros_(self.conv.weight)
+        if self.conv.bias is not None:
+            nn.init.zeros_(self.conv.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass for ShortConv.
+
+        Args:
+            x: Input tensor of shape [batch_size, seq_len, hc_mult, hidden_size]
+
+        Returns:
+            torch.Tensor: Output tensor of same shape, calculated as SiLU(Conv(Norm(x))) + x
+        """
+        batch_size, seq_len, hc_mult, hidden_size = x.shape
+
+        # Step 1: Independent RMSNorm per branch
+        normed_branches = []
+        for i in range(hc_mult):
+            normed_branches.append(self.norms[i](x[:, :, i, :]))
+
+        x_norm = torch.stack(normed_branches, dim=2)
+
+        # Step 2: Reshape for Conv1D -> [batch_size, total_channels, seq_len]
+        # x_norm: [B, L, M, D] -> [B, M, D, L] -> [B, M*D, L]
+        x_conv_in = x_norm.permute(0, 2, 3, 1).reshape(
+            batch_size, hc_mult * hidden_size, seq_len
+        )
+
+        # Step 4: Causal padding (shift sequence right so conv output corresponds to current pos)
+        pad_len = (self.kernel_size - 1) * self.dilation
+        if pad_len > 0:
+            x_padded = F.pad(x_conv_in, (pad_len, 0))
+        else:
+            x_padded = x_conv_in
+
+        # Step 3: Depthwise convolution
+        conv_out = self.conv(x_padded)
+
+        # Step 5: SiLU activation
+        if self.activation:
+            conv_out = F.silu(conv_out)
+
+        # Step 6: Convert back to [batch_size, seq_len, hc_mult, hidden_size]
+        out = (
+            conv_out.view(batch_size, hc_mult, hidden_size, seq_len)
+            .permute(0, 3, 1, 2)
+            .contiguous()
+        )
+
+        # Residual connection
+        return cast(torch.Tensor, out + x)
+
+
 class ContextAwareGating(nn.Module):
     """
     Context-Aware Gating module as described in Section 2.3 and 2.4 of the Engram paper.
