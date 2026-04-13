@@ -168,6 +168,9 @@ class ContextAwareGating(nn.Module):
         gate = gate.abs().clamp_min(1e-6).sqrt() * gate.sign()
         gate = gate.sigmoid().unsqueeze(-1)  # [B, L, M, 1]
 
+        # Store for visualization
+        self.last_gate = gate.detach()
+
         # 步骤5：门控调制
         gated_value = gate * value.unsqueeze(
             2
