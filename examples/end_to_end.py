@@ -125,7 +125,8 @@ def train_engram() -> PreTrainedTokenizer:
         weight_decay=0.01,
         logging_steps=10,
         save_strategy="no",
-        fp16=torch.cuda.is_available(),
+        bf16=torch.cuda.is_bf16_supported(),
+        fp16=not torch.cuda.is_bf16_supported() and torch.cuda.is_available(),
         report_to="none",
         remove_unused_columns=True,
     )

@@ -72,9 +72,11 @@ class EngramModel(nn.Module):
         # Attach hooks immediately
         self.load_engram()
 
-        # Ensure Engram layers match the base model dtype
-        if hasattr(base_model, "dtype"):
-            self.to(base_model.dtype)
+        # Note: We do NOT unconditionally cast to base_model.dtype here.
+        # Keeping Engram layers in float32 is essential for training stability 
+        # when the backbone is float16/bfloat16 (Mixed Precision).
+        # Trainer/autocast will handle the precision transitions during forward/backward.
+        self.engram_layers.float()
 
     def _find_transformer_layers(self) -> nn.ModuleList:
         """Find the main transformer layers module list."""
