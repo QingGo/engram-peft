@@ -13,28 +13,24 @@
       
       
       
-        <link rel="prev" href="..">
-      
-      
-        <link rel="next" href="../docs/tutorial/">
       
       
         
       
       
-      <link rel="icon" href="../assets/images/favicon.png">
+      <link rel="icon" href="../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>简体中文 - Engram-PEFT</title>
+        <title>Memory Footprint Analysis: Engram vs. LoRA - Engram-PEFT</title>
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -53,7 +49,7 @@
       
     
     
-    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -78,7 +74,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#engram-peft" class="md-skip">
+        <a href="#memory-footprint-analysis-engram-vs-lora" class="md-skip">
           Skip to content
         </a>
       
@@ -92,7 +88,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="Engram-PEFT" class="md-header__button md-logo" aria-label="Engram-PEFT" data-md-component="logo">
+    <a href="../.." title="Engram-PEFT" class="md-header__button md-logo" aria-label="Engram-PEFT" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -112,7 +108,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              简体中文
+              Memory Footprint Analysis: Engram vs. LoRA
             
           </span>
         </div>
@@ -225,7 +221,7 @@
   
   
     <li class="md-tabs__item">
-      <a href=".." class="md-tabs__link">
+      <a href="../.." class="md-tabs__link">
         
   
   
@@ -242,11 +238,9 @@
   
   
   
-    
   
-  
-    <li class="md-tabs__item md-tabs__item--active">
-      <a href="./" class="md-tabs__link">
+    <li class="md-tabs__item">
+      <a href="../../README_zh/" class="md-tabs__link">
         
   
   
@@ -265,7 +259,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../docs/tutorial/" class="md-tabs__link">
+      <a href="../tutorial/" class="md-tabs__link">
         
   
   
@@ -284,7 +278,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../docs/api/" class="md-tabs__link">
+      <a href="../api/" class="md-tabs__link">
         
   
   
@@ -303,7 +297,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../docs/paper_alignment/" class="md-tabs__link">
+      <a href="../paper_alignment/" class="md-tabs__link">
         
   
   
@@ -338,7 +332,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="Engram-PEFT" class="md-nav__button md-logo" aria-label="Engram-PEFT" data-md-component="logo">
+    <a href="../.." title="Engram-PEFT" class="md-nav__button md-logo" aria-label="Engram-PEFT" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -368,7 +362,7 @@
   
   
     <li class="md-nav__item">
-      <a href=".." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -392,37 +386,10 @@
       
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    简体中文
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../README_zh/" class="md-nav__link">
         
   
   
@@ -438,120 +405,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#_1" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        🚀 快速开始
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="🚀 快速开始">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#_2" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        安装
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#5" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        5 分钟上手示例
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#_3" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        📊 性能对比
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#_4" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        🛠 特性
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#_5" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        📖 文档
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#_6" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        🎯 引用
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#_7" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        开源协议
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -563,7 +416,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../docs/tutorial/" class="md-nav__link">
+      <a href="../tutorial/" class="md-nav__link">
         
   
   
@@ -590,7 +443,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../docs/api/" class="md-nav__link">
+      <a href="../api/" class="md-nav__link">
         
   
   
@@ -617,7 +470,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../docs/paper_alignment/" class="md-nav__link">
+      <a href="../paper_alignment/" class="md-nav__link">
         
   
   
@@ -664,22 +517,44 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#_1" class="md-nav__link">
+  <a href="#1-baseline-tinyllama-11b" class="md-nav__link">
     <span class="md-ellipsis">
       
-        🚀 快速开始
+        1. Baseline: TinyLlama-1.1B
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="🚀 快速开始">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-lora-analysis-r16" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. LoRA Analysis (r=16)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#15-full-fine-tuning-fft-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.5 Full Fine-Tuning (FFT) Analysis
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.5 Full Fine-Tuning (FFT) Analysis">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#_2" class="md-nav__link">
+  <a href="#theoretical-breakdown" class="md-nav__link">
     <span class="md-ellipsis">
       
-        安装
+        Theoretical Breakdown:
       
     </span>
   </a>
@@ -687,10 +562,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#5" class="md-nav__link">
+  <a href="#total-rationale" class="md-nav__link">
     <span class="md-ellipsis">
       
-        5 分钟上手示例
+        Total Rationale:
       
     </span>
   </a>
@@ -703,10 +578,49 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#_3" class="md-nav__link">
+  <a href="#3-engram-analysis" class="md-nav__link">
     <span class="md-ellipsis">
       
-        📊 性能对比
+        3. Engram Analysis
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Engram Analysis">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#parameter-breakdown" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameter Breakdown
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#vram-overhead" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        VRAM Overhead
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#summary-comparison-table-11b-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary Comparison Table (1.1B Model)
       
     </span>
   </a>
@@ -714,43 +628,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#_4" class="md-nav__link">
+  <a href="#4-conclusion" class="md-nav__link">
     <span class="md-ellipsis">
       
-        🛠 特性
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#_5" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        📖 文档
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#_6" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        🎯 引用
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#_7" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        开源协议
+        4. Conclusion
       
     </span>
   </a>
@@ -777,106 +658,114 @@
   
 
 
-<h1 id="engram-peft">Engram-PEFT</h1>
-<p><a href="../">English</a> | [中文]</p>
-<p><a href="https://arxiv.org/abs/2601.07372"><img alt="Paper" src="https://img.shields.io/badge/arXiv-2601.07372-B31B1B.svg" /></a>
-<a href="https://github.com/deepseek-ai/Engram"><img alt="Official Demo" src="https://img.shields.io/badge/GitHub-Official_Demo-black?logo=github" /></a>
-<a href="../LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" /></a>
-<a href="https://qinggo.github.io/engram-peft/"><img alt="Documentation" src="https://img.shields.io/badge/Docs-MkDocs-blue.svg" /></a></p>
-<blockquote>
-<p>[!IMPORTANT]
-这是一个 DeepSeek Engram 论文的 <strong>非官方实现</strong>。不代表 DeepSeek-AI 官方团队。</p>
-</blockquote>
-<p><strong>Engram-PEFT</strong> 是一个高性能、100% 对齐论文的 DeepSeek Engram 架构实现。它提供了一个参数高效微调 (PEFT) 接口，可将条件记忆 (Conditional Memory) 注入任何基于 Transformer 的大语言模型。</p>
-<p>Engram 使用稀疏检索机制将 <strong>静态知识存储</strong> 与 <strong>动态推理</strong> 解耦，允许模型在不增加推理 FLOPs 或干扰核心逻辑的情况下，扩展其实际记忆。</p>
-<hr />
-<h2 id="_1">🚀 快速开始</h2>
-<h3 id="_2">安装</h3>
-<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>engram-peft
-</code></pre></div>
-<p>如果您需要运行示例脚本或进行开发，请安装开发依赖：</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># 使用 uv (推荐)</span>
-uv<span class="w"> </span>sync<span class="w"> </span>--all-groups
-
-<span class="c1"># 使用 pip</span>
-pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[dev]&quot;</span>
-</code></pre></div>
-<h3 id="5">5 分钟上手示例</h3>
-<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoModelForCausalLM</span><span class="p">,</span> <span class="n">AutoTokenizer</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">engram_peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">EngramConfig</span><span class="p">,</span> <span class="n">get_engram_model</span>
-
-<span class="c1"># 1. 加载基础模型</span>
-<span class="n">base_model</span> <span class="o">=</span> <span class="n">AutoModelForCausalLM</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T&quot;</span><span class="p">)</span>
-<span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="s2">&quot;TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T&quot;</span><span class="p">)</span>
-
-<span class="c1"># 2. 注入 Engram 层 (对齐 arXiv:2601.07372)</span>
-<span class="n">config</span> <span class="o">=</span> <span class="n">EngramConfig</span><span class="p">(</span><span class="n">target_layers</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">11</span><span class="p">,</span> <span class="mi">20</span><span class="p">])</span>
-<span class="n">model</span> <span class="o">=</span> <span class="n">get_engram_model</span><span class="p">(</span><span class="n">base_model</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">tokenizer</span><span class="p">)</span>
-
-<span class="c1"># 3. 模型准备好进行训练了！</span>
-<span class="c1"># 只有 Engram 参数 (约占总量的 1%) 是可训练的。</span>
-</code></pre></div>
-<hr />
-<h2 id="_3">📊 性能对比</h2>
+<h1 id="memory-footprint-analysis-engram-vs-lora">Memory Footprint Analysis: Engram vs. LoRA</h1>
+<p>This document provides a theoretical and empirical analysis of the memory (VRAM) usage for Engram and LoRA when applied to the TinyLlama-1.1B model.</p>
+<h2 id="1-baseline-tinyllama-11b">1. Baseline: TinyLlama-1.1B</h2>
+<p>To understand the overhead, we first examine the base model:
+- <strong>Parameters</strong>: ~1.1 Billion
+- <strong>Weight Precision</strong>: FP16 (2 bytes/param)
+- <strong>Static Memory</strong>: ~2.2 GB (weights only)
+- <strong>Inference/Training Context</strong>: VRAM usage also includes CUDA kernels, workspace, and activations (gradient checkpoints), typically totaling <strong>3-5 GB</strong> for the base model during training with small batch sizes.</p>
+<h2 id="2-lora-analysis-r16">2. LoRA Analysis (r=16)</h2>
+<p>In our benchmarks, LoRA adds parameters to <code>q_proj</code> and <code>v_proj</code>.
+- <strong>Rank ($r$)</strong>: 16
+- <strong>Hidden Size ($D$)</strong>: 2048
+- <strong>Params per module</strong>: $D \times r + r \times D = 65,536$
+- <strong>Total Layers</strong>: 22
+- <strong>Total LoRA Params</strong>: $2 \text{ modules} \times 22 \text{ layers} \times 65k \approx 2.88 \text{ Million}$
+- <strong>VRAM Overhead</strong>: 
+    - Weights + Gradients + Optimizer States: $\approx 2.88M \times (2+2+8) \approx 35 \text{ MB}$.
+    - Since this overhead is negligible, LoRA training memory is dominated by the base model and its activations.
+- <strong>Observed VRAM</strong>: <strong>~5.1 GB</strong> (mostly base weights + activations).</p>
+<h2 id="15-full-fine-tuning-fft-analysis">1.5 Full Fine-Tuning (FFT) Analysis</h2>
+<p>For a 1.1B parameter model using the standard Adam optimizer and mixed-precision (FP16), the memory requirement is significantly higher due to the need for gradient and optimizer state storage for <em>every</em> parameter.</p>
+<h3 id="theoretical-breakdown">Theoretical Breakdown:</h3>
+<ol>
+<li><strong>Model Weights (FP16)</strong>: $1.1B \times 2 \text{ bytes} = \mathbf{2.2 \text{ GB}}$</li>
+<li><strong>Gradients (FP16)</strong>: $1.1B \times 2 \text{ bytes} = \mathbf{2.2 \text{ GB}}$</li>
+<li><strong>Optimizer States (Adam/FP32)</strong>:</li>
+<li>Adam requires 12 bytes per parameter (Master Weight, Momentum, and Variance in FP32).</li>
+<li>$1.1B \times 12 \text{ bytes} = \mathbf{13.2 \text{ GB}}$</li>
+<li><strong>Activations &amp; Buffers</strong>:</li>
+<li>For a 1.1B model, training usually requires <strong>2-4 GB</strong> for activation storage (depending on sequence length and gradient checkpointing).</li>
+<li>CUDA overhead and workspace usually occupy <strong>1-2 GB</strong>.</li>
+</ol>
+<h3 id="total-rationale">Total Rationale:</h3>
+<p><strong>$17.6 \text{ GB (Static)} + 4 \text{ GB (Activations)} + 2 \text{ GB (System)} \approx \mathbf{23.6 \text{ GB}}$</strong></p>
+<p>This explains why <strong>~24 GB</strong> is the industry-standard minimum for full fine-tuning of 1B-scale models.</p>
+<h2 id="3-engram-analysis">3. Engram Analysis</h2>
+<p>Engram's architecture introduces large (though sparse) embedding tables and branching projections.</p>
+<h3 id="parameter-breakdown">Parameter Breakdown</h3>
+<p>Using the configuration <code>target_layers=[2, 11, 20]</code> (3 layers) and <code>engram_vocab_size_per_ngram=[256000, 256000]</code>:
+1. <strong>Multi-Head Embeddings (Sparse)</strong>:
+   - 16 heads total, dimension per head = 64.
+   - Total capacity per layer $\approx 512,000$ entries.
+   - 3 layers $\times 512k \times 64 \approx \mathbf{98.3 \text{ Million parameters}}$.
+2. <strong>Context-Aware Gating (Dense)</strong>:
+   - Shared Value/Key projections per layer $\approx 10.5 \text{ Million}$.
+   - 3 layers $\approx \mathbf{31.5 \text{ Million parameters}}$.
+- <strong>Total Engram Params</strong>: $\approx \mathbf{130 \text{ Million}}$.</p>
+<h3 id="vram-overhead">VRAM Overhead</h3>
+<p>Even though Engram uses sparse gradient updates, the full parameter set and optimizer states must reside in VRAM:
+- <strong>Weights (FP16)</strong>: $130M \times 2 \approx 260 \text{ MB}$.
+- <strong>Optimizer States (Adam/SparseAdam)</strong>: $130M \times 8 \approx \mathbf{1.04 \text{ GB}}$.
+- <strong>Activations</strong>: Branching ($hc_mult=4$) increases activation storage requirement by $\approx 20$ MB per layer.
+- <strong>Total Calculated Overhead</strong>: <strong>~1.3 - 1.5 GB</strong> above the LoRA baseline.</p>
+<p>This aligns closely with our theoretical calculation of <strong>~1.5 GB</strong> overhead for Engram's 130M parameters and their corresponding optimizer states. </p>
+<h2 id="summary-comparison-table-11b-model">Summary Comparison Table (1.1B Model)</h2>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">方法</th>
-<th style="text-align: left;">额外参数总量</th>
-<th style="text-align: left;">梯度更新规模</th>
-<th style="text-align: left;">显存占用 (1.1B)</th>
+<th style="text-align: left;">Component</th>
+<th style="text-align: left;">FFT (Full Fine-Tune)</th>
+<th style="text-align: left;">LoRA (r=16)</th>
+<th style="text-align: left;">Engram (3 layers)</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;"><strong>FFT</strong> (全参数微调)</td>
-<td style="text-align: left;">0</td>
-<td style="text-align: left;">1,100M</td>
-<td style="text-align: left;"><strong>~24GB (预估值)</strong></td>
+<td style="text-align: left;"><strong>Trainable Params</strong></td>
+<td style="text-align: left;">1,100 M</td>
+<td style="text-align: left;">2.88 M</td>
+<td style="text-align: left;">130 M</td>
 </tr>
 <tr>
-<td style="text-align: left;"><strong>LoRA</strong> (r=16)</td>
-<td style="text-align: left;">1.8M</td>
-<td style="text-align: left;">1.8M</td>
-<td style="text-align: left;"><strong>~5.1GB</strong></td>
+<td style="text-align: left;"><strong>Weight Memory</strong></td>
+<td style="text-align: left;">2.2 GB</td>
+<td style="text-align: left;">2.2 GB*</td>
+<td style="text-align: left;">2.45 GB**</td>
 </tr>
 <tr>
-<td style="text-align: left;"><strong>Engram-PEFT</strong></td>
-<td style="text-align: left;"><strong>11.2M</strong></td>
-<td style="text-align: left;"><strong>~1.2M</strong>*</td>
-<td style="text-align: left;"><strong>~6.8GB</strong></td>
+<td style="text-align: left;"><strong>Optimizer States</strong></td>
+<td style="text-align: left;">13.2 GB</td>
+<td style="text-align: left;">0.03 GB</td>
+<td style="text-align: left;">1.04 GB</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Gradients</strong></td>
+<td style="text-align: left;">2.2 GB</td>
+<td style="text-align: left;">0.01 GB</td>
+<td style="text-align: left;">0.26 GB</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Activations/CUDA</strong></td>
+<td style="text-align: left;">~6.0 GB</td>
+<td style="text-align: left;">~2.8 GB</td>
+<td style="text-align: left;">~3.0 GB</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Total VRAM</strong></td>
+<td style="text-align: left;"><strong>~24 GB (est.)</strong></td>
+<td style="text-align: left;"><strong>~5.1 GB (obs.)</strong></td>
+<td style="text-align: left;"><strong>~6.8 GB (obs.)</strong></td>
 </tr>
 </tbody>
 </table>
-<p><em>* Engram 采用稀疏检索机制；每步仅有极小比例（约 1%）的参数被激活并接收梯度更新。关于显存占用和扩展性的详细分析，请参阅 <a href="../docs/memory_analysis/">显存分析报告 (英文)</a>。</em></p>
-<hr />
-<h2 id="_4">🛠 特性</h2>
-<ul>
-<li><strong>100% 对齐论文</strong>：实现了附录 A 表 5 的参数以及 DeepSeek 官方的门控/哈希逻辑。</li>
-<li><strong>CPU 端预计算</strong>：<code>EngramDataCollator</code> 在 CPU 上预计算多头哈希，确保 100% 的 GPU 利用率。</li>
-<li><strong>分词器压缩 (Tokenizer Compression)</strong>：内置 NFKC 和小写归一化，实现 23% 的词表缩减（与论文一致）。</li>
-<li><strong>零侵入性</strong>：通过 forward hook 注入；无需修改基础模型架构源码。</li>
-<li><strong>动态切换</strong>：运行时加载和交换“知识包”，无需重新加载基础模型。</li>
-</ul>
-<hr />
-<h2 id="_5">📖 文档</h2>
-<p>完整详情请参阅我们的文档：
-- <a href="../docs/tutorial/">教程</a>: 快速上手指南和领域知识注入。
-- <a href="../docs/api/">API 参考</a>: 详细的类和函数文档。
-- <a href="../docs/paper_alignment/">论文对齐</a>: 我们如何对齐 DeepSeek 的研究。</p>
-<hr />
-<h2 id="_6">🎯 引用</h2>
-<p>如果您在研究中使用此实现，请引用 DeepSeek 的原始论文：</p>
-<div class="highlight"><pre><span></span><code><span class="nc">@article</span><span class="p">{</span><span class="nl">deepseek2026engram</span><span class="p">,</span>
-<span class="w">  </span><span class="na">title</span><span class="p">=</span><span class="s">{Conditional Memory via Scalable Lookup: A New Axis of Sparsity for Large Language Models}</span><span class="p">,</span>
-<span class="w">  </span><span class="na">author</span><span class="p">=</span><span class="s">{DeepSeek-AI}</span><span class="p">,</span>
-<span class="w">  </span><span class="na">journal</span><span class="p">=</span><span class="s">{arXiv preprint arXiv:2601.07372}</span><span class="p">,</span>
-<span class="w">  </span><span class="na">year</span><span class="p">=</span><span class="s">{2026}</span>
-<span class="p">}</span>
-</code></pre></div>
-<hr />
-<h2 id="_7">开源协议</h2>
-<p>Apache License 2.0。详情请参阅 <a href="../LICENSE">LICENSE</a>。</p>
+<p><em>* LoRA and Engram weights include the frozen base model (2.2GB).\
+*</em> Engram weights include base (2.2GB) + Engram tables (0.26GB).*</p>
+<h2 id="4-conclusion">4. Conclusion</h2>
+<p>The observed difference in VRAM (<strong>Engram 6.8 GB</strong> vs <strong>LoRA 5.1 GB</strong>) is $\approx \mathbf{1.7 \text{ GB}}$. </p>
+<p>This aligns closely with our theoretical calculation of <strong>~1.5 GB</strong> overhead for Engram's 130M parameters and their corresponding optimizer states. For larger base models (e.g., 7B+), this overhead becomes a much smaller fraction of the total budget, highlighting Engram's efficiency as a "Parameter-Efficient" method for massive knowledge injection.</p>
 
 
 
@@ -932,10 +821,10 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>
