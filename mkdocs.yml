@@ -2,12 +2,26 @@ site_name: Engram-PEFT
 site_description: 100% Alignment with DeepSeek Engram Paper (arXiv:2601.07372)
 site_author: DeepSeek-AI & Engram-PEFT Contributors
 repo_url: https://github.com/QingGo/engram-peft
-edit_uri: edit/main/docs/
+edit_uri: edit/main/
 docs_dir: .
-site_dir: ../site
-not_in_nav: |
-  PRD.md
-  checklist.md
+site_dir: ../site_build
+
+exclude_docs: |
+  src/**
+  tests/**
+  examples/**
+  build/**
+  dist/**
+  .venv/**
+  .git/**
+  .github/**
+  .mypy_cache/**
+  .pytest_cache/**
+  docs/PRD.md
+  docs/checklist.md
+  LICENSE
+  pyproject.toml
+  uv.lock
 
 theme:
   name: material
@@ -53,8 +67,8 @@ markdown_extensions:
   - md_in_html
 
 nav:
-  - Home: index.md
+  - Home: README.md
   - 简体中文: README_zh.md
-  - Tutorial: tutorial.md
-  - API Reference: api.md
-  - Paper Alignment: paper_alignment.md
+  - Tutorial: docs/tutorial.md
+  - API Reference: docs/api.md
+  - Paper Alignment: docs/paper_alignment.md
