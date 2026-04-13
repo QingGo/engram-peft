@@ -12,27 +12,28 @@ Usage:
 """
 
 import os
+from typing import Any, Callable, Dict, List, Optional, cast
+
 import torch
-from typing import Dict, Any, List, Callable, cast, Optional
 import torch.nn as nn
+from datasets import load_dataset  # type: ignore[import-untyped]
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     PreTrainedTokenizer,
-    TrainingArguments,
     Trainer,
+    TrainingArguments,
     set_seed,
 )
-from datasets import load_dataset  # type: ignore[import-untyped]
 
 from engram_peft import (
     EngramConfig,
-    get_engram_model,
     EngramDataCollator,
+    EngramLayer,
+    EngramModel,
+    get_engram_model,
     get_optimizer,
     get_scheduler,
-    EngramModel,
-    EngramLayer,
 )
 
 # 1. Configuration & Constants

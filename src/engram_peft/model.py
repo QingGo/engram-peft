@@ -1,14 +1,14 @@
 import os
-from typing import Dict, Any, cast, Optional, Tuple, Union, List, Callable
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
 import torch
 import torch.nn as nn
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
-from engram_peft.config import EngramConfig
-from engram_peft.layer import EngramLayer
 from engram_peft.compression import CompressedTokenizer
+from engram_peft.config import EngramConfig
 from engram_peft.hashing import NgramHashMapping
+from engram_peft.layer import EngramLayer
 
 
 class EngramModel(nn.Module):

@@ -1,7 +1,8 @@
 import json
 import os
+from typing import Any, Dict, List, Union
+
 import numpy as np
-from typing import Dict, List, Union, Any
 import torch
 from tokenizers import Regex, normalizers  # type: ignore
 from transformers import AutoTokenizer, PreTrainedTokenizer

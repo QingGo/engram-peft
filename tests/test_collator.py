@@ -1,13 +1,12 @@
+from typing import Any, Dict, List
+
+import numpy as np
 import pytest
 import torch
-import numpy as np
-from typing import Dict, List, Any
-from transformers import PreTrainedTokenizer
+from transformers import AutoTokenizer, PreTrainedTokenizer
+
 from engram_peft.collator import EngramDataCollator
 from engram_peft.config import EngramConfig
-
-
-from transformers import AutoTokenizer
 
 
 @pytest.fixture

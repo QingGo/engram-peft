@@ -1,7 +1,8 @@
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union, overload
+
 import torch
-from torch.optim import Optimizer, Adam, SparseAdam
+from torch.optim import Adam, Optimizer, SparseAdam
 from torch.optim.lr_scheduler import LambdaLR
-from typing import List, Optional, Any, TYPE_CHECKING, Dict, Union, Callable, overload
 
 if TYPE_CHECKING:
     from engram_peft.model import EngramModel

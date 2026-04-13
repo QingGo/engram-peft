@@ -1,11 +1,13 @@
+from typing import Any, List, cast
+from unittest.mock import MagicMock
+
 import torch
 import torch.nn as nn
-from typing import List, Any, cast
-from unittest.mock import MagicMock
-from engram_peft.layer import ContextAwareGating, EngramLayer, ShortConv
-from engram_peft.config import EngramConfig
+
 from engram_peft.compression import CompressedTokenizer
+from engram_peft.config import EngramConfig
 from engram_peft.hashing import NgramHashMapping
+from engram_peft.layer import ContextAwareGating, EngramLayer, ShortConv
 
 
 def test_shortconv_initialization() -> None:

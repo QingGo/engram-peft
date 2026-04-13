@@ -12,31 +12,31 @@ Usage:
 """
 
 import os
+import time
+from typing import Any, Dict, List, Optional, Tuple, cast
+
 import torch
 import torch.nn as nn
-import time
-from typing import Dict, Any, List, cast, Optional, Tuple
-
+from datasets import Dataset, load_dataset  # type: ignore[import-untyped]
 from transformers import (
     AutoTokenizer,
-    PreTrainedTokenizer,
+    DataCollatorForLanguageModeling,
     PretrainedConfig,
     PreTrainedModel,
-    TrainingArguments,
+    PreTrainedTokenizer,
     Trainer,
+    TrainingArguments,
     set_seed,
-    DataCollatorForLanguageModeling,
 )
-from datasets import load_dataset, Dataset  # type: ignore[import-untyped]
 
 from engram_peft import (
     EngramConfig,
-    get_engram_model,
     EngramDataCollator,
+    EngramLayer,
+    EngramModel,
+    get_engram_model,
     get_optimizer,
     get_scheduler,
-    EngramModel,
-    EngramLayer,
 )
 
 # 1. Constants & Device Detection

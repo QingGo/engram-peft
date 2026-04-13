@@ -1,9 +1,11 @@
+from typing import Dict, List, Optional, Tuple, cast
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Optional, cast, Dict, Tuple, List
-from engram_peft.config import EngramConfig
+
 from engram_peft.compression import CompressedTokenizer
+from engram_peft.config import EngramConfig
 from engram_peft.hashing import NgramHashMapping
 
 

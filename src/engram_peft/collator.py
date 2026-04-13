@@ -1,8 +1,10 @@
+from typing import Any, Dict, List, Optional, cast
+
 import torch
-from typing import Dict, List, Any, Optional, cast
 from transformers import DataCollatorForLanguageModeling, PreTrainedTokenizer
-from engram_peft.config import EngramConfig
+
 from engram_peft.compression import CompressedTokenizer
+from engram_peft.config import EngramConfig
 from engram_peft.hashing import NgramHashMapping
 
 
