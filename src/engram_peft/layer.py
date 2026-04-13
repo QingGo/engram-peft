@@ -110,183 +110,69 @@ class ContextAwareGating(nn.Module):
 
     This module computes a gating signal based on the context (h_t) and the retrieved
     Engram embeddings (e_t), and applies it to the value projection of the embeddings.
-    It also includes a depthwise causal convolution and a residual connection.
-
-    Attributes:
-        embedding_dim (int): Total dimension of the concatenated Engram embeddings (e_t).
-                             e_t is formed by concatenating embeddings from all N-gram orders
-                             and all hash heads: e_t = ||_{n} ||_{k} e_{t,n,k}, e_t ∈ R^{d_mem}.
-        hidden_dim (int): Dimension of the Transformer hidden states (h_t).
-        num_branches (int): Number of branches in the multi-branch architecture.
-        kernel_size (int): Size of the convolution kernel (fixed to 4 in the paper).
-        dilation (int): Dilation rate for the convolution.
     """
 
-    def __init__(
-        self,
-        embedding_dim: int = 1024,  # Total concatenated dimension (e.g. 1024 dim)
-        hidden_dim: int = 2560,
-        num_branches: int = 1,
-        kernel_size: int = 4,
-        dilation: Optional[int] = None,
-    ):
+    def __init__(self, engram_hidden_size: int, hidden_size: int, hc_mult: int = 4):
         super().__init__()
-        self.embedding_dim = embedding_dim
-        self.hidden_dim = hidden_dim
-        self.num_branches = num_branches
-        self.kernel_size = kernel_size
-        self.dilation = dilation if dilation is not None else 1
+        self.engram_hidden_size = engram_hidden_size
+        self.hidden_size = hidden_size
+        self.hc_mult = hc_mult
 
-        # Step 1: Shared Value projection: W_V
-        self.w_v = nn.Linear(embedding_dim, hidden_dim, bias=False)
+        # 步骤1：共享的Value投影
+        self.w_v = nn.Linear(engram_hidden_size, hidden_size, bias=False)
 
-        # Step 2: Branch-specific Key projection: W_K
-        # We use a single linear layer to project to all branches at once
-        self.w_k = nn.Linear(embedding_dim, num_branches * hidden_dim, bias=False)
-
-        # Step 3: Branch-specific RMSNorm for h_t and k_t
-        self.norm_h = nn.ModuleList(
-            [nn.RMSNorm(hidden_dim) for _ in range(num_branches)]
-        )
-        self.norm_k = nn.ModuleList(
-            [nn.RMSNorm(hidden_dim) for _ in range(num_branches)]
+        # 步骤2：分支特定的Key投影 W_K^(m)
+        self.w_k = nn.ModuleList(
+            [
+                nn.Linear(engram_hidden_size, hidden_size, bias=False)
+                for _ in range(hc_mult)
+            ]
         )
 
-        # Step 6: Depthwise causal convolution
-        # parameters are shared across branches if num_branches > 1
-        self.conv = nn.Conv1d(
-            in_channels=hidden_dim,
-            out_channels=hidden_dim,
-            kernel_size=kernel_size,
-            stride=1,
-            padding=0,
-            dilation=self.dilation,
-            groups=hidden_dim,  # Depthwise
-            bias=True,
-        )
+        # 步骤3：独立的 RMSNorm
+        self.norm_h = nn.ModuleList([nn.RMSNorm(hidden_size) for _ in range(hc_mult)])
+        self.norm_k = nn.ModuleList([nn.RMSNorm(hidden_size) for _ in range(hc_mult)])
 
-        # Step 8: Branch-specific RMSNorm before convolution
-        self.norm_v_tilde = nn.ModuleList(
-            [nn.RMSNorm(hidden_dim) for _ in range(num_branches)]
-        )
-
-        # Initialize convolution to zero to preserve identity mapping (Y = v_tilde initially)
-        self.reset_parameters()
-
-    def reset_parameters(self) -> None:
-        """Initialize parameters as per paper requirements."""
-        nn.init.zeros_(self.conv.weight)
-        if self.conv.bias is not None:
-            nn.init.zeros_(self.conv.bias)
-        # Linear layers use default initialization (Kaiming Uniform)
-
-    def forward(self, e_t: torch.Tensor, h_t: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, embeddings: torch.Tensor, hidden_states: torch.Tensor
+    ) -> torch.Tensor:
         """
         Forward pass of the ContextAwareGating module.
 
         Args:
-            e_t: [batch_size, seq_len, embedding_dim] - Concatenated Engram embeddings.
-            h_t: [batch_size, seq_len, num_branches, hidden_dim] if num_branches > 1,
-                 else [batch_size, seq_len, hidden_dim].
+            embeddings: [batch_size, seq_len, engram_hidden_size]
+            hidden_states: [batch_size, seq_len, hc_mult, hidden_size]
 
         Returns:
-            torch.Tensor: Output tensor Y with the same shape as h_t.
+            torch.Tensor: gated_value of shape [batch_size, seq_len, hc_mult, hidden_size]
         """
-        batch_size, seq_len, _ = e_t.shape
+        # 步骤1：共享的Value投影
+        value = self.w_v(embeddings)  # [B, L, D]
 
-        # Step 1: Shared Value projection: v_t = W_V e_t
-        v_t = self.w_v(e_t)  # [B, L, D]
+        normed_keys_list = []
+        normed_queries_list = []
 
-        # Step 2: Branch-specific Key projection: k_t = W_K e_t
-        k_t_raw = self.w_k(e_t)  # [B, L, M * D]
+        for m in range(self.hc_mult):
+            # 步骤2：分支特定的Key投影
+            key_m = self.w_k[m](embeddings)
+            # 步骤3：对每个分支的key和hidden_states应用独立的RMSNorm
+            normed_keys_list.append(self.norm_k[m](key_m))
+            normed_queries_list.append(self.norm_h[m](hidden_states[:, :, m, :]))
 
-        if self.num_branches > 1:
-            k_t = k_t_raw.view(batch_size, seq_len, self.num_branches, self.hidden_dim)
-            # h_t is already [B, L, M, D]
-        else:
-            k_t = k_t_raw  # [B, L, D]
-            # h_t is [B, L, D]
+        normed_key = torch.stack(normed_keys_list, dim=2)  # [B, L, M, D]
+        normed_query = torch.stack(normed_queries_list, dim=2)  # [B, L, M, D]
 
-        # Step 3: Branch-specific RMSNorm h_t and k_t
-        if self.num_branches > 1:
-            h_t_norm_list = []
-            k_t_norm_list = []
-            for i in range(self.num_branches):
-                h_t_norm_list.append(self.norm_h[i](h_t[:, :, i, :]))
-                k_t_norm_list.append(self.norm_k[i](k_t[:, :, i, :]))
-            h_t_norm = torch.stack(h_t_norm_list, dim=2)
-            k_t_norm = torch.stack(k_t_norm_list, dim=2)
-        else:
-            h_t_norm = self.norm_h[0](h_t)
-            k_t_norm = self.norm_k[0](k_t)
+        # 步骤4：计算门控
+        gate = (normed_key * normed_query).sum(dim=-1) / (self.hidden_size**0.5)
+        gate = gate.abs().clamp_min(1e-6).sqrt() * gate.sign()
+        gate = gate.sigmoid().unsqueeze(-1)  # [B, L, M, 1]
 
-        # Step 4: Calculate gating α_t = σ( (h_t_norm · k_t_norm) / sqrt(D) )
-        # dot product over the last dimension D
-        dot_product = (h_t_norm * k_t_norm).sum(dim=-1) / (self.hidden_dim**0.5)
+        # 步骤5：门控调制
+        gated_value = gate * value.unsqueeze(
+            2
+        )  # [B, L, M, 1] * [B, L, 1, D] -> [B, L, M, D]
 
-        # Stability trick from official demo:
-        # gate = gate.abs().clamp_min(1e-6).sqrt() * gate.sign()
-        stable_dot_product = (
-            dot_product.abs().clamp_min(1e-6).sqrt() * dot_product.sign()
-        )
-        alpha_t = torch.sigmoid(stable_dot_product)
-
-        # Step 5: Gating modulation: ṽ_t = α_t · v_t
-        if self.num_branches > 1:
-            # alpha_t: [B, L, M] -> [B, L, M, 1]
-            # v_t: [B, L, D] -> [B, L, 1, D]
-            v_tilde = alpha_t.unsqueeze(-1) * v_t.unsqueeze(2)  # [B, L, M, D]
-        else:
-            # alpha_t: [B, L] -> [B, L, 1]
-            # v_t: [B, L, D]
-            v_tilde = alpha_t.unsqueeze(-1) * v_t  # [B, L, D]
-
-        # Step 6 & 7: Depthwise causal convolution
-        # Step 8: Branch-specific RMSNorm(ṽ) before convolution
-        if self.num_branches > 1:
-            # Apply branch-specific RMSNorm
-            v_tilde_norm_list = []
-            for i in range(self.num_branches):
-                v_tilde_norm_list.append(self.norm_v_tilde[i](v_tilde[:, :, i, :]))
-            v_tilde_norm = torch.stack(v_tilde_norm_list, dim=2)
-
-            # [B, L, M, D] -> [B, M, D, L] -> [B*M, D, L]
-            x_norm = (
-                v_tilde_norm.permute(0, 2, 3, 1)
-                .reshape(batch_size * self.num_branches, self.hidden_dim, seq_len)
-                .contiguous()
-            )
-        else:
-            v_tilde_norm = self.norm_v_tilde[0](v_tilde)
-            # [B, L, D] -> [B, D, L]
-            x_norm = v_tilde_norm.permute(0, 2, 1).contiguous()
-
-        # Manual padding for causal convolution
-        padding_size = (self.kernel_size - 1) * self.dilation
-        if padding_size > 0:
-            x_padded = F.pad(x_norm, (padding_size, 0))
-        else:
-            x_padded = x_norm
-
-        # Apply convolution
-        conv_out = self.conv(x_padded)
-
-        # Step 8: SiLU activation + residual connection: Y = SiLU(Conv(RMSNorm(ṽ))) + ṽ
-        y = F.silu(conv_out)
-
-        # Reshape back to match input shape
-        if self.num_branches > 1:
-            # [B*M, D, L] -> [B, M, D, L] -> [B, L, M, D]
-            y = (
-                y.view(batch_size, self.num_branches, self.hidden_dim, seq_len)
-                .permute(0, 3, 1, 2)
-                .contiguous()
-            )
-        else:
-            # [B, D, L] -> [B, L, D]
-            y = y.permute(0, 2, 1).contiguous()
-
-        return cast(torch.Tensor, y + v_tilde)
+        return cast(torch.Tensor, gated_value)
 
 
 class EngramLayer(nn.Module):
@@ -356,11 +242,18 @@ class EngramLayer(nn.Module):
 
         # 4. Context-Aware Gating
         self.gating = ContextAwareGating(
-            embedding_dim=self.total_embedding_dim,
-            hidden_dim=self.hidden_dim,
-            num_branches=self.num_branches,
+            engram_hidden_size=self.total_embedding_dim,
+            hidden_size=self.hidden_dim,
+            hc_mult=self.num_branches,
+        )
+
+        # 5. ShortConv
+        self.short_conv = ShortConv(
+            hidden_size=self.hidden_dim,
             kernel_size=self.kernel_size,
             dilation=self.dilation,
+            hc_mult=self.num_branches,
+            activation=True,
         )
 
     def forward(
@@ -403,9 +296,29 @@ class EngramLayer(nn.Module):
         # Flatten the last two dimensions: total_heads * d_per_head = total_embedding_dim
         e_t = all_embeddings_tensor.flatten(start_dim=-2)
 
-        # Step 4: Context-Aware Gating modulation
-        # y has the same shape as hidden_states
-        y = self.gating(e_t, hidden_states)
+        # Ensure hidden_states is [B, L, M, D] if it's not already
+        is_3d = hidden_states.dim() == 3
+        if is_3d:
+            hidden_states_m = hidden_states.unsqueeze(2).expand(
+                -1, -1, self.num_branches, -1
+            )
+        else:
+            hidden_states_m = hidden_states
 
-        # Step 5: Residual connection: hidden_states + Y
+        # Step 4: Context-Aware Gating modulation
+        # gated_value has shape [B, L, M, D]
+        gated_value = self.gating(e_t, hidden_states_m)
+
+        # Step 5: ShortConv module
+        # y has shape [B, L, M, D]
+        y = self.short_conv(gated_value)
+
+        # Step 6: Residual connection to Transformer Block hidden states
+        if is_3d:
+            if self.num_branches == 1:
+                y = y.squeeze(2)
+            else:
+                # Sum branches if no out_proj is provided
+                y = y.sum(dim=2)
+
         return cast(torch.Tensor, hidden_states + y)
