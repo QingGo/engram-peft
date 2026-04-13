@@ -4,7 +4,7 @@ import torch.nn as nn
 from engram_peft.config import EngramConfig
 from engram_peft.layer import EngramLayer
 from engram_peft.compression import CompressedTokenizer
-from engram_peft.hashing import calculate_global_primes
+from engram_peft.hashing import NgramHashMapping
 
 
 class EngramModel(nn.Module):
@@ -19,25 +19,35 @@ class EngramModel(nn.Module):
         # 1. Initialize compressor if needed
         self.compressor = None
         if tokenizer is not None:
-            self.compressor = CompressedTokenizer(tokenizer)
+            if isinstance(tokenizer, str):
+                self.compressor = CompressedTokenizer(tokenizer)
+            else:
+                self.compressor = CompressedTokenizer(
+                    getattr(config, "tokenizer_name_or_path", "deepseek-ai/DeepSeek-V3")
+                )
+                # If they pass tokenizer object, we bypass. The previous fix made it take str.
 
-        # 2. Calculate global primes for all layers
-        # Convert max_ngram_size to list of ngram_sizes
-        ngram_sizes = list(range(2, config.max_ngram_size + 1))
-        self.primes_per_layer = calculate_global_primes(
-            layer_ids=config.target_layers,
-            ngram_sizes=ngram_sizes,
-            hash_heads=config.n_head_per_ngram,
+        # 2. Initialize global Hash Mapping
+        self.hash_mapping = NgramHashMapping(
             engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
+            max_ngram_size=config.max_ngram_size,
+            n_head_per_ngram=config.n_head_per_ngram,
+            layer_ids=config.target_layers,
+            tokenizer_name_or_path=getattr(
+                config, "tokenizer_name_or_path", "deepseek-ai/DeepSeek-V3"
+            ),
+            seed=config.seed,
         )
 
         # 3. Initialize Engram layers
         self.engram_layers = nn.ModuleDict()
         for layer_id in config.target_layers:
+            # Flatten primes for this layer
+            flat_primes = sum(self.hash_mapping.prime_tables[layer_id], [])
             self.engram_layers[str(layer_id)] = EngramLayer(
                 config=config,
                 layer_id=layer_id,
-                primes=self.primes_per_layer[layer_id],
+                primes=flat_primes,
                 compressor=self.compressor,
             )
 

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 from engram_peft.layer import ContextAwareGating, EngramLayer
 from engram_peft.config import EngramConfig
 from engram_peft.compression import CompressedTokenizer
-from engram_peft.hashing import calculate_global_primes
+from engram_peft.hashing import NgramHashMapping
 
 
 def test_context_aware_gating_initialization() -> None:
@@ -179,12 +179,13 @@ def test_engram_layer_forward() -> None:
     compressor.lookup = torch.arange(100)  # Mock lookup table
     compressor.compressed_vocab_size = 100
 
-    primes = calculate_global_primes(
-        layer_ids=[1],
-        ngram_sizes=list(range(2, config.max_ngram_size + 1)),
-        hash_heads=config.n_head_per_ngram,
+    mapping = NgramHashMapping(
         engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
-    )[1]
+        max_ngram_size=config.max_ngram_size,
+        n_head_per_ngram=config.n_head_per_ngram,
+        layer_ids=[1],
+    )
+    primes = sum(mapping.prime_tables[1], [])
 
     layer = EngramLayer(config, layer_id=1, primes=primes, compressor=compressor)
 
@@ -193,7 +194,12 @@ def test_engram_layer_forward() -> None:
     input_ids = torch.randint(0, 100, (batch_size, seq_len))
     hidden_states = torch.randn(batch_size, seq_len, config.hidden_dim)
 
-    output = layer(input_ids=input_ids, hidden_states=hidden_states)
+    # Use mapping to compute
+    compressed_ids = compressor.lookup[input_ids]
+    hashes_np = mapping.hash(compressed_ids)[1]
+    engram_hash_indices = torch.from_numpy(hashes_np)
+
+    output = layer(hidden_states=hidden_states, engram_hash_indices=engram_hash_indices)
 
     assert output.shape == hidden_states.shape
     assert not torch.allclose(
@@ -213,12 +219,13 @@ def test_engram_layer_indices_priority() -> None:
         engram_vocab_size_per_ngram=[100],
         hc_mult=1,
     )
-    primes = calculate_global_primes(
-        layer_ids=[1],
-        ngram_sizes=list(range(2, config.max_ngram_size + 1)),
-        hash_heads=config.n_head_per_ngram,
+    mapping = NgramHashMapping(
         engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
-    )[1]
+        max_ngram_size=config.max_ngram_size,
+        n_head_per_ngram=config.n_head_per_ngram,
+        layer_ids=[1],
+    )
+    primes = sum(mapping.prime_tables[1], [])
     layer = EngramLayer(config, layer_id=1, primes=primes)
 
     batch_size = 1
@@ -247,12 +254,13 @@ def test_engram_layer_sparse_gradients() -> None:
         engram_vocab_size_per_ngram=[100],
         hc_mult=1,
     )
-    primes = calculate_global_primes(
-        layer_ids=[1],
-        ngram_sizes=list(range(2, config.max_ngram_size + 1)),
-        hash_heads=config.n_head_per_ngram,
+    mapping = NgramHashMapping(
         engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
-    )[1]
+        max_ngram_size=config.max_ngram_size,
+        n_head_per_ngram=config.n_head_per_ngram,
+        layer_ids=[1],
+    )
+    primes = sum(mapping.prime_tables[1], [])
     layer = EngramLayer(config, layer_id=1, primes=primes)
 
     batch_size = 1
@@ -290,12 +298,13 @@ def test_engram_layer_output_shape() -> None:
         hc_mult=4,
         engram_vocab_size_per_ngram=[100],
     )
-    primes = calculate_global_primes(
-        layer_ids=[1],
-        ngram_sizes=list(range(2, config.max_ngram_size + 1)),
-        hash_heads=config.n_head_per_ngram,
+    mapping = NgramHashMapping(
         engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
-    )[1]
+        max_ngram_size=config.max_ngram_size,
+        n_head_per_ngram=config.n_head_per_ngram,
+        layer_ids=[1],
+    )
+    primes = sum(mapping.prime_tables[1], [])
     layer = EngramLayer(config, layer_id=1, primes=primes)
 
     batch_size = 2

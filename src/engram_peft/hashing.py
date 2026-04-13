@@ -1,155 +1,151 @@
-from typing import Dict, List, Tuple, TypedDict
+from dataclasses import dataclass, field
+from typing import Dict, List, Set, Union
 
 import numpy as np
 import torch
 from sympy import nextprime  # type: ignore[import-untyped]
 
 
-class HashParams(TypedDict):
-    p: int
-    multipliers: torch.Tensor
-
-
-def calculate_global_primes(
-    layer_ids: List[int],
-    ngram_sizes: List[int],
-    hash_heads: int,
-    engram_vocab_size_per_ngram: List[int],
-) -> Dict[int, List[int]]:
+@dataclass
+class NgramHashMapping:
     """
-    Calculates unique prime table sizes for all layers and heads.
-    Matches the official demo's calculate_vocab_size_across_layers logic.
-
-    Args:
-        layer_ids: List of all layers where Engram is applied.
-        ngram_sizes: List of N-gram orders (e.g. [2, 3]).
-        hash_heads: Number of hash heads per N-gram order.
-        engram_vocab_size_per_ngram: Target base capacity for each N-gram order.
-
-    Returns:
-        A dictionary mapping layer_id to a flat list of primes for all its heads.
-    """
-    seen_primes = set()
-    primes_across_layers = {}
-
-    for layer_id in sorted(layer_ids):
-        all_layer_primes = []
-        for i, _ in enumerate(ngram_sizes):
-            # For each ngram order, start from its specific base capacity
-            base_vocab_size = engram_vocab_size_per_ngram[i]
-            current_prime_search_start = base_vocab_size - 1
-
-            for _ in range(hash_heads):
-                p_val = nextprime(current_prime_search_start)
-                if p_val is None:
-                    p = current_prime_search_start + 1
-                else:
-                    p = int(p_val)
-
-                # Ensure global uniqueness across layers and heads
-                while p in seen_primes:
-                    p_val = nextprime(p)
-                    if p_val is None:
-                        p += 1
-                    else:
-                        p = int(p_val)
-
-                seen_primes.add(p)
-                all_layer_primes.append(p)
-                # Next head for the SAME ngram in SAME layer starts searching from current prime
-                current_prime_search_start = p
-
-        primes_across_layers[layer_id] = all_layer_primes
-
-    return primes_across_layers
-
-
-class MultiHeadHash:
-    """
-    Implements Multi-Head Hashing as described in the paper section 2.2.
-    For each N-gram order n, we employ K distinct hash heads.
+    Implements Multi-Head Hashing as described in the Engram paper section 2.2.
     Aligned with the official Engram demo implementation.
     """
 
-    def __init__(
-        self,
-        layer_id: int,
-        primes: List[int],
-        ngram_sizes: List[int] = [2, 3],
-        hash_heads: int = 8,
-        seed: int = 42,
-        tokenizer_vocab_size: int = 129280,
-    ):
+    engram_vocab_size_per_ngram: List[int] = field(
+        default_factory=lambda: [2262400 // 2, 2262400 // 2]
+    )
+    max_ngram_size: int = 3
+    n_head_per_ngram: int = 8
+    layer_ids: List[int] = field(default_factory=lambda: [2, 15])
+    tokenizer_name_or_path: str = "deepseek-ai/DeepSeek-V3"
+    pad_id: int = 2
+    seed: int = 0
+
+    def __post_init__(self) -> None:
+        self.ngram_sizes = list(range(2, self.max_ngram_size + 1))
+        self.all_multipliers: Dict[int, np.ndarray] = {}
+
+        for layer_id in self.layer_ids:
+            # Layer-specific seed
+            PRIME_1 = 10007
+            base_seed = int(self.seed + PRIME_1 * int(layer_id))
+            g = np.random.default_rng(base_seed)
+
+            # Follow official demo's heuristic bound based on tokenizer_vocab_size
+            tokenizer_vocab_size = 129280
+            max_long = np.iinfo(np.int64).max
+            M_max = int(max_long // tokenizer_vocab_size)
+            half_bound = max(1, M_max // 2)
+
+            # Generate max_ngram_size multipliers for this layer
+            r = g.integers(
+                low=0, high=half_bound, size=(self.max_ngram_size,), dtype=np.int64
+            )
+            # Must be odd numbers
+            self.all_multipliers[layer_id] = r * 2 + 1
+
+        self.prime_tables = self.calculate_vocab_size_across_layers()
+
+    def find_next_prime(self, start: int, seen_primes: Set[int]) -> int:
+        """Finds the next unused global prime number strictly greater than start."""
+        p_val = nextprime(start)
+        p = start + 1 if p_val is None else int(p_val)
+        while p in seen_primes:
+            p_val = nextprime(p)
+            p = p + 1 if p_val is None else int(p_val)
+        return p
+
+    def calculate_vocab_size_across_layers(self) -> Dict[int, List[List[int]]]:
         """
-        Initialize the MultiHeadHash with pre-calculated primes.
+        Calculates unique prime table sizes for all layers and heads.
+        Matches the official demo's globally unique prime generation.
+        Returns:
+            Dict mapping layer_id -> List of Lists of primes [ngram_idx][head_idx]
+        """
+        seen_primes: Set[int] = set()
+        primes_across_layers: Dict[int, List[List[int]]] = {}
+
+        for layer_id in sorted(self.layer_ids):
+            layer_primes = []
+            for i in range(len(self.ngram_sizes)):
+                head_primes = []
+                base_vocab_size = self.engram_vocab_size_per_ngram[i]
+                current_start = base_vocab_size - 1
+
+                for _ in range(self.n_head_per_ngram):
+                    p = self.find_next_prime(current_start, seen_primes)
+                    seen_primes.add(p)
+                    head_primes.append(p)
+                    current_start = p
+
+                layer_primes.append(head_primes)
+            primes_across_layers[layer_id] = layer_primes
+
+        return primes_across_layers
+
+    def _get_ngram_hashes(self, input_ids: np.ndarray, layer_id: int) -> np.ndarray:
+        """
+        Calculates polynomial + XOR multi-head hashes for a given layer.
 
         Args:
-            layer_id: The ID of the current layer.
-            primes: List of pre-calculated primes for this layer (all heads).
-            ngram_sizes: List of N-gram orders.
-            hash_heads: Number of hash heads per N-gram order.
-            seed: Random seed for generating hash parameters.
-            tokenizer_vocab_size: Size of the compressed vocabulary.
-        """
-        self.layer_id = layer_id
-        self.ngram_sizes = ngram_sizes
-        self.hash_heads = hash_heads
-        self.primes = primes
-        self.seed = seed
-        self.tokenizer_vocab_size = tokenizer_vocab_size
-
-        # Generate layer-specific multipliers
-        PRIME_1 = 10007
-        base_seed = int(seed + PRIME_1 * int(layer_id))
-        g = np.random.default_rng(base_seed)
-
-        max_long = np.iinfo(np.int64).max
-        M_max = int(max_long // self.tokenizer_vocab_size)
-        half_bound = max(1, M_max // 2)
-
-        max_ngram = max(ngram_sizes)
-        r = g.integers(low=0, high=half_bound, size=(max_ngram,), dtype=np.int64)
-        self.all_multipliers = torch.from_numpy(r * 2 + 1)
-
-        self.hash_params: Dict[Tuple[int, int], HashParams] = {}
-        prime_idx = 0
-        for n in ngram_sizes:
-            for k in range(hash_heads):
-                p = self.primes[prime_idx]
-                self.hash_params[(n, k)] = {
-                    "p": p,
-                    "multipliers": self.all_multipliers[:n],
-                }
-                prime_idx += 1
-
-    def compute_hashes(self, compressed_token_ids: torch.Tensor) -> torch.Tensor:
-        """
-        Computes the hash indices using Multiplicative-XOR logic.
+            input_ids: [batch_size, seq_len] array of compressed IDs.
+            layer_id: Target layer ID.
 
         Returns:
-            torch.Tensor: [batch_size, seq_len, total_heads] where total_heads = len(ngram_sizes) * hash_heads
+            np.ndarray of shape [batch_size, seq_len, total_heads].
         """
-        batch_size, seq_len = compressed_token_ids.shape
-        device = compressed_token_ids.device
+        batch_size, seq_len = input_ids.shape
         all_head_hashes = []
 
         max_n = max(self.ngram_sizes)
-        padding = torch.zeros((batch_size, max_n - 1), dtype=torch.long, device=device)
-        padded_tokens = torch.cat([padding, compressed_token_ids], dim=1)
+        # Pad with pad_id for left context
+        padding = np.full((batch_size, max_n - 1), self.pad_id, dtype=np.int64)
+        padded_tokens = np.concatenate([padding, input_ids], axis=1).astype(np.int64)
 
-        for n in self.ngram_sizes:
-            ngrams = padded_tokens[:, : seq_len + n - 1].unfold(1, n, 1)
-            m = self.all_multipliers[:n].to(device)
-            weighted_tokens = ngrams * m
+        multipliers = self.all_multipliers[layer_id]
+        layer_primes = self.prime_tables[layer_id]
 
-            mix = weighted_tokens[..., 0]
-            for i in range(1, n):
-                mix = torch.bitwise_xor(mix, weighted_tokens[..., i])
+        for i, n in enumerate(self.ngram_sizes):
+            # Using stride_tricks to extract sliding windows for n-grams
+            view_shape = (batch_size, seq_len + n - 1 - n + 1, n)
+            strides = padded_tokens.strides + (padded_tokens.strides[-1],)
+            ngrams = np.lib.stride_tricks.as_strided(
+                padded_tokens[:, : seq_len + n - 1], shape=view_shape, strides=strides
+            )
 
-            for k in range(self.hash_heads):
-                p = self.hash_params[(n, k)]["p"]
-                h = (mix % p + p) % p
-                all_head_hashes.append(h.long())
+            m = multipliers[:n]
+            weighted = ngrams * m
 
-        # [B, L, total_heads]
-        return torch.stack(all_head_hashes, dim=-1)
+            mix = weighted[..., 0]
+            for j in range(1, n):
+                mix = np.bitwise_xor(mix, weighted[..., j])
+
+            for p in layer_primes[i]:
+                # Modulo operation h = (mix % p + p) % p for robustness
+                h = np.mod(np.mod(mix, p) + p, p)
+                all_head_hashes.append(h)
+
+        return np.stack(all_head_hashes, axis=-1)
+
+    def hash(self, input_ids: Union[torch.Tensor, np.ndarray]) -> Dict[int, np.ndarray]:
+        """
+        Compute hashes for all tracked layers.
+
+        Args:
+            input_ids: Original compressed ids as torch Tensor or numpy Array.
+
+        Returns:
+            Dict mapping layer_id -> np.ndarray of hash indices.
+        """
+        if isinstance(input_ids, torch.Tensor):
+            arr = input_ids.cpu().numpy()
+        else:
+            arr = np.array(input_ids)
+
+        hashes = {}
+        for layer_id in self.layer_ids:
+            hashes[layer_id] = self._get_ngram_hashes(arr, layer_id)
+
+        return hashes

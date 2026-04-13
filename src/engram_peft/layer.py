@@ -4,7 +4,6 @@ import torch.nn.functional as F
 from typing import Optional, cast, Dict, Tuple, List
 from engram_peft.config import EngramConfig
 from engram_peft.compression import CompressedTokenizer
-from engram_peft.hashing import MultiHeadHash
 
 
 class ContextAwareGating(nn.Module):
@@ -242,17 +241,7 @@ class EngramLayer(nn.Module):
             len(self.ngram_sizes) * self.hash_heads
         )
 
-        # 2. Multi-Head Hashing
-        self.multi_head_hash = MultiHeadHash(
-            layer_id=layer_id,
-            primes=primes,
-            ngram_sizes=self.ngram_sizes,
-            hash_heads=self.hash_heads,
-            seed=config.seed,
-            tokenizer_vocab_size=(
-                compressor.compressed_vocab_size if compressor else 129280
-            ),
-        )
+        # (Hashing logic is now external via NgramHashMapping)
 
         # 3. Single shared embedding table with offsets
         # Matches Demo's MultiHeadEmbedding logic
@@ -298,23 +287,10 @@ class EngramLayer(nn.Module):
         if hidden_states is None:
             raise ValueError("hidden_states must be provided.")
 
-        # Step 1: Get hash indices (Priority: engram_hash_indices > compressed_ids > input_ids)
         if engram_hash_indices is None:
-            if compressed_ids is None:
-                if input_ids is None:
-                    raise ValueError(
-                        "Either input_ids, compressed_ids, or engram_hash_indices must be provided."
-                    )
-                if self.compressor is None:
-                    raise ValueError(
-                        "CompressedTokenizer is required if only input_ids are provided."
-                    )
-                # Use the pre-computed lookup table for fast mapping
-                compressed_ids = self.compressor.lookup.to(input_ids.device)[input_ids]
-
-            # Compute hashes using MultiHeadHash
-            # At this point, compressed_ids is guaranteed not to be None
-            engram_hash_indices = self.multi_head_hash.compute_hashes(compressed_ids)
+            raise ValueError(
+                "engram_hash_indices must be provided from NgramHashMapping."
+            )
 
         # Step 2: Retrieve vectors from single shared embedding table
         # engram_hash_indices: [B, L, total_heads]
