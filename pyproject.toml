@@ -1,6 +1,6 @@
 [project]
 name = "engram-peft"
-version = "1.0.1"
+version = "1.0.2"
 description = "Engram-PEFT: Efficient Parameter-Efficient Fine-Tuning with Engram"
 readme = "README.md"
 authors = [
