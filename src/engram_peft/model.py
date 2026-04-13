@@ -72,6 +72,10 @@ class EngramModel(nn.Module):
         # Attach hooks immediately
         self.load_engram()
 
+        # Ensure Engram layers match the base model dtype
+        if hasattr(base_model, "dtype"):
+            self.to(base_model.dtype)
+
     def _find_transformer_layers(self) -> nn.ModuleList:
         """Find the main transformer layers module list."""
         if hasattr(self.base_model, "model") and hasattr(
