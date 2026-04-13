@@ -5,6 +5,7 @@
 [![Paper](https://img.shields.io/badge/arXiv-2601.07372-B31B1B.svg)](https://arxiv.org/abs/2601.07372)
 [![Official Demo](https://img.shields.io/badge/GitHub-Official_Demo-black?logo=github)](https://github.com/deepseek-ai/Engram)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](../LICENSE)
+[![Documentation](https://img.shields.io/badge/Docs-MkDocs-blue.svg)](https://qinggo.github.io/engram-peft/)
 
 > [!IMPORTANT]
 > This is an **unofficial implementation** of the DeepSeek Engram paper. It is not affiliated with the DeepSeek-AI team.
