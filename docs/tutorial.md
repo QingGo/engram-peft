@@ -26,7 +26,7 @@ config = EngramConfig(
 )
 
 # 3. Inject & Freeze
-base_model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16)
+base_model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16)
 model = get_engram_model(base_model, config, tokenizer)
 
 # 4. Train

@@ -58,7 +58,7 @@ def train_engram() -> PreTrainedTokenizer:
 
     print(f"Loading base model: {MODEL_NAME}")
     base_model = AutoModelForCausalLM.from_pretrained(
-        MODEL_NAME, torch_dtype=torch.float16, device_map="auto"
+        MODEL_NAME, dtype=torch.float16, device_map="auto"
     )
 
     # Initialize Engram Configuration
@@ -125,7 +125,7 @@ def train_engram() -> PreTrainedTokenizer:
         weight_decay=0.01,
         logging_steps=10,
         save_strategy="no",
-        fp16=True,
+        fp16=torch.cuda.is_available(),
         report_to="none",
         remove_unused_columns=True,
     )
@@ -168,7 +168,7 @@ def inference_demo(tokenizer: PreTrainedTokenizer) -> None:
     # Load base model again (clean slate)
     print("Loading clean base model for inference...")
     base_model = AutoModelForCausalLM.from_pretrained(
-        MODEL_NAME, torch_dtype=torch.float16, device_map="auto"
+        MODEL_NAME, dtype=torch.float16, device_map="auto"
     )
 
     # Load trained Engram onto the base model
