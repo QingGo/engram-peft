@@ -35,4 +35,4 @@ jobs:
           # 配置 Git 身份以便 mkdocs 提交到 gh-pages
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          uv run mkdocs gh-deploy --force -f docs/mkdocs.yml --remote-name origin
+          uv run mkdocs gh-deploy --force -f mkdocs.yml --remote-name origin

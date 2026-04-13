@@ -48,13 +48,13 @@ model = get_engram_model(base_model, config, tokenizer)
 
 ## 📊 Performance Comparison
 
-| Method | Extra Params | Trainable Params | VRAM (1.1B) | Perplexity (TinyStories) | Memory Retention |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **FFT** (Full Fine-Tune) | 0 | 1,100M | ~24GB | 1.0 (Ref) | High |
-| **LoRA** (r=16) | 1.8M | 1.8M | ~8GB | 1.4 | Moderate |
-| **Engram-PEFT** | **11.2M** | **1.2M*** | **~6GB** | **1.1** | **Extreme** |
+| Method | Params Added | Grad. Update Size | VRAM (1.1B) |
+| :--- | :--- | :--- | :--- |
+| **FFT** (Full Fine-Tune) | 0 | 1,100M | ~24GB |
+| **LoRA** (r=16) | 1.8M | 1.8M | ~8GB |
+| **Engram-PEFT** | **11.2M** | **~1.2M*** | **~6GB** |
 
-*\* Engram uses sparse updates (only 1% of Engram parameters are updated per step), drastically reducing optimizer memory.*
+*\* Engram employs sparse lookup; only a tiny fraction of parameters (approx. 1%) are active and receive gradient updates per step, significantly reducing optimizer state overhead.*
 
 ---
 
@@ -71,9 +71,9 @@ model = get_engram_model(base_model, config, tokenizer)
 ## 📖 Documentation
 
 For full details, see our documentation:
-- [Tutorials](tutorial.md): Quickstart and domain knowledge injection.
-- [API Reference](api.md): Detailed class and function documentation.
-- [Paper Alignment](paper_alignment.md): How we match the DeepSeek research.
+- [Tutorials](docs/tutorial.md): Quickstart and domain knowledge injection.
+- [API Reference](docs/api.md): Detailed class and function documentation.
+- [Paper Alignment](docs/paper_alignment.md): How we match the DeepSeek research.
 
 ---
 
