@@ -141,9 +141,7 @@ def test_cag_gradients() -> None:
 
 
 def test_engram_layer_forward() -> None:
-    """
-    测试用例 5：验证完整 EngramLayer 的前向传播
-    """
+    """测试用例 9：验证完整EngramLayer的前向传播"""
     config = EngramConfig(
         max_ngram_size=3,
         n_head_per_ngram=4,
@@ -187,9 +185,7 @@ def test_engram_layer_forward() -> None:
 
 
 def test_engram_layer_indices_priority() -> None:
-    """
-    测试用例 6：验证 engram_hash_indices 优先使用
-    """
+    """测试用例 10：验证engram_hash_indices优先使用（加速测试，速度快5倍以上）"""
     config = EngramConfig(
         max_ngram_size=2,
         n_head_per_ngram=1,
@@ -222,9 +218,7 @@ def test_engram_layer_indices_priority() -> None:
 
 
 def test_engram_layer_sparse_gradients() -> None:
-    """
-    测试用例 7：验证嵌入表的梯度只在被检索的行上更新
-    """
+    """测试用例 11：验证嵌入表的梯度只在被检索的行上更新"""
     config = EngramConfig(
         max_ngram_size=2,
         n_head_per_ngram=1,
@@ -254,7 +248,7 @@ def test_engram_layer_sparse_gradients() -> None:
     loss.backward()
 
     # Access the single embedding table
-    grad = layer.embedding.weight.grad
+    grad = layer.multi_head_embedding.embedding.weight.grad
     assert grad is not None
 
     # Only rows 0 and 1 should have non-zero gradients (assuming offset is 0 for first head)
@@ -265,9 +259,7 @@ def test_engram_layer_sparse_gradients() -> None:
 
 
 def test_engram_layer_output_shape() -> None:
-    """
-    测试用例 8：验证输出形状与输入 hidden_states 形状完全相同
-    """
+    """测试用例 12：验证输出形状与输入形状完全相同"""
     # Test multi-branch case
     config = EngramConfig(
         max_ngram_size=2,

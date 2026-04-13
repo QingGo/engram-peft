@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from typing import Optional, cast, Dict, Tuple, List
 from engram_peft.config import EngramConfig
 from engram_peft.compression import CompressedTokenizer
+from engram_peft.hashing import NgramHashMapping
 
 
 class ShortConv(nn.Module):
@@ -175,6 +176,37 @@ class ContextAwareGating(nn.Module):
         return cast(torch.Tensor, gated_value)
 
 
+class MultiHeadEmbedding(nn.Module):
+    """
+    Concatenated embedding table for all hash heads across all N-gram sizes.
+    Retrieves vectors from K independent virtual embedding tables using offset indices.
+    """
+
+    def __init__(self, primes: List[int], embedding_dim_per_head: int):
+        super().__init__()
+        offsets = [0]
+        for p in primes[:-1]:
+            offsets.append(offsets[-1] + p)
+        self.register_buffer("offsets", torch.tensor(offsets, dtype=torch.long))
+
+        total_capacity = sum(primes)
+        self.embedding = nn.Embedding(total_capacity, embedding_dim_per_head)
+        nn.init.normal_(self.embedding.weight, mean=0.0, std=0.02)
+
+    def forward(self, hash_indices: torch.Tensor) -> torch.Tensor:
+        """
+        Retrieves embedding vectors for pre-computed hash indices.
+        Args:
+            hash_indices: [batch_size, seq_len, total_heads]
+        Returns:
+            torch.Tensor: [batch_size, seq_len, total_heads, embedding_dim_per_head]
+        """
+        shifted_indices = hash_indices.to(
+            cast(torch.device, self.offsets.device)
+        ) + cast(torch.Tensor, self.offsets)
+        return cast(torch.Tensor, self.embedding(shifted_indices))
+
+
 class EngramLayer(nn.Module):
     """
     Complete Engram Layer as described in Section 2.1-2.3 of the Engram paper.
@@ -225,29 +257,27 @@ class EngramLayer(nn.Module):
             len(self.ngram_sizes) * self.hash_heads
         )
 
-        # (Hashing logic is now external via NgramHashMapping)
+        # 0. Hash Mapping
+        self.hash_mapping = NgramHashMapping(
+            engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
+            max_ngram_size=config.max_ngram_size,
+            n_head_per_ngram=config.n_head_per_ngram,
+            layer_ids=[layer_id],
+        )
 
-        # 3. Single shared embedding table with offsets
-        # Matches Demo's MultiHeadEmbedding logic
-        offsets = [0]
-        for p in primes[:-1]:
-            offsets.append(offsets[-1] + p)
+        # 1. MultiHeadEmbedding
+        self.multi_head_embedding = MultiHeadEmbedding(
+            primes=primes, embedding_dim_per_head=self.embedding_dim_per_head
+        )
 
-        self.register_buffer("offsets", torch.tensor(offsets, dtype=torch.long))
-
-        total_capacity = sum(primes)
-        self.embedding = nn.Embedding(total_capacity, self.embedding_dim_per_head)
-        # Weight initialization: mean 0, std 0.02
-        nn.init.normal_(self.embedding.weight, mean=0.0, std=0.02)
-
-        # 4. Context-Aware Gating
+        # 2. Context-Aware Gating
         self.gating = ContextAwareGating(
             engram_hidden_size=self.total_embedding_dim,
             hidden_size=self.hidden_dim,
             hc_mult=self.num_branches,
         )
 
-        # 5. ShortConv
+        # 3. ShortConv
         self.short_conv = ShortConv(
             hidden_size=self.hidden_dim,
             kernel_size=self.kernel_size,
@@ -255,6 +285,22 @@ class EngramLayer(nn.Module):
             hc_mult=self.num_branches,
             activation=True,
         )
+
+    @property
+    def value_proj(self) -> nn.Linear:
+        return self.gating.w_v
+
+    @property
+    def key_projs(self) -> nn.ModuleList:
+        return self.gating.w_k
+
+    @property
+    def norm1(self) -> nn.ModuleList:
+        return self.gating.norm_k
+
+    @property
+    def norm2(self) -> nn.ModuleList:
+        return self.gating.norm_h
 
     def forward(
         self,
@@ -279,22 +325,22 @@ class EngramLayer(nn.Module):
             raise ValueError("hidden_states must be provided.")
 
         if engram_hash_indices is None:
-            raise ValueError(
-                "engram_hash_indices must be provided from NgramHashMapping."
-            )
+            if input_ids is None:
+                raise ValueError(
+                    "Either engram_hash_indices or input_ids must be provided."
+                )
+            if self.compressor is None:
+                raise ValueError(
+                    "Compressor must be provided to compute hashes from input_ids."
+                )
+            # Step 1: Compress and hash
+            c_ids = self.compressor.compress(input_ids)
+            hashes_np = self.hash_mapping.hash(c_ids)[self.layer_id]
+            engram_hash_indices = torch.from_numpy(hashes_np).to(hidden_states.device)
 
-        # Step 2: Retrieve vectors from single shared embedding table
-        # engram_hash_indices: [B, L, total_heads]
-        indices_on_device = engram_hash_indices.to(hidden_states.device)
-        shifted_indices = indices_on_device + cast(torch.Tensor, self.offsets)
-
-        # [B, L, total_heads, d_per_head]
-        all_embeddings_tensor = self.embedding(shifted_indices)
-
-        # Step 3: Concatenate all N-gram and hash head vectors: e_t = ||_{n} ||_{k} e_{t,n,k}
-        # [batch_size, seq_len, total_embedding_dim]
-        # Flatten the last two dimensions: total_heads * d_per_head = total_embedding_dim
-        e_t = all_embeddings_tensor.flatten(start_dim=-2)
+        # Step 1: Retrieve vectors from MultiHeadEmbedding and flatten
+        all_embeddings = self.multi_head_embedding(engram_hash_indices)
+        e_t = all_embeddings.flatten(start_dim=-2)
 
         # Ensure hidden_states is [B, L, M, D] if it's not already
         is_3d = hidden_states.dim() == 3
