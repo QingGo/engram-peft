@@ -1,11 +1,13 @@
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union, overload
 
 import torch
-from torch.optim import Adam, Optimizer, SparseAdam
+from torch.optim.adam import Adam
+from torch.optim.optimizer import Optimizer
+from torch.optim.sparse_adam import SparseAdam
 from torch.optim.lr_scheduler import LambdaLR
 
 if TYPE_CHECKING:
-    from engram_peft.model import EngramModel
+    from engram_peft import EngramModel
 
 
 class MixedOptimizer(Optimizer):
@@ -22,10 +24,11 @@ class MixedOptimizer(Optimizer):
         for opt in optimizers:
             param_groups.extend(opt.param_groups)
 
-        # We don't call super().__init__ because we manage param_groups manually
-        # to avoid double-referencing parameters in the base class.
-        self.param_groups = param_groups
-        self.defaults = {}
+        # We call super().__init__ to ensure the base Optimizer class
+        # is correctly initialized (state, etc.)
+        super().__init__(param_groups, {})
+
+        # Ensure defaults are populated from sub-optimizers for transparency
         for opt in optimizers:
             self.defaults.update(opt.defaults)
 

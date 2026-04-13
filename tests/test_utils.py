@@ -3,7 +3,9 @@ from typing import Any, Dict, List, cast
 import pytest
 import torch
 import torch.nn as nn
+from torch.optim import Adam # type: ignore
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel
+
 
 from engram_peft.config import EngramConfig
 from engram_peft.layer import EngramLayer
@@ -19,6 +21,8 @@ class DummyModel(nn.Module):
         self.model.layers = nn.ModuleList(
             [nn.Linear(hidden_size, hidden_size) for _ in range(32)]
         )
+        # Mock config for parameter syncing
+        self.config = cast(Any, type("MockConfig", (), {"hidden_size": hidden_size})())
 
     def forward(self, input_ids: torch.Tensor, **kwargs: Any) -> torch.Tensor:
         batch_size, seq_len = input_ids.shape
@@ -30,9 +34,9 @@ class DummyModel(nn.Module):
             x = cast(torch.Tensor, layer(x))
         return x
 
-    def requires_grad_(self, mode: bool = True) -> "DummyModel":
+    def requires_grad_(self, requires_grad: bool = True) -> "DummyModel":
         for p in self.parameters():
-            p.requires_grad = mode
+            p.requires_grad = requires_grad
         return self
 
 
@@ -124,7 +128,7 @@ def test_memory_saving() -> None:
 
 def test_scheduler_steps() -> None:
     """验证学习率调度器在关键步长的输出。"""
-    optimizer = torch.optim.Adam([torch.nn.Parameter(torch.randn(1))], lr=1.0)
+    optimizer = Adam([torch.nn.Parameter(torch.randn(1))], lr=1.0)
     num_steps = 100
     warmup = 10
     scheduler = get_scheduler(

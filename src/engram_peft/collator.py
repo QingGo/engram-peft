@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional, cast
 
 import torch
-from transformers import DataCollatorForLanguageModeling, PreTrainedTokenizer
+from transformers import DataCollatorForLanguageModeling, PreTrainedTokenizerBase
 
 from engram_peft.compression import CompressedTokenizer
 from engram_peft.config import EngramConfig
@@ -20,7 +20,7 @@ class EngramDataCollator(DataCollatorForLanguageModeling):
 
     def __init__(
         self,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PreTrainedTokenizerBase,
         config: EngramConfig,
         compressor: Optional[CompressedTokenizer] = None,
         mlm: bool = False,

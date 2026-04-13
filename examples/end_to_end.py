@@ -1,29 +1,31 @@
 """
-Engram-PEFT End-to-End Example.
+Engram-PEFT End-to-End GPU Example.
 
-This script demonstrates a full workflow using Engram-PEFT:
-1. Training: Loading a base model, injecting Engram layers, and training on TinyStories.
-2. Inference: Generating text with trained Engram weights.
-3. Visualization: Observing the Context-Aware Gating activation levels.
-4. Dynamic Management: Loading and unloading Engram packs at runtime.
+This script demonstrates the core Engram-PEFT workflow:
+1. Dataset Preparation: Loading and tokenizing a small subset of TinyStories.
+2. Engram Injection: Injecting Context-Aware Hash-tables into a base model.
+3. Focused Training: Updating only the Engram parameters using MixedOptimizer.
+4. Saving & Inference: Persisting weights and demonstrating dynamic loading/generation.
 
 Usage:
-    uv run python examples/end_to_end.py
+    uv run python examples/end_to_end.py --max_steps 50 --batch_size 4
 """
 
+import argparse
+import copy
 import os
-from typing import Any, Callable, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, cast
 
 import torch
-import torch.nn as nn
-from datasets import load_dataset  # type: ignore[import-untyped]
+from datasets import load_dataset  # type: ignore
+
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
-    PreTrainedTokenizer,
-    Trainer,
-    TrainingArguments,
+    PreTrainedModel,
+    PreTrainedTokenizerBase,
     set_seed,
+    TrainingArguments,
 )
 
 from engram_peft import (
@@ -31,67 +33,39 @@ from engram_peft import (
     EngramDataCollator,
     EngramLayer,
     EngramModel,
+    EngramTrainer,
     get_engram_model,
     get_optimizer,
     get_scheduler,
 )
 
-# 1. Configuration & Constants
 MODEL_NAME = "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T"
-OUTPUT_DIR = "outputs/engram_test"
+OUTPUT_DIR = "outputs/engram_standard"
 ENGRAM_WEIGHTS_DIR = os.path.join(OUTPUT_DIR, "engram_weights")
-DATASET_SUBSET = 200  # Smaller subset for faster demonstration
-MAX_LENGTH = 128
 SEED = 42
 
 set_seed(SEED)
 
 
-def train_engram() -> PreTrainedTokenizer:
-    print(f"\n>>> Phase 1: Training Engram on {MODEL_NAME}")
-
-    # Load Tokenizer & Model
-    print(f"Loading tokenizer: {MODEL_NAME}")
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-
-    print(f"Loading base model: {MODEL_NAME}")
-    base_model = AutoModelForCausalLM.from_pretrained(
-        MODEL_NAME, dtype=torch.float16, device_map="auto"
-    )
-
-    # Initialize Engram Configuration
-    # We set hidden_size to 2048 to match TinyLlama's architecture
-    config = EngramConfig(
-        target_layers=[2, 11, 20],  # Inject into early, middle, and late layers
-        hidden_size=2048,
-        embedding_dim=1024,  # Engram retrieval dimension
-        enable_tokenizer_compression=True,
-        tokenizer_name_or_path=MODEL_NAME,
-        pad_id=tokenizer.pad_token_id,
-    )
-
-    # Inject Engram into base model
-    print("Injecting Engram layers and freezing base model...")
-    model = get_engram_model(base_model, config, tokenizer)  # type: ignore[arg-type]
-
-    # Prepare TinyStories Dataset
-    print(f"Loading TinyStories dataset (subset={DATASET_SUBSET})...")
+def prepare_dataset(
+    tokenizer: PreTrainedTokenizerBase, subset_size: int, max_length: int
+) -> Any:
     dataset = load_dataset("roneneldan/TinyStories", split="train", streaming=True)
 
     def tokenize_function(examples: Dict[str, Any]) -> Dict[str, Any]:
-        return tokenizer(  # type: ignore[no-any-return]
+        tokenized = tokenizer(
             examples["text"],
             truncation=True,
-            max_length=MAX_LENGTH,
+            max_length=max_length,
             padding="max_length",
         )
+        tokenized_dict = dict(tokenized)
+        tokenized_dict["labels"] = copy.deepcopy(tokenized_dict["input_ids"])
+        return tokenized_dict
 
-    # Take a small sample and tokenize
     train_data = []
     for i, item in enumerate(dataset):
-        if i >= DATASET_SUBSET:
+        if i >= subset_size:
             break
         train_data.append(item)
 
@@ -100,30 +74,44 @@ def train_engram() -> PreTrainedTokenizer:
     train_dataset = Dataset.from_list(train_data).map(
         tokenize_function, batched=True, remove_columns=["text"]
     )
+    return train_dataset
 
-    # Collator precomputes hash indices on CPU
-    collator = EngramDataCollator(tokenizer=tokenizer, config=config)  # type: ignore[arg-type]
 
-    # Setup Optimizer & Scheduler
-    # MixedOptimizer manages SparseAdam for embeddings and Adam for conv/gating
-    optimizer = get_optimizer(model, base_learning_rate=4e-4)
+def train_engram(
+    base_model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizerBase,
+    train_dataset: Any,
+    args: argparse.Namespace,
+) -> None:
+    print(f"\n>>> Phase 1: Training Engram on {MODEL_NAME}")
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
 
-    # Calculate training steps for 1 epoch
-    num_train_epochs = 1
-    total_steps = len(train_dataset) * num_train_epochs // 8  # Assume batch_size=8
-    scheduler = get_scheduler(
-        optimizer, num_training_steps=total_steps, warmup_steps=10
+    config = EngramConfig(
+        target_layers=[2, 11, 20],
+        engram_vocab_size_per_ngram=[256000, 256000],
+        hidden_size=2048,
+        embedding_dim=1024,
+        enable_tokenizer_compression=True,
+        tokenizer_name_or_path=MODEL_NAME,
+        pad_id=tokenizer.pad_token_id if isinstance(tokenizer.pad_token_id, int) else 0,
     )
 
-    # Training Arguments
+    print("Injecting Engram layers and freezing base model...")
+    model = get_engram_model(base_model, config, tokenizer)
+
+    collator = EngramDataCollator(tokenizer=tokenizer, config=config)
+    optimizer = get_optimizer(model, base_learning_rate=4e-4)
+    scheduler = get_scheduler(
+        optimizer, num_training_steps=args.max_steps, warmup_steps=10
+    )
+
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
-        per_device_train_batch_size=4,
+        per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=2,
-        num_train_epochs=num_train_epochs,
-        learning_rate=4e-4,
-        weight_decay=0.01,
-        logging_steps=10,
+        max_steps=args.max_steps,
+        logging_steps=5,
         save_strategy="no",
         bf16=torch.cuda.is_bf16_supported(),
         fp16=not torch.cuda.is_bf16_supported() and torch.cuda.is_available(),
@@ -131,8 +119,7 @@ def train_engram() -> PreTrainedTokenizer:
         remove_unused_columns=True,
     )
 
-    # Trainer Execution
-    trainer = Trainer(
+    trainer = EngramTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
@@ -140,55 +127,28 @@ def train_engram() -> PreTrainedTokenizer:
         optimizers=(optimizer, scheduler),
     )
 
-    print("Starting training...")
+    print("Starting Engram training...")
     trainer.train()
 
-    # Save ONLY Engram weights and config
+    if torch.cuda.is_available():
+        peak_mem = torch.cuda.max_memory_allocated() / (1024**3)
+        print(f"Peak Memory: {peak_mem:.2f} GB")
+
     print(f"Saving Engram weights to {ENGRAM_WEIGHTS_DIR}")
     model.save_pretrained(ENGRAM_WEIGHTS_DIR)
 
-    return cast(PreTrainedTokenizer, tokenizer)
+    # Ready for inference
+    model.unload_engram()
 
 
-def visualize_gating_hook(name: str) -> Callable[[nn.Module, Any, Any], None]:
-    """Factory for forward hooks to capture gating values."""
-
-    def hook(module: nn.Module, input: Any, output: Any) -> None:
-        # gate has shape [B, L, M, D] in ContextAwareGating but we sum it to [B, L, M] for visualization
-        # In our implementation, gate is computed and immediately applied.
-        # We need to capture the 'gate' within ContextAwareGating.forward or modify it to store it.
-        # For this demonstration, we'll just print a notification that hooks are active.
-        pass
-
-    return hook
-
-
-def inference_demo(tokenizer: PreTrainedTokenizer) -> None:
-    print(f"\n>>> Phase 2: Inference & Gating Visualization")
-
-    # Load base model again (clean slate)
-    print("Loading clean base model for inference...")
-    base_model = AutoModelForCausalLM.from_pretrained(
-        MODEL_NAME, dtype=torch.float16, device_map="auto"
-    )
+def inference_demo(
+    base_model: PreTrainedModel, tokenizer: PreTrainedTokenizerBase
+) -> None:
+    print(f"\n>>> Phase 2: Inference & Dynamic Usage")
 
     # Load trained Engram onto the base model
     print(f"Loading trained Engram from {ENGRAM_WEIGHTS_DIR}")
     model = EngramModel.from_pretrained(base_model, ENGRAM_WEIGHTS_DIR)
-
-    # Setup Gating Visualization
-    # We will hook into the ContextAwareGating modules to see activation levels
-    gating_values: Dict[int, Any] = {}
-
-    def get_gating_hook(layer_id: int) -> Callable[[nn.Module, Any, Any], None]:
-        def hook(module: nn.Module, input: Any, output: Any) -> None:
-            # The gate is actually computed inside 'forward'.
-            # In our current implementation, we'd need to modify 'layer.py' to expose it
-            # or use a more complex hook.
-            # For now, let's just demonstrate the generation and dynamic switching.
-            pass
-
-        return hook
 
     prompt = "Once upon a time, there was a little robot named"
     inputs = tokenizer(prompt, return_tensors="pt").to(model.base_model.device)
@@ -197,7 +157,9 @@ def inference_demo(tokenizer: PreTrainedTokenizer) -> None:
 
     # Generate with Engram enabled
     print("Generating with Engram ENABLED...")
-    output_engram = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+    output_engram = model.generate(
+        **inputs, max_new_tokens=20, max_length=None, do_sample=False
+    )
     print(
         f"Output (Engram): {tokenizer.decode(output_engram[0], skip_special_tokens=True)}"
     )
@@ -212,32 +174,49 @@ def inference_demo(tokenizer: PreTrainedTokenizer) -> None:
             gate_str = " | ".join([f"B{i}: {g:.3f}" for i, g in enumerate(mean_gates)])
             print(f"Layer {layer_id}: {gate_str}")
 
-    # 3. Dynamic Switching Demo
-    print(f"\n>>> Phase 3: Dynamic Switching Demo")
-
-    print("Unloading Engram (Switch back to Base Model)...")
+    # Dynamic Switching Demo
+    print("\nUnloading Engram (Back to Base Model)...")
     model.unload_engram()
-    output_base = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+    output_base = model.generate(
+        **inputs, max_new_tokens=20, max_length=None, do_sample=False
+    )
     print(
         f"Output (Base):   {tokenizer.decode(output_base[0], skip_special_tokens=True)}"
     )
 
-    print("Reloading Engram weights...")
-    model.load_engram(ENGRAM_WEIGHTS_DIR)
-    output_reloaded = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-    print(
-        f"Output (Reload): {tokenizer.decode(output_reloaded[0], skip_special_tokens=True)}"
-    )
-
-    print("\nEnd-to-end example completed successfully!")
+    print("\nEnd-to-end demo completed!")
 
 
 if __name__ == "__main__":
-    # Create output directories
+    parser = argparse.ArgumentParser(description="Run Engram End-to-End Demo")
+    parser.add_argument(
+        "--max_steps", type=int, default=50, help="Number of training steps"
+    )
+    parser.add_argument(
+        "--batch_size", type=int, default=4, help="Batch size per device"
+    )
+    parser.add_argument(
+        "--subset", type=int, default=1000, help="Dataset subset size to load"
+    )
+    args = parser.parse_args()
+
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # 1. Train
-    tokenizer = train_engram()
+    print(f"Loading tokenizer & base model: {MODEL_NAME}")
+    tokenizer = cast(PreTrainedTokenizerBase, AutoTokenizer.from_pretrained(MODEL_NAME))
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
 
-    # 2. Inference & Dynamic Switching
-    inference_demo(tokenizer)
+    print(f"Loading Base Model...")
+    base_model = AutoModelForCausalLM.from_pretrained(
+        MODEL_NAME, dtype=torch.float16, device_map="auto"
+    )
+
+    # 1. Prepare Data
+    train_dataset = prepare_dataset(tokenizer, subset_size=args.subset, max_length=128)
+
+    # 2. Train Engram
+    train_engram(base_model, tokenizer, train_dataset, args)
+
+    # 3. Inference Demo
+    inference_demo(base_model, tokenizer)

@@ -13,14 +13,13 @@ Usage:
 
 import os
 import time
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, Optional, Tuple, cast
 
 import torch
 import torch.nn as nn
 from datasets import Dataset, load_dataset  # type: ignore[import-untyped]
 from transformers import (
     AutoTokenizer,
-    DataCollatorForLanguageModeling,
     PretrainedConfig,
     PreTrainedModel,
     PreTrainedTokenizer,
@@ -34,6 +33,7 @@ from engram_peft import (
     EngramDataCollator,
     EngramLayer,
     EngramModel,
+    EngramTrainer,
     get_engram_model,
     get_optimizer,
     get_scheduler,
@@ -228,15 +228,6 @@ class SimpleTransformer(PreTrainedModel, GenerationMixin):
 
 
 # 3. Main Logic Functions
-class EngramTrainer(Trainer):
-    """Custom Trainer to handle SparseCPU gradients which don't support linalg_vector_norm."""
-
-    def _get_grad_norm(
-        self, model: nn.Module, grad_norm: Optional[torch.Tensor] = None
-    ) -> torch.Tensor:
-        return torch.tensor(0.0).to(self.args.device)
-
-
 def train_engram() -> Tuple[EngramModel, PreTrainedTokenizer, EngramConfig]:
     print("\n>>> Stage 1: Initializing Tiny Model & Engram")
 
@@ -270,7 +261,7 @@ def train_engram() -> Tuple[EngramModel, PreTrainedTokenizer, EngramConfig]:
         engram_vocab_size_per_ngram=[10000, 10000],
         enable_tokenizer_compression=True,
         tokenizer_name_or_path=MODEL_NAME,
-        pad_id=tokenizer.pad_token_id,
+        pad_id=tokenizer.pad_token_id if isinstance(tokenizer.pad_token_id, int) else 0,
         seed=SEED,
     )
 
@@ -313,11 +304,11 @@ def train_engram() -> Tuple[EngramModel, PreTrainedTokenizer, EngramConfig]:
         save_strategy="no",
         report_to="none",
         remove_unused_columns=False,
-        max_grad_norm=0.0,  # Disable clipping to avoid SparseCPU error
+        max_grad_norm=1.0,  # Now supported by EngramTrainer even on CPU
     )
 
     trainer = EngramTrainer(
-        model=model,
+        model=cast(EngramModel, model),
         args=training_args,
         train_dataset=train_dataset,
         data_collator=collator,
@@ -366,9 +357,11 @@ def inference_demo(tokenizer: PreTrainedTokenizer, config: EngramConfig) -> None
             logits = outputs.logits[:, -1, :]
             # Simple greedy decoding
             next_token = torch.argmax(logits, dim=-1, keepdim=True)
-            curr_ids = torch.cat([curr_ids, next_token], dim=-1)
+            curr_ids = torch.cat([cast(torch.Tensor, curr_ids), next_token], dim=-1)
 
-    print(f"Output: {tokenizer.decode(curr_ids[0], skip_special_tokens=True)}")
+    print(
+        f"Output: {tokenizer.decode(cast(torch.Tensor, curr_ids)[0], skip_special_tokens=True)}"
+    )
 
     # Gating Visualization
     print("\n[Visualization] Context-Aware Gating activation:")
@@ -393,9 +386,11 @@ def inference_demo(tokenizer: PreTrainedTokenizer, config: EngramConfig) -> None
             outputs = model(input_ids=curr_ids_base)
             logits = outputs.logits[:, -1, :]
             next_token = torch.argmax(logits, dim=-1, keepdim=True)
-            curr_ids_base = torch.cat([curr_ids_base, next_token], dim=-1)
+            curr_ids_base = torch.cat(
+                [cast(torch.Tensor, curr_ids_base), next_token], dim=-1
+            )
     print(
-        f"Base Output: {tokenizer.decode(curr_ids_base[0], skip_special_tokens=True)}"
+        f"Base Output: {tokenizer.decode(cast(torch.Tensor, curr_ids_base)[0], skip_special_tokens=True)}"
     )
 
     print("\nReloading Engram...")

@@ -20,7 +20,7 @@ def test_shortconv_initialization() -> None:
     l1_dist = torch.abs(out - x).max().item()
     assert (
         l1_dist < 1e-6
-    ), f"Initial output should equal input, but L1 distance is {l1_dist}"
+    ), f"Initial output should be equal to input (due to internal residual), but max diff is {l1_dist}"
 
 
 def test_shortconv_output_shape() -> None:
@@ -51,7 +51,7 @@ def test_shortconv_mhc_branches() -> None:
     """测试用例 4：验证mHC分支处理正确 (各分支互相独立计算)"""
     hidden_size = 8
     hc_mult = 4
-    module = ShortConv(hidden_size=hidden_size, hc_mult=hc_mult)
+    module = ShortConv(hidden_size=hidden_size, hc_mult=hc_mult, zero_init=False)
     x = torch.randn(2, 5, hc_mult, hidden_size)
 
     # 验证独立性，修改一个分支的输入，不应该影响其他分支输出
@@ -64,7 +64,7 @@ def test_shortconv_mhc_branches() -> None:
     # 分支0改变了
     assert not torch.allclose(out[:, :, 0, :], out_modified[:, :, 0, :])
     # 其余分支未受影响 (尽管卷积目前是权重全0，由于 residual 和独立 normalization，如果卷积全0其余分支显然不受影响)
-    # 我们为卷积随意赋非0权重以确保卷积阶段分支也是独立的 (groups=total_channels 是深度可分离的)
+    # We already have non-zero weight from init, but can re-init if needed
     with torch.no_grad():
         nn.init.normal_(module.conv.weight)
 
@@ -113,7 +113,9 @@ def test_cag_multi_branch() -> None:
     hidden_size = 128
     hc_mult = 3
 
-    module = ContextAwareGating(engram_hidden_size, hidden_size, hc_mult)
+    module = ContextAwareGating(
+        engram_hidden_size, hidden_size, hc_mult, zero_init=False
+    )
     e = torch.randn(2, 5, engram_hidden_size)
     h = torch.randn(2, 5, hc_mult, hidden_size)
 
@@ -148,8 +150,10 @@ def test_engram_layer_forward() -> None:
         max_ngram_size=3,
         n_head_per_ngram=4,
         embedding_dim=128,
-        hidden_dim=32,
+        hidden_size=32,
         hc_mult=1,
+        conv_zero_init=False,
+        gating_zero_init=False,
         engram_vocab_size_per_ngram=[100, 100],
     )
 
@@ -171,7 +175,7 @@ def test_engram_layer_forward() -> None:
     batch_size = 2
     seq_len = 8
     input_ids = torch.randint(0, 100, (batch_size, seq_len))
-    hidden_states = torch.randn(batch_size, seq_len, config.hidden_dim)
+    hidden_states = torch.randn(batch_size, seq_len, config.hidden_size)
 
     # Use mapping to compute
     compressed_ids = compressor.lookup[input_ids]
@@ -192,7 +196,7 @@ def test_engram_layer_indices_priority() -> None:
         max_ngram_size=2,
         n_head_per_ngram=1,
         embedding_dim=16,
-        hidden_dim=32,
+        hidden_size=32,
         engram_vocab_size_per_ngram=[100],
         hc_mult=1,
     )
@@ -207,7 +211,7 @@ def test_engram_layer_indices_priority() -> None:
 
     batch_size = 1
     seq_len = 4
-    hidden_states = torch.randn(batch_size, seq_len, config.hidden_dim)
+    hidden_states = torch.randn(batch_size, seq_len, config.hidden_size)
 
     # Precompute hash indices
     # We'll use a specific index and verify the output depends on it
@@ -225,7 +229,9 @@ def test_engram_layer_sparse_gradients() -> None:
         max_ngram_size=2,
         n_head_per_ngram=1,
         embedding_dim=16,
-        hidden_dim=32,
+        hidden_size=32,
+        conv_zero_init=False,
+        gating_zero_init=False,
         engram_vocab_size_per_ngram=[100],
         hc_mult=1,
     )
@@ -240,7 +246,7 @@ def test_engram_layer_sparse_gradients() -> None:
 
     batch_size = 1
     seq_len = 2
-    hidden_states = torch.randn(batch_size, seq_len, config.hidden_dim)
+    hidden_states = torch.randn(batch_size, seq_len, config.hidden_size)
 
     # Only use index 0 and 1
     indices = torch.tensor([[[0], [1]]], dtype=torch.long)  # [B, L, total_heads]
@@ -269,7 +275,7 @@ def test_engram_layer_output_shape() -> None:
         max_ngram_size=2,
         n_head_per_ngram=2,
         embedding_dim=32,
-        hidden_dim=32,
+        hidden_size=32,
         hc_mult=4,
         engram_vocab_size_per_ngram=[100],
     )
@@ -284,7 +290,7 @@ def test_engram_layer_output_shape() -> None:
 
     batch_size = 2
     seq_len = 5
-    hidden_states = torch.randn(batch_size, seq_len, config.hc_mult, config.hidden_dim)
+    hidden_states = torch.randn(batch_size, seq_len, config.hc_mult, config.hidden_size)
 
     # Create hash indices tensor with shape [B, L, total_heads]
     total_heads = config.n_head_per_ngram * (config.max_ngram_size - 1)

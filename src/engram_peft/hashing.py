@@ -71,7 +71,10 @@ class NgramHashMapping:
             layer_primes = []
             for i in range(len(self.ngram_sizes)):
                 head_primes = []
-                base_vocab_size = self.engram_vocab_size_per_ngram[i]
+                # Distribute the total bucket capacity among the heads
+                base_vocab_size = (
+                    self.engram_vocab_size_per_ngram[i] // self.n_head_per_ngram
+                )
                 current_start = base_vocab_size - 1
 
                 for _ in range(self.n_head_per_ngram):

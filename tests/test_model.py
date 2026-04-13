@@ -24,6 +24,7 @@ class MockTransformerBlock(nn.Module):
 
 class MockModelConfig(PretrainedConfig):
     model_type = "mock"
+    hidden_size: int = 32
 
 
 class MockPreTrainedModel(PreTrainedModel):
@@ -100,8 +101,8 @@ def test_layer_injection_instances() -> None:
     assert "1" in engram_model.engram_layers
     assert "3" in engram_model.engram_layers
 
-    # Ensure hook handles are active
-    assert len(engram_model._hook_handles) == 2
+    # Ensure hook handles are active (target layers + global model pre-hook)
+    assert len(engram_model._hook_handles) == 3
 
     # Run a forward pass to ensure no crash from hooks
     input_ids = torch.randint(0, 100, (2, 5))
@@ -151,7 +152,7 @@ def test_dynamic_load_unload() -> None:
     config, base_model = create_mock_setup()
     engram_model = get_engram_model(base_model, config, tokenizer=None)
 
-    assert len(engram_model._hook_handles) == 2
+    assert len(engram_model._hook_handles) == 3
     assert engram_model._engram_enabled is True
 
     # Unload: should remove hooks and disable
@@ -166,7 +167,7 @@ def test_dynamic_load_unload() -> None:
 
     # Load again
     engram_model.load_engram()
-    assert len(engram_model._hook_handles) == 2
+    assert len(engram_model._hook_handles) == 3
     assert engram_model._engram_enabled is True
 
 

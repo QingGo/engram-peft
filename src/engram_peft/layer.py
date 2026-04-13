@@ -26,6 +26,7 @@ class ShortConv(nn.Module):
         norm_eps: float = 1e-5,
         hc_mult: int = 4,
         activation: bool = True,
+        zero_init: bool = True,
     ):
         super().__init__()
         self.hidden_size = hidden_size
@@ -52,10 +53,16 @@ class ShortConv(nn.Module):
             bias=True,
         )
 
-        # Weight/bias initialization: must be zeros
-        nn.init.zeros_(self.conv.weight)
-        if self.conv.bias is not None:
-            nn.init.zeros_(self.conv.bias)
+        # Weight/bias initialization
+        if zero_init:
+            nn.init.zeros_(self.conv.weight)
+            if self.conv.bias is not None:
+                nn.init.zeros_(self.conv.bias)
+        else:
+            # Use normal initialization if zero_init is False
+            nn.init.normal_(self.conv.weight, std=0.02)
+            if self.conv.bias is not None:
+                nn.init.zeros_(self.conv.bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -103,8 +110,12 @@ class ShortConv(nn.Module):
             .contiguous()
         )
 
-        # Residual connection
-        return cast(torch.Tensor, out + x)
+        # CRITICAL: Internal Residual Connection (ShortConv residual)
+        # This residual (+ x) is essential even though EngramLayer has a global residual.
+        # Without this, if the convolution is zero-initialized, the gradient is blocked
+        # (gradient becomes 0 * previous_grad), preventing Embedding and Gating from learning.
+        # This matches the formula: Y = SiLU(Conv(Norm(V))) + V
+        return cast(torch.Tensor, (out + x).to(x.dtype))
 
 
 class ContextAwareGating(nn.Module):
@@ -115,7 +126,13 @@ class ContextAwareGating(nn.Module):
     Engram embeddings (e_t), and applies it to the value projection of the embeddings.
     """
 
-    def __init__(self, engram_hidden_size: int, hidden_size: int, hc_mult: int = 4):
+    def __init__(
+        self,
+        engram_hidden_size: int,
+        hidden_size: int,
+        hc_mult: int = 4,
+        zero_init: bool = True,
+    ):
         super().__init__()
         self.engram_hidden_size = engram_hidden_size
         self.hidden_size = hidden_size
@@ -123,6 +140,8 @@ class ContextAwareGating(nn.Module):
 
         # 步骤1：共享的Value投影
         self.w_v = nn.Linear(engram_hidden_size, hidden_size, bias=False)
+        if zero_init:
+            nn.init.zeros_(self.w_v.weight)
 
         # 步骤2：分支特定的Key投影 W_K^(m)
         self.w_k = nn.ModuleList(
@@ -135,6 +154,7 @@ class ContextAwareGating(nn.Module):
         # 步骤3：独立的 RMSNorm
         self.norm_h = nn.ModuleList([nn.RMSNorm(hidden_size) for _ in range(hc_mult)])
         self.norm_k = nn.ModuleList([nn.RMSNorm(hidden_size) for _ in range(hc_mult)])
+        self.last_gate: Optional[torch.Tensor] = None
 
     def forward(
         self, embeddings: torch.Tensor, hidden_states: torch.Tensor
@@ -257,9 +277,7 @@ class EngramLayer(nn.Module):
             if config.conv_dilation is not None
             else config.max_ngram_size
         )
-        self.hidden_dim = getattr(
-            config, "hidden_size", getattr(config, "hidden_dim", 2560)
-        )
+        self.hidden_dim = config.hidden_size
 
         self.total_embedding_dim = config.embedding_dim
         self.embedding_dim_per_head = self.total_embedding_dim // (
@@ -284,6 +302,7 @@ class EngramLayer(nn.Module):
             engram_hidden_size=self.total_embedding_dim,
             hidden_size=self.hidden_dim,
             hc_mult=self.num_branches,
+            zero_init=config.gating_zero_init,
         )
 
         # 3. ShortConv
@@ -293,6 +312,7 @@ class EngramLayer(nn.Module):
             dilation=self.dilation,
             hc_mult=self.num_branches,
             activation=True,
+            zero_init=config.conv_zero_init,
         )
 
     @property
@@ -349,7 +369,7 @@ class EngramLayer(nn.Module):
 
         # Step 1: Retrieve vectors from MultiHeadEmbedding and flatten
         all_embeddings = self.multi_head_embedding(engram_hash_indices)
-        e_t = all_embeddings.flatten(start_dim=-2)
+        e_t = all_embeddings.flatten(start_dim=-2).to(hidden_states.device)
 
         # Ensure hidden_states is [B, L, M, D] if it's not already
         is_3d = hidden_states.dim() == 3
@@ -376,4 +396,4 @@ class EngramLayer(nn.Module):
                 # Sum branches if no out_proj is provided
                 y = y.sum(dim=2)
 
-        return cast(torch.Tensor, hidden_states + y)
+        return cast(torch.Tensor, (hidden_states + y).to(hidden_states.dtype))

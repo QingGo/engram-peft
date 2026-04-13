@@ -2,13 +2,11 @@
 
 [English] | [中文](README_zh.md)
 
-[![Paper](https://img.shields.io/badge/arXiv-2601.07372-B31B1B.svg)](https://arxiv.org/abs/2601.07372)
-[![Official Demo](https://img.shields.io/badge/GitHub-Official_Demo-black?logo=github)](https://github.com/deepseek-ai/Engram)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](../LICENSE)
-[![Documentation](https://img.shields.io/badge/Docs-MkDocs-blue.svg)](https://qinggo.github.io/engram-peft/)
-
 > [!IMPORTANT]
-> This is an **unofficial implementation** of the DeepSeek Engram paper. It is not affiliated with the DeepSeek-AI team.
+> This is an **unofficial implementation** of the DeepSeek Engram paper ([arXiv:2601.07372](https://arxiv.org/abs/2601.07372)). [DeepSeek-AI official demo is here](https://github.com/deepseek-ai/Engram).
+
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Documentation](https://img.shields.io/badge/Docs-MkDocs-blue.svg)](https://qinggo.github.io/engram-peft/)
 
 **Engram-PEFT** is a high-performance, 100% paper-aligned implementation of the DeepSeek Engram architecture. It provides a Parameter-Efficient Fine-Tuning (PEFT) interface to inject conditional memory into any Transformer-based LLM.
 
@@ -21,9 +19,17 @@ Engram decouples **static knowledge storage** from **dynamic reasoning** using a
 ### Installation
 
 ```bash
-uv pip install engram-peft
-# or
 pip install engram-peft
+```
+
+To run examples or contribute to development, install the project with development dependencies:
+
+```bash
+# Using uv (recommended)
+uv sync --all-groups
+
+# Using pip
+pip install -e ".[dev]"
 ```
 
 ### 5-Minute Example
@@ -50,11 +56,11 @@ model = get_engram_model(base_model, config, tokenizer)
 
 | Method | Params Added | Grad. Update Size | VRAM (1.1B) |
 | :--- | :--- | :--- | :--- |
-| **FFT** (Full Fine-Tune) | 0 | 1,100M | ~24GB |
-| **LoRA** (r=16) | 1.8M | 1.8M | ~8GB |
-| **Engram-PEFT** | **11.2M** | **~1.2M*** | **~6GB** |
+| **FFT** (Full Fine-Tune) | 0 | 1,100M | **~24GB (est.)** |
+| **LoRA** (r=16) | 1.8M | 1.8M | **~5.1GB** |
+| **Engram-PEFT** | **11.2M** | **~1.2M*** | **~6.8GB** |
 
-*\* Engram employs sparse lookup; only a tiny fraction of parameters (approx. 1%) are active and receive gradient updates per step, significantly reducing optimizer state overhead.*
+*\* Engram employs sparse lookup; only a tiny fraction of parameters (approx. 1%) are active and receive gradient updates per step. For a detailed breakdown of VRAM usage and scaling, see our [Memory Analysis](docs/memory_analysis.md).*
 
 ---
 

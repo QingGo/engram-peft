@@ -2,66 +2,56 @@
 
 This directory contains examples demonstrating how to use the Engram-PEFT library for efficient Parameter-Efficient Fine-Tuning.
 
-## End-to-End Example: `end_to_end.py`
+## 1. End-to-End Example (GPU): `end_to_end.py`
 
-The `end_to_end.py` script provides a complete walkthrough of the Engram lifecycle, from dataset preparation to dynamic weight switching.
+The `end_to_end.py` script provides a focused walkthrough of the Engram lifecycle on GPU hardware. This is the recommended script for a standard "Getting Started" experience.
 
 ### Features
-- **Official Config**: Uses `EngramConfig` aligned with the official paper specifications.
-- **Engram Injection**: Demonstrates `get_engram_model` for non-invasive layer injection into a base Transformer model.
-- **Optimized Training**: Uses the custom `MixedOptimizer` (SparseAdam + Adam) and `LambdaLR` scheduler.
-- **Hugging Face Integration**: Fully compatible with the `Trainer` API.
-- **Dynamic Loading**: Shows how to `load_engram` and `unload_engram` at runtime.
-
-### Prerequisites
-Ensure you have the dependencies installed. This project uses `uv` for package management.
+- **Dataset Preparation**: Streaming download and tokenization of "TinyStories".
+- **Engram Injection**: Automatic layer injection and base model freezing.
+- **Sparse Training**: Efficient training using `EngramTrainer` and `MixedOptimizer`.
+- **Inference Demo**: Interactive generation with dynamic `load`/`unload` switching.
 
 ### Running the Example
-To run the full end-to-end example (training + inference):
-
 ```bash
-uv run python examples/end_to_end.py
+uv run python examples/end_to_end.py --max_steps 50 --batch_size 4
 ```
-
-### Script Breakdown
-1. **Phase 1: Training**
-   - Loads a subset of the `TinyStories` dataset.
-   - Loads `TinyLlama-1.1B` as the base model.
-   - Injects Engram layers and freezes the base model.
-   - Trains for 1 epoch.
-   - Saves only the Engram weights (`engram_weights.pt`) and config.
-
-2. **Phase 2: Inference**
-   - Loads a clean base model.
-   - Attaches the trained Engram weights.
-   - Generates text.
-
-3. **Phase 3: Dynamic Switching**
-   - Demonstrates unloading Engram layers to revert to base model behavior.
-   - Demonstrates reloading the weights dynamically.
-
-### Memory Usage
-For `TinyLlama-1.1B`, the training typically requires less than 8GB of VRAM with the provided settings (batch size 4, gradient accumulation 2), making it suitable for consumer GPUs like the RTX 3060/3070 and above.
 
 ---
 
-## CPU-Optimized Example: `end_to_end_cpu.py`
+## 2. Baseline Comparison: `compare_engram_lora.py`
 
-This script is designed for environments **without a GPU** or for users who want a **fast, lightweight demonstration** (< 5 minutes).
+This script is used to benchmark Engram against other PEFT methods like LoRA to showcase its advantages in memory and stability.
 
 ### Features
-- **Ultra-Tiny Model**: Uses a custom "nanochat-style" Transformer with < 10M parameters.
-- **Pure CPU Support**: Optimized configuration that runs efficiently on consumer CPUs.
-- **No External Weights**: Initializes from scratch, requiring no large downloads.
-- **Full PEFT Workflow**: Includes injection, training (100 steps), saving, and dynamic inference.
+- **Benchmarking**: Tracks Peak VRAM usage and average wall-clock time per step.
+- **LoRA vs Engram**: Trains both methods under identical conditions for fair comparison.
+- **Visualization**: Generates a high-quality comparison plot (`outputs/engram_test/loss_curve.png`).
+- **Reporting**: Persists all metrics into a `training_metrics.json` file.
+
+### Running the Comparison
+```bash
+uv run python examples/compare_engram_lora.py --max_steps 100 --batch_size 4
+```
+
+---
+
+## 3. CPU-Optimized Example: `end_to_end_cpu.py`
+
+Designed for environments **without a GPU** or for users who want a **fast demonstration** (< 3 minutes) using a nano-sized model.
 
 ### Running the Example
 ```bash
 uv run python examples/end_to_end_cpu.py
 ```
 
-### Performance Expectations
-- **Device**: CPU (Auto-detected).
-- **Time**: ~2-3 minutes for 100 steps.
-- **Memory**: < 1GB RAM.
-- **Output**: Generates text and prints mean activation values for the Context-Aware Gating (CAG) branches.
+---
+
+## 🛠 Prerequisites
+
+The examples require additional libraries (`matplotlib`, `seaborn`, `pandas`, `peft`, `datasets`) which are included in the project's dev dependencies.
+
+Ensure your environment is synchronized:
+```bash
+uv sync --all-groups
+```

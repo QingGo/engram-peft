@@ -19,7 +19,11 @@ class EngramConfig(PretrainedConfig):
     model_type = "engram"
 
     engram_vocab_size_per_ngram: List[int] = field(
-        default_factory=lambda: [1131200, 1131200]
+        default_factory=lambda: [1131200, 1131200],
+        metadata={
+            "help": "Total number of hash buckets for each N-gram size (e.g., [2, 3]). "
+            "This total capacity is distributed among the K heads."
+        },
     )
     max_ngram_size: int = 3
     n_head_per_ngram: int = 8
@@ -28,9 +32,11 @@ class EngramConfig(PretrainedConfig):
     target_layers: List[int] = field(default_factory=lambda: [2, 15])
     hc_mult: int = 4
     combine_mhc: bool = True
+    hidden_size: int = 2048
     conv_kernel_size: int = 4
     conv_dilation: Optional[int] = None
     conv_zero_init: bool = True
+    gating_zero_init: bool = False
     learning_rate_multiplier: float = 5.0
     weight_decay: float = 0.0
     tokenizer_name_or_path: str = "deepseek-ai/DeepSeek-V3"
@@ -50,11 +56,13 @@ class EngramConfig(PretrainedConfig):
         conv_kernel_size: int = 4,
         conv_dilation: Optional[int] = None,
         conv_zero_init: bool = True,
+        gating_zero_init: bool = False,
         learning_rate_multiplier: float = 5.0,
         weight_decay: float = 0.0,
         tokenizer_name_or_path: str = "deepseek-ai/DeepSeek-V3",
         pad_id: int = 2,
         seed: int = 0,
+        hidden_size: int = 2048,
         **kwargs: Any,
     ):
         """Constructs EngramConfig."""
@@ -78,7 +86,9 @@ class EngramConfig(PretrainedConfig):
         )
 
         self.conv_zero_init = conv_zero_init
+        self.gating_zero_init = gating_zero_init
         self.learning_rate_multiplier = learning_rate_multiplier
+        self.hidden_size = hidden_size
         self.weight_decay = weight_decay
         self.tokenizer_name_or_path = tokenizer_name_or_path
         self.pad_id = pad_id
