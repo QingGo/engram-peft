@@ -8,7 +8,7 @@ This script demonstrates how Engram compares against standard PEFT methods (like
 4. Lifecycle: Demonstrates full training and dynamic management.
 
 Usage:
-    uv run python examples/compare_engram_lora.py --max_steps 50 --batch_size 4
+    uv run python examples/compare_engram_lora.py --max_steps 50 --batch_size 4 --num_workers 4
 """
 
 import argparse
@@ -105,10 +105,13 @@ def prepare_dataset(
         tokenize_function, batched=True, remove_columns=["text"]
     )
     
+    # Shuffle dataset to ensure representative eval set
+    full_dataset = full_dataset.shuffle(seed=42)
+    
     train_dataset = full_dataset.select(range(subset_size))
     eval_dataset = full_dataset.select(range(subset_size, subset_size + eval_size))
     
-    print(f"Dataset prepared: {len(train_dataset)} train samples, {len(eval_dataset)} eval samples (strict split).")
+    print(f"Dataset prepared: {len(train_dataset)} train samples, {len(eval_dataset)} eval samples (shuffled split).")
     return train_dataset, eval_dataset
 
 
@@ -126,6 +129,8 @@ def get_base_model_eval_loss(
         bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
         fp16=not (torch.cuda.is_available() and torch.cuda.is_bf16_supported())
         and torch.cuda.is_available(),
+        dataloader_num_workers=4,  # Constant for quick eval
+        dataloader_pin_memory=True,
     )
     trainer = Trainer(
         model=model,
@@ -171,6 +176,10 @@ def train_lora(
         and torch.cuda.is_available(),
         report_to="none",
         remove_unused_columns=True,
+        dataloader_num_workers=args.num_workers,
+        dataloader_pin_memory=True,
+        evaluation_strategy="steps",
+        eval_steps=100,
     )
 
     trainer = Trainer(
@@ -253,6 +262,10 @@ def train_engram_model(
         and torch.cuda.is_available(),
         report_to="none",
         remove_unused_columns=True,
+        dataloader_num_workers=args.num_workers,
+        dataloader_pin_memory=True,
+        evaluation_strategy="steps",
+        eval_steps=100,
     )
 
     trainer = EngramTrainer(
@@ -506,6 +519,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--grad_accum", type=int, default=2, help="Gradient accumulation steps"
     )
+    parser.add_argument(
+        "--num_workers", type=int, default=4, help="Number of dataloader workers"
+    )
     args = parser.parse_args()
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -535,8 +551,9 @@ if __name__ == "__main__":
         base_mem = 0.0
 
     # 1. Prepare Data (Training + Unseen Validation)
+    # Increased eval_size to 500 for better representativeness
     train_dataset, eval_dataset = prepare_dataset(
-        tokenizer, subset_size=args.subset, eval_size=50, max_length=128
+        tokenizer, subset_size=args.subset, eval_size=500, max_length=128
     )
 
     results: Dict[str, Any] = {}

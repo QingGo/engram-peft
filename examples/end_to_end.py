@@ -8,7 +8,9 @@ This script demonstrates the core Engram-PEFT workflow:
 4. Saving & Inference: Persisting weights and demonstrating dynamic loading/generation.
 
 Usage:
-    uv run python examples/end_to_end.py --max_steps 50 --batch_size 4
+    ```bash
+uv run python examples/end_to_end.py --max_steps 50 --batch_size 4 --num_workers 4
+```
 """
 
 import argparse
@@ -117,6 +119,8 @@ def train_engram(
         fp16=not torch.cuda.is_bf16_supported() and torch.cuda.is_available(),
         report_to="none",
         remove_unused_columns=True,
+        dataloader_num_workers=args.num_workers,
+        dataloader_pin_memory=True,
     )
 
     trainer = EngramTrainer(
@@ -197,6 +201,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--subset", type=int, default=1000, help="Dataset subset size to load"
+    )
+    parser.add_argument(
+        "--num_workers", type=int, default=4, help="Number of dataloader workers"
     )
     args = parser.parse_args()
 

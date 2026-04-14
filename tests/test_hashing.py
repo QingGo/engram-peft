@@ -56,7 +56,7 @@ def test_uniform_distribution() -> None:
     tokens = np.zeros((1, num_samples), dtype=np.int64)
     tokens[0] = np.arange(num_samples)
 
-    hashes = mapping._get_ngram_hashes(tokens, 1)
+    hashes = mapping.hash(tokens)[1]
     # first head, n=2
     h_vals = hashes[0, :, 0]
 
@@ -78,7 +78,7 @@ def test_batch_processing() -> None:
     seq_len = 16
 
     tokens = np.random.randint(0, 10000, size=(batch_size, seq_len))
-    hashes = mapping._get_ngram_hashes(tokens, 2)
+    hashes = mapping.hash(tokens)[2]
 
     # total_heads = (max_ngram_size - 1) * n_head_per_ngram
     # Here ngrams are 2, 3 -> 2 orders * 8 = 16
@@ -87,7 +87,7 @@ def test_batch_processing() -> None:
 
     for b in range(batch_size):
         single_input = tokens[b : b + 1]
-        single_hash = mapping._get_ngram_hashes(single_input, 2)
+        single_hash = mapping.hash(single_input)[2]
         np.testing.assert_array_equal(
             hashes[b : b + 1],
             single_hash,

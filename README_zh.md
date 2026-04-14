@@ -73,7 +73,7 @@ model.print_trainable_parameters()
 ## 🛠 特性
 
 - **100% 对齐论文**：实现了附录 A 表 5 的参数以及 DeepSeek 官方的门控/哈希逻辑。
-- **CPU 端预计算**：`EngramDataCollator` 在 CPU 上预计算多头哈希，确保 100% 的 GPU 利用率。
+- **向量化 CPU 端预计算**：`EngramDataCollator` 使用高度优化的 NumPy 广播机制在 CPU 上预计算哈希。支持多进程加载 (`num_workers > 0`)，确保 100% 的 GPU 利用率。
 - **分词器压缩 (Tokenizer Compression)**：内置 NFKC 和小写归一化，实现 23% 的词表缩减。
 - **零侵入性**：通过 forward hook 注入；无需修改基础模型架构源码。
 - **类 PEFT API**：提供 `print_trainable_parameters()` 和 `save_pretrained()` 等熟悉的方法。

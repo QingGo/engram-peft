@@ -31,7 +31,7 @@ Engram uses a modular injection at specific bottleneck layers (e.g., layers 2 an
 - **Efficiency Gains**:
     1. **Layer Sparsity**: By targeting only the layers most critical for knowledge injection, Engram reduces the total number of gradient calculations compared to a global LoRA application.
     2. **Kernel Efficiency**: Engram consolidates structural parameters into few, larger GEMM operations (Single Gating block) rather than many tiny rank-update operations spread across 22 layers.
-    3. **Pre-computation**: `EngramDataCollator` pre-calculates hash indices on the CPU, removing the hashing overhead from the GPU timeline.
+    3. **Pre-computation**: `EngramDataCollator` pre-calculates hash indices on the CPU, removing the hashing overhead from the GPU timeline. In our latest version, this is **highly vectorized** using NumPy broadcasting and supports **multi-process workers** (`num_workers`), effectively parallelizing the most CPU-intensive part of the Engram pipeline across multiple cores.
 
 ## 3. Memory Footprint Analysis
 

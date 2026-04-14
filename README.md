@@ -73,7 +73,7 @@ model.print_trainable_parameters()
 ## 🛠 Features
 
 - **100% Paper Alignment**: Implements Appendix A Table 5 parameters and the official DeepSeek gating/hashing logic.
-- **CPU-Side Precomputation**: `EngramDataCollator` precomputes multi-head hashes on CPU, ensuring 100% GPU utilization.
+- **Vectorized CPU-Side Precomputation**: `EngramDataCollator` uses highly optimized NumPy broadcasting to precompute hashes on CPU. Supports multi-process loading (`num_workers > 0`) to ensure 100% GPU utilization.
 - **Tokenizer Compression**: Built-in NFKC and lowercase normalization for 23% vocabulary reduction.
 - **Zero-Invasive**: Injects via forward hooks; no modification to your base model architecture required.
 - **Peft-like API**: Familiar methods like `print_trainable_parameters()` and `save_pretrained()`.

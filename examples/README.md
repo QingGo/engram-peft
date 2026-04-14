@@ -14,7 +14,7 @@ The `end_to_end.py` script provides a focused walkthrough of the Engram lifecycl
 
 ### Running the Example
 ```bash
-uv run python examples/end_to_end.py --max_steps 50 --batch_size 4
+uv run python examples/end_to_end.py --max_steps 50 --batch_size 4 --num_workers 4
 ```
 
 ---
@@ -31,7 +31,7 @@ This script is used to benchmark Engram against other PEFT methods like LoRA to 
 
 ### Running the Comparison
 ```bash
-uv run python examples/compare_engram_lora.py --max_steps 100 --batch_size 4
+uv run python examples/compare_engram_lora.py --max_steps 100 --batch_size 4 --num_workers 4
 ```
 
 ---
