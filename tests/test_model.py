@@ -54,7 +54,7 @@ class MockPreTrainedModel(PreTrainedModel):
 
 def create_mock_setup() -> tuple:
     config = EngramConfig(
-        max_ngram_size=2,
+        ngram_sizes=[2],
         n_head_per_ngram=2,
         embedding_dim=32,
         hidden_dim=32,

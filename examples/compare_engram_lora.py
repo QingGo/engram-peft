@@ -29,8 +29,6 @@ from transformers import (
     AutoTokenizer,
     DefaultDataCollator,
     PreTrainedModel,
-    PreTrainedTokenizer,
-    PreTrainedTokenizerFast,
     PreTrainedTokenizerBase,
     Trainer,
     TrainingArguments,

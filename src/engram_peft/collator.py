@@ -43,7 +43,7 @@ class EngramDataCollator(DataCollatorForLanguageModeling):
         # Initialize the global hashing mapping
         self.hash_mapping = NgramHashMapping(
             engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
-            max_ngram_size=config.max_ngram_size,
+            ngram_sizes=config.ngram_sizes,
             n_head_per_ngram=config.n_head_per_ngram,
             layer_ids=config.target_layers,
             tokenizer_name_or_path=config.tokenizer_name_or_path,

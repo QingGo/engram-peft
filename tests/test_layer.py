@@ -147,7 +147,7 @@ def test_cag_gradients() -> None:
 def test_engram_layer_forward() -> None:
     """测试用例 9：验证完整EngramLayer的前向传播"""
     config = EngramConfig(
-        max_ngram_size=3,
+        ngram_sizes=[2, 3],
         n_head_per_ngram=4,
         embedding_dim=128,
         hidden_size=32,
@@ -164,7 +164,7 @@ def test_engram_layer_forward() -> None:
 
     mapping = NgramHashMapping(
         engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
-        max_ngram_size=config.max_ngram_size,
+        ngram_sizes=config.ngram_sizes,
         n_head_per_ngram=config.n_head_per_ngram,
         layer_ids=[1],
     )
@@ -193,7 +193,7 @@ def test_engram_layer_forward() -> None:
 def test_engram_layer_indices_priority() -> None:
     """测试用例 10：验证engram_hash_indices优先使用（加速测试，速度快5倍以上）"""
     config = EngramConfig(
-        max_ngram_size=2,
+        ngram_sizes=[2],
         n_head_per_ngram=1,
         embedding_dim=16,
         hidden_size=32,
@@ -202,7 +202,7 @@ def test_engram_layer_indices_priority() -> None:
     )
     mapping = NgramHashMapping(
         engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
-        max_ngram_size=config.max_ngram_size,
+        ngram_sizes=config.ngram_sizes,
         n_head_per_ngram=config.n_head_per_ngram,
         layer_ids=[1],
     )
@@ -226,7 +226,7 @@ def test_engram_layer_indices_priority() -> None:
 def test_engram_layer_sparse_gradients() -> None:
     """测试用例 11：验证嵌入表的梯度只在被检索的行上更新"""
     config = EngramConfig(
-        max_ngram_size=2,
+        ngram_sizes=[2],
         n_head_per_ngram=1,
         embedding_dim=16,
         hidden_size=32,
@@ -237,7 +237,7 @@ def test_engram_layer_sparse_gradients() -> None:
     )
     mapping = NgramHashMapping(
         engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
-        max_ngram_size=config.max_ngram_size,
+        ngram_sizes=config.ngram_sizes,
         n_head_per_ngram=config.n_head_per_ngram,
         layer_ids=[1],
     )
@@ -272,7 +272,7 @@ def test_engram_layer_output_shape() -> None:
     """测试用例 12：验证输出形状与输入形状完全相同"""
     # Test multi-branch case
     config = EngramConfig(
-        max_ngram_size=2,
+        ngram_sizes=[2],
         n_head_per_ngram=2,
         embedding_dim=32,
         hidden_size=32,
@@ -281,7 +281,7 @@ def test_engram_layer_output_shape() -> None:
     )
     mapping = NgramHashMapping(
         engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
-        max_ngram_size=config.max_ngram_size,
+        ngram_sizes=config.ngram_sizes,
         n_head_per_ngram=config.n_head_per_ngram,
         layer_ids=[1],
     )
@@ -293,7 +293,7 @@ def test_engram_layer_output_shape() -> None:
     hidden_states = torch.randn(batch_size, seq_len, config.hc_mult, config.hidden_size)
 
     # Create hash indices tensor with shape [B, L, total_heads]
-    total_heads = config.n_head_per_ngram * (config.max_ngram_size - 1)
+    total_heads = config.n_head_per_ngram * len(config.ngram_sizes)
     indices = torch.zeros((batch_size, seq_len, total_heads), dtype=torch.long)
 
     output = layer(hidden_states=hidden_states, engram_hash_indices=indices)

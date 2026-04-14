@@ -34,7 +34,7 @@ class TestEngramConfig(unittest.TestCase):
         """测试用例 2：验证 save/load 功能正常"""
         config = EngramConfig(
             engram_vocab_size_per_ngram=[1000, 1000, 1000],
-            max_ngram_size=4,
+            ngram_sizes=[2, 3, 4],
             embedding_dim=256,
         )
 
@@ -48,6 +48,7 @@ class TestEngramConfig(unittest.TestCase):
             self.assertEqual(
                 loaded_config.engram_vocab_size_per_ngram, [1000, 1000, 1000]
             )
+            self.assertEqual(loaded_config.ngram_sizes, [2, 3, 4])
             self.assertEqual(loaded_config.max_ngram_size, 4)
             self.assertEqual(loaded_config.embedding_dim, 256)
             self.assertEqual(

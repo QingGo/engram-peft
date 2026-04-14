@@ -75,7 +75,7 @@ def test_gradient_sparsity() -> None:
     config = EngramConfig(
         target_layers=[0],
         n_head_per_ngram=1,
-        max_ngram_size=2,
+        ngram_sizes=[2],
         enable_tokenizer_compression=False,
         engram_vocab_size_per_ngram=[100],
         hidden_size=128,

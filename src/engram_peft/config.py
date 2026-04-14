@@ -25,6 +25,12 @@ class EngramConfig(PretrainedConfig):
             "This total capacity is distributed among the K heads."
         },
     )
+    ngram_sizes: List[int] = field(
+        default_factory=lambda: [2, 3],
+        metadata={
+            "help": "Explicit list of N-gram sizes to use (e.g., [2, 3])."
+        },
+    )
     max_ngram_size: int = 3
     n_head_per_ngram: int = 8
     embedding_dim: int = 1280
@@ -46,7 +52,7 @@ class EngramConfig(PretrainedConfig):
     def __init__(
         self,
         engram_vocab_size_per_ngram: Optional[List[int]] = None,
-        max_ngram_size: int = 3,
+        ngram_sizes: Optional[List[int]] = None,
         n_head_per_ngram: int = 8,
         embedding_dim: int = 1280,
         enable_tokenizer_compression: bool = True,
@@ -71,7 +77,8 @@ class EngramConfig(PretrainedConfig):
             if engram_vocab_size_per_ngram is not None
             else [1131200, 1131200]
         )
-        self.max_ngram_size = max_ngram_size
+        self.ngram_sizes = ngram_sizes if ngram_sizes is not None else [2, 3]
+        self.max_ngram_size = max(self.ngram_sizes)
         self.n_head_per_ngram = n_head_per_ngram
         self.embedding_dim = embedding_dim
         self.enable_tokenizer_compression = enable_tokenizer_compression
@@ -82,7 +89,7 @@ class EngramConfig(PretrainedConfig):
 
         # dynamic default for conv_dilation
         self.conv_dilation = (
-            conv_dilation if conv_dilation is not None else max_ngram_size
+            conv_dilation if conv_dilation is not None else self.max_ngram_size
         )
 
         self.conv_zero_init = conv_zero_init

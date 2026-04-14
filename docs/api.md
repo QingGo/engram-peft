@@ -13,7 +13,7 @@ Configuration class for Engram PEFT module. Inherits from `transformers.Pretrain
 
 **Parameters:**
 - `engram_vocab_size_per_ngram` (`List[int]`, default: `[1131200, 1131200]`): Total engram vocabulary size split per N-gram order.
-- `max_ngram_size` (`int`, default: `3`): Maximum N-gram order (e.g., 3 means 2-grams and 3-grams).
+- `ngram_sizes` (`List[int]`, default: `[2, 3]`): List of N-gram orders to use (e.g., `[2, 3]` means 2-grams and 3-grams).
 - `n_head_per_ngram` (`int`, default: `8`): Number of hash heads per N-gram order.
 - `embedding_dim` (`int`, default: `1280`): Dimension of the Engram retrieval embedding.
 - `enable_tokenizer_compression` (`bool`, default: `True`): Whether to use NFKC/Lowercase normalization for token grouping.
@@ -21,7 +21,7 @@ Configuration class for Engram PEFT module. Inherits from `transformers.Pretrain
 - `hc_mult` (`int`, default: `4`): Multi-head hyper-connection expansion factor.
 - `combine_mhc` (`bool`, default: `True`): Whether to combine multi-head hyper-connections.
 - `conv_kernel_size` (`int`, default: `4`): Convolution kernel size for short-term context.
-- `conv_dilation` (`Optional[int]`, default: `None`): Convolution dilation (defaults to `max_ngram_size`).
+- `conv_dilation` (`Optional[int]`, default: `None`): Convolution dilation (defaults to `max(ngram_sizes)`).
 - `conv_zero_init` (`bool`, default: `True`): Initialize convolution weights to zero to ensure identity mapping at start.
 - `learning_rate_multiplier` (`float`, default: `5.0`): LR multiplier for sparse embedding parameters.
 - `tokenizer_name_or_path` (`str`, default: `"deepseek-ai/DeepSeek-V3"`): Tokenizer used for precomputing hashes.

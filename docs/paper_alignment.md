@@ -9,7 +9,7 @@ This document details the alignment between the `engram-peft` implementation and
 | **Tokenizer Compression** (Sec 2.2) | `compression.py` | Implements `P: V→V'` surjective mapping using `NFKC` + `Lowercase` + `Strip`. |
 | **Multi-Head Hashing** (Sec 2.2) | `hashing.py` | Polynomial hashing followed by bitwise XOR. Uses prime-sized tables $M_{n,k}$. |
 | **Context-Aware Gating** (Sec 2.3) | `layer.py:ContextAwareGating` | Formula: $\alpha_t = \sigma( \text{RMSNorm}(h_t)^\top \text{RMSNorm}(k_t) / \sqrt{d} )$. |
-| **Short-term Memory** (Sec 2.3) | `layer.py:ShortConv` | Depth-wise 1D Conv with kernel size 4 and dilation equal to max N-gram order. |
+| **Short-term Memory** (Sec 2.3) | `layer.py:ShortConv` | Depth-wise 1D Conv with kernel size 4 and dilation equal to max N-gram size. |
 | **Mixed Optimization** (Sec 4.1) | `utils.py:get_optimizer` | `SparseAdam` for retrieval embeddings with $5\times$ learning rate multiplier. |
 
 ## Hyperparameters (Appendix A Table 5)
@@ -22,7 +22,7 @@ Our `EngramConfig` defaults are 100% aligned with the configurations for the 27B
 | Engram Vocab Size | 2,262,400 | `engram_vocab_size_per_ngram: [1131200, 1131200]` |
 | Hash Heads $K$ | 8 | `n_head_per_ngram: 8` |
 | Target Layers | [2, 15] | `target_layers: [2, 15]` |
-| N-gram Orders $n$ | [2, 3] | `max_ngram_size: 3` |
+| N-gram Orders $n$ | [2, 3] | `ngram_sizes: [2, 3]` |
 | LR Multiplier | $5\times$ | `learning_rate_multiplier: 5.0` |
 | Conv Zero Init | True | `conv_zero_init: True` |
 

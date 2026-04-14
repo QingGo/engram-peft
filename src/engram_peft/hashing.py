@@ -16,6 +16,7 @@ class NgramHashMapping:
     engram_vocab_size_per_ngram: List[int] = field(
         default_factory=lambda: [2262400 // 2, 2262400 // 2]
     )
+    ngram_sizes: List[int] = field(default_factory=lambda: [2, 3])
     max_ngram_size: int = 3
     n_head_per_ngram: int = 8
     layer_ids: List[int] = field(default_factory=lambda: [2, 15])
@@ -24,7 +25,7 @@ class NgramHashMapping:
     seed: int = 0
 
     def __post_init__(self) -> None:
-        self.ngram_sizes = list(range(2, self.max_ngram_size + 1))
+        self.max_ngram_size = max(self.ngram_sizes)
         self.all_multipliers: Dict[int, np.ndarray] = {}
 
         for layer_id in self.layer_ids:

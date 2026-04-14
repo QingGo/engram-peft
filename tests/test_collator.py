@@ -36,7 +36,7 @@ class TestEngramDataCollator:
     def setup_config(self) -> EngramConfig:
         return EngramConfig(
             target_layers=[2, 15],
-            max_ngram_size=3,
+            ngram_sizes=[2, 3],
             n_head_per_ngram=4,
             engram_vocab_size_per_ngram=[100, 100],
             seed=42,
@@ -59,7 +59,7 @@ class TestEngramDataCollator:
         # Batch size = 2
         # Max seq len = 4
         # Num layers = 2 (layers 2 and 15)
-        # Total heads = (max_ngram_size - 1) * n_head_per_ngram = (3-1) * 4 = 8
+        # Total heads = len(ngram_sizes) * n_head_per_ngram = 2 * 4 = 8
         assert hashes.shape == (2, 4, 2, 8)
         assert isinstance(hashes, torch.Tensor)
 

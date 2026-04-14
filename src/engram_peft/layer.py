@@ -268,7 +268,7 @@ class EngramLayer(nn.Module):
         self.layer_id = layer_id
         self.compressor = compressor
 
-        self.ngram_sizes = list(range(2, config.max_ngram_size + 1))
+        self.ngram_sizes = config.ngram_sizes
         self.hash_heads = config.n_head_per_ngram
         self.num_branches = config.hc_mult
         self.kernel_size = config.conv_kernel_size
@@ -287,7 +287,7 @@ class EngramLayer(nn.Module):
         # 0. Hash Mapping
         self.hash_mapping = NgramHashMapping(
             engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
-            max_ngram_size=config.max_ngram_size,
+            ngram_sizes=config.ngram_sizes,
             n_head_per_ngram=config.n_head_per_ngram,
             layer_ids=[layer_id],
         )

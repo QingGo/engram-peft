@@ -11,7 +11,7 @@ def test_hash_table_sizes_are_prime() -> None:
     """测试用例 1：验证所有哈希表大小都是质数"""
     mapping = NgramHashMapping(
         engram_vocab_size_per_ngram=[1000, 2000],
-        max_ngram_size=3,
+        ngram_sizes=[2, 3],
         n_head_per_ngram=4,
         layer_ids=[1, 2],
     )
@@ -45,7 +45,7 @@ def test_uniform_distribution() -> None:
     # use small prime limits to get more accurate histograms easily
     mapping = NgramHashMapping(
         engram_vocab_size_per_ngram=[101],
-        max_ngram_size=2,
+        ngram_sizes=[2],
         n_head_per_ngram=1,
         layer_ids=[1],
         seed=42,
