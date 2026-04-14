@@ -316,6 +316,44 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../memory_analysis/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Memory Analysis
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../fix_record.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Change Log
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -705,6 +743,60 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../memory_analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Memory Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../fix_record.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Change Log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -922,15 +1014,16 @@
 <p>Configuration class for Engram PEFT module. Inherits from <code>transformers.PretrainedConfig</code>. All default values exactly match the specifications in the Engram paper Appendix A Table 5.</p>
 <p><strong>Parameters:</strong>
 - <code>engram_vocab_size_per_ngram</code> (<code>List[int]</code>, default: <code>[1131200, 1131200]</code>): Total engram vocabulary size split per N-gram order.
-- <code>max_ngram_size</code> (<code>int</code>, default: <code>3</code>): Maximum N-gram order (e.g., 3 means 2-grams and 3-grams).
+- <code>ngram_sizes</code> (<code>List[int]</code>, default: <code>[2, 3]</code>): List of N-gram orders to use (e.g., <code>[2, 3]</code> means 2-grams and 3-grams).
 - <code>n_head_per_ngram</code> (<code>int</code>, default: <code>8</code>): Number of hash heads per N-gram order.
 - <code>embedding_dim</code> (<code>int</code>, default: <code>1280</code>): Dimension of the Engram retrieval embedding.
 - <code>enable_tokenizer_compression</code> (<code>bool</code>, default: <code>True</code>): Whether to use NFKC/Lowercase normalization for token grouping.
 - <code>target_layers</code> (<code>List[int]</code>, default: <code>[2, 15]</code>): Transformer layers where Engram modules are injected.
+- <code>target_modules</code> (<code>Optional[Union[List[str], str]]</code>, default: <code>None</code>): Specific module names or regex patterns to target for injection.
 - <code>hc_mult</code> (<code>int</code>, default: <code>4</code>): Multi-head hyper-connection expansion factor.
 - <code>combine_mhc</code> (<code>bool</code>, default: <code>True</code>): Whether to combine multi-head hyper-connections.
 - <code>conv_kernel_size</code> (<code>int</code>, default: <code>4</code>): Convolution kernel size for short-term context.
-- <code>conv_dilation</code> (<code>Optional[int]</code>, default: <code>None</code>): Convolution dilation (defaults to <code>max_ngram_size</code>).
+- <code>conv_dilation</code> (<code>Optional[int]</code>, default: <code>None</code>): Convolution dilation (defaults to <code>max(ngram_sizes)</code>).
 - <code>conv_zero_init</code> (<code>bool</code>, default: <code>True</code>): Initialize convolution weights to zero to ensure identity mapping at start.
 - <code>learning_rate_multiplier</code> (<code>float</code>, default: <code>5.0</code>): LR multiplier for sparse embedding parameters.
 - <code>tokenizer_name_or_path</code> (<code>str</code>, default: <code>"deepseek-ai/DeepSeek-V3"</code>): Tokenizer used for precomputing hashes.</p>
@@ -958,10 +1051,17 @@
 <p><code>engram_peft.model.EngramModel</code></p>
 <p>The wrapper class for the base model. Handles dynamic hook management and weight serialization.</p>
 <p><strong>Methods:</strong>
-- <code>save_pretrained(save_directory: str)</code>: Saves ONLY the Engram weights and configuration.
+- <code>print_trainable_parameters()</code>: Prints the count and percentage of trainable parameters.
+- <code>add_adapter(adapter_name: str, config: EngramConfig)</code>: Adds a new set of Engram weights with its own configuration.
+- <code>set_adapter(adapter_name: str)</code>: Switches the active knowledge pack to the specified adapter.
+- <code>create_optimizer(base_learning_rate: float)</code>: Returns a <code>MixedOptimizer</code> pre-configured for this model's sparse/dense layers.
+- <code>create_scheduler(optimizer, num_steps, warmup_steps)</code>: Returns the paper-aligned Step Decay scheduler.
+- <code>save_pretrained(save_directory: str)</code>: Saves ONLY the active Engram weights and configuration.
 - <code>from_pretrained(base_model, engram_path)</code>: Loads Engram weights onto a base model.
 - <code>unload_engram()</code>: Dynamically removes all PEFT hooks (reverts to base model).
-- <code>load_engram(engram_path=None)</code>: Re-installs hooks and optionally loads weights.</p>
+- <code>load_engram(engram_path=None)</code>: Re-installs hooks and optionally loads weights.
+- <code>load_weights_flexible(checkpoint_path, layer_mapping=None, reuse_structural=False)</code>: Loads weights from a checkpoint even if configurations (layers, buckets, n-grams) differ.
+- <code>remap_from_corpus(corpus_tokens, checkpoint_path, layer_mapping=None, batch_size=32)</code>: "Best-effort" remapping for cases where seeds or tokenizers differ, using a reference corpus to align indices.</p>
 <hr />
 <h2 id="data-utilities">Data Utilities</h2>
 <h3 id="engramdatacollator"><code>EngramDataCollator</code></h3>

@@ -314,6 +314,44 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="docs/memory_analysis/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Memory Analysis
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="docs/fix_record.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Change Log
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -635,6 +673,60 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="docs/memory_analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Memory Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="docs/fix_record.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Change Log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -809,8 +901,9 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 <span class="n">config</span> <span class="o">=</span> <span class="n">EngramConfig</span><span class="p">(</span><span class="n">target_layers</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">11</span><span class="p">,</span> <span class="mi">20</span><span class="p">])</span>
 <span class="n">model</span> <span class="o">=</span> <span class="n">get_engram_model</span><span class="p">(</span><span class="n">base_model</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">tokenizer</span><span class="p">)</span>
 
-<span class="c1"># 3. Model is ready for training! </span>
-<span class="c1"># Only Engram parameters (approx 1% of total) are trainable.</span>
+<span class="c1"># 3. Quick check on trainable parameters</span>
+<span class="n">model</span><span class="o">.</span><span class="n">print_trainable_parameters</span><span class="p">()</span>
+<span class="c1"># trainable params: 11,214,400 || all params: 1,111,214,400 || trainable%: 1.0092</span>
 </code></pre></div>
 <hr />
 <h2 id="performance-comparison">📊 Performance Comparison</h2>
@@ -850,9 +943,13 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 <ul>
 <li><strong>100% Paper Alignment</strong>: Implements Appendix A Table 5 parameters and the official DeepSeek gating/hashing logic.</li>
 <li><strong>CPU-Side Precomputation</strong>: <code>EngramDataCollator</code> precomputes multi-head hashes on CPU, ensuring 100% GPU utilization.</li>
-<li><strong>Tokenizer Compression</strong>: Built-in NFKC and lowercase normalization to achieve 23% vocabulary reduction (consistent with paper).</li>
+<li><strong>Tokenizer Compression</strong>: Built-in NFKC and lowercase normalization for 23% vocabulary reduction.</li>
 <li><strong>Zero-Invasive</strong>: Injects via forward hooks; no modification to your base model architecture required.</li>
-<li><strong>Dynamic Switching</strong>: Load and swap "knowledge packs" at runtime without reloading the base model.</li>
+<li><strong>Peft-like API</strong>: Familiar methods like <code>print_trainable_parameters()</code> and <code>save_pretrained()</code>.</li>
+<li><strong>Named Adapters</strong>: Industry-standard named adapter management (add/set/unload) for modular knowledge packs.</li>
+<li><strong>Weight Migration</strong>: One-of-a-kind implementation supporting <strong>Best-effort Cross-Tokenizer Migration</strong> (best effort). Reuse weights between Llama, Qwen, and others via semantic offset alignment.</li>
+<li><strong>Structural Robustness</strong>: Supports cross-layer mapping, dynamic bucket resizing, and N-gram subset loading.</li>
+<li><strong>Automated Training</strong>: Native <code>EngramTrainer</code> with built-in sparse Adam support and automatic sync of optimizer hyperparameters.</li>
 </ul>
 <hr />
 <h2 id="documentation">📖 Documentation</h2>
@@ -872,7 +969,7 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 </code></pre></div>
 <hr />
 <h2 id="license">License</h2>
-<p>Apache License 2.0. See <a href="../LICENSE">LICENSE</a> for details.</p>
+<p>Apache License 2.0. See <a href="LICENSE">LICENSE</a> for details.</p>
 
 
 

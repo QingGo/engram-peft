@@ -16,6 +16,8 @@
         <link rel="prev" href="../api/">
       
       
+        <link rel="next" href="../memory_analysis/">
+      
       
         
       
@@ -314,6 +316,44 @@
   
 
       
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../memory_analysis/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Memory Analysis
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../fix_record.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Change Log
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -566,10 +606,75 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#weight-reuse-knowledge-transfer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Weight Reuse &amp; Knowledge Transfer
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
       
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../memory_analysis/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Memory Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../fix_record.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Change Log
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -633,6 +738,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#weight-reuse-knowledge-transfer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Weight Reuse &amp; Knowledge Transfer
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -683,7 +799,7 @@
 <tr>
 <td style="text-align: left;"><strong>Short-term Memory</strong> (Sec 2.3)</td>
 <td style="text-align: left;"><code>layer.py:ShortConv</code></td>
-<td style="text-align: left;">Depth-wise 1D Conv with kernel size 4 and dilation equal to max N-gram order.</td>
+<td style="text-align: left;">Depth-wise 1D Conv with kernel size 4 and dilation equal to max N-gram size.</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>Mixed Optimization</strong> (Sec 4.1)</td>
@@ -726,7 +842,7 @@
 <tr>
 <td style="text-align: left;">N-gram Orders $n$</td>
 <td style="text-align: left;">[2, 3]</td>
-<td style="text-align: left;"><code>max_ngram_size: 3</code></td>
+<td style="text-align: left;"><code>ngram_sizes: [2, 3]</code></td>
 </tr>
 <tr>
 <td style="text-align: left;">LR Multiplier</td>
@@ -752,6 +868,16 @@
     Embedding tables for all heads in a layer are concatenated into a single larger <code>nn.Embedding</code> and indexed using offsets for maximum GPU throughput.</li>
 <li><strong>mHC (multi-Head Hyper-connection)</strong>:
     We support <code>hc_mult=4</code> which expands the hidden states before gating, as described in the paper's efficient hyper-connection section.</li>
+</ol>
+<h2 id="weight-reuse-knowledge-transfer">Weight Reuse &amp; Knowledge Transfer</h2>
+<p>One of the key practical advantages of the Engram design—implied by its deterministic hashing and modular nature—is the ability to reuse learned memory across different environments. We implement several enhancements beyond the paper's base training logic:</p>
+<ol>
+<li><strong>Structural Invariance</strong>:
+    Because each N-gram head is independent, weights can be migrated between models with different <code>target_layers</code> or different <code>engram_vocab_size_per_ngram</code> (via slicing/padding).</li>
+<li><strong>Logic Alignment (Seeds &amp; Tokenizers)</strong>:
+    The paper emphasizes "normalized textual equivalence." By leveraging this, we can align weights between different tokenizers (e.g., Llama-2 vs Qwen) by using character-level offset mappings on a reference corpus to synchronize the logical hashes.</li>
+<li><strong>Cross-Model Knowledge Distillation</strong>:
+    A trained Engram module can be treated as a portable "knowledge pack." Our implementation supports loading weights even when hashing seeds differ, by using a best-effort remapping strategy that recovers the semantic mapping from a sample of text data.</li>
 </ol>
 
 

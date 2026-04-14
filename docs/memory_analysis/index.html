@@ -13,6 +13,8 @@
       
       
       
+        <link rel="prev" href="../paper_alignment/">
+      
       
       
         
@@ -23,7 +25,7 @@
     
     
       
-        <title>Memory Footprint Analysis: Engram vs. LoRA - Engram-PEFT</title>
+        <title>Memory Analysis - Engram-PEFT</title>
       
     
     
@@ -108,7 +110,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Memory Footprint Analysis: Engram vs. LoRA
+              Memory Analysis
             
           </span>
         </div>
@@ -310,6 +312,46 @@
   
 
       
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Memory Analysis
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../fix_record.md" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Change Log
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -478,6 +520,229 @@
     
   
     Paper Alignment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Memory Analysis
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Memory Analysis
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-baseline-tinyllama-11b" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Baseline: TinyLlama-1.1B
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-lora-analysis-r16" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. LoRA Analysis (r=16)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#15-full-fine-tuning-fft-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1.5 Full Fine-Tuning (FFT) Analysis
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1.5 Full Fine-Tuning (FFT) Analysis">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#theoretical-breakdown" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Theoretical Breakdown:
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#total-rationale" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Total Rationale:
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-engram-analysis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Engram Analysis
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Engram Analysis">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#parameter-breakdown" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Parameter Breakdown
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#vram-overhead" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        VRAM Overhead
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#summary-comparison-table-11b-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Summary Comparison Table (1.1B Model)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-conclusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Conclusion
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../fix_record.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Change Log
   
 
     
