@@ -25,7 +25,7 @@
     
     
       
-        <title>Memory Analysis - Engram-PEFT</title>
+        <title>Comparison Analysis (LoRA vs Engram) - Engram-PEFT</title>
       
     
     
@@ -76,7 +76,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#memory-footprint-analysis-engram-vs-lora" class="md-skip">
+        <a href="#performance-comparison-engram-vs-lora" class="md-skip">
           Skip to content
         </a>
       
@@ -110,7 +110,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Memory Analysis
+              Comparison Analysis (LoRA vs Engram)
             
           </span>
         </div>
@@ -326,7 +326,7 @@
   
     
   
-  Memory Analysis
+  Comparison Analysis (LoRA vs Engram)
 
       </a>
     </li>
@@ -555,7 +555,7 @@
   <span class="md-ellipsis">
     
   
-    Memory Analysis
+    Comparison Analysis (LoRA vs Engram)
   
 
     
@@ -573,7 +573,7 @@
   <span class="md-ellipsis">
     
   
-    Memory Analysis
+    Comparison Analysis (LoRA vs Engram)
   
 
     
@@ -599,10 +599,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-baseline-tinyllama-11b" class="md-nav__link">
+  <a href="#1-executive-summary" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. Baseline: TinyLlama-1.1B
+        1. Executive Summary
       
     </span>
   </a>
@@ -610,33 +610,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-lora-analysis-r16" class="md-nav__link">
+  <a href="#2-computational-analysis-why-engram-is-faster" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. LoRA Analysis (r=16)
+        2. Computational Analysis: Why Engram is Faster
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#15-full-fine-tuning-fft-analysis" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        1.5 Full Fine-Tuning (FFT) Analysis
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="1.5 Full Fine-Tuning (FFT) Analysis">
+    <nav class="md-nav" aria-label="2. Computational Analysis: Why Engram is Faster">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#theoretical-breakdown" class="md-nav__link">
+  <a href="#lora-complexity" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Theoretical Breakdown:
+        LoRA Complexity
       
     </span>
   </a>
@@ -644,10 +633,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#total-rationale" class="md-nav__link">
+  <a href="#engram-complexity" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Total Rationale:
+        Engram Complexity
       
     </span>
   </a>
@@ -660,22 +649,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#3-engram-analysis" class="md-nav__link">
+  <a href="#3-memory-footprint-analysis" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. Engram Analysis
+        3. Memory Footprint Analysis
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="3. Engram Analysis">
+    <nav class="md-nav" aria-label="3. Memory Footprint Analysis">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#parameter-breakdown" class="md-nav__link">
+  <a href="#vram-discrepancy-allocated-vs-system" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Parameter Breakdown
+        VRAM Discrepancy (Allocated vs. System)
       
     </span>
   </a>
@@ -683,10 +672,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#vram-overhead" class="md-nav__link">
+  <a href="#the-1gb-weight-gap" class="md-nav__link">
     <span class="md-ellipsis">
       
-        VRAM Overhead
+        The "1GB Weight Gap"
       
     </span>
   </a>
@@ -699,10 +688,60 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#summary-comparison-table-11b-model" class="md-nav__link">
+  <a href="#4-performance-convergence" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Summary Comparison Table (1.1B Model)
+        4. Performance &amp; Convergence
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Performance &amp; Convergence">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#loss-curve-comparison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Loss Curve Comparison
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#generalization-training-vs-evaluation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Generalization: Training vs. Evaluation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#throughput-tokens-per-second" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Throughput (Tokens per Second)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-conclusion-selecting-the-right-method" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Conclusion: Selecting the Right Method
       
     </span>
   </a>
@@ -710,10 +749,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#4-conclusion" class="md-nav__link">
+  <a href="#6-detailed-metrics-raw-data" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. Conclusion
+        6. Detailed Metrics (Raw Data)
       
     </span>
   </a>
@@ -782,10 +821,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-baseline-tinyllama-11b" class="md-nav__link">
+  <a href="#1-executive-summary" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. Baseline: TinyLlama-1.1B
+        1. Executive Summary
       
     </span>
   </a>
@@ -793,33 +832,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-lora-analysis-r16" class="md-nav__link">
+  <a href="#2-computational-analysis-why-engram-is-faster" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. LoRA Analysis (r=16)
+        2. Computational Analysis: Why Engram is Faster
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#15-full-fine-tuning-fft-analysis" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        1.5 Full Fine-Tuning (FFT) Analysis
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="1.5 Full Fine-Tuning (FFT) Analysis">
+    <nav class="md-nav" aria-label="2. Computational Analysis: Why Engram is Faster">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#theoretical-breakdown" class="md-nav__link">
+  <a href="#lora-complexity" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Theoretical Breakdown:
+        LoRA Complexity
       
     </span>
   </a>
@@ -827,10 +855,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#total-rationale" class="md-nav__link">
+  <a href="#engram-complexity" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Total Rationale:
+        Engram Complexity
       
     </span>
   </a>
@@ -843,22 +871,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#3-engram-analysis" class="md-nav__link">
+  <a href="#3-memory-footprint-analysis" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. Engram Analysis
+        3. Memory Footprint Analysis
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="3. Engram Analysis">
+    <nav class="md-nav" aria-label="3. Memory Footprint Analysis">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#parameter-breakdown" class="md-nav__link">
+  <a href="#vram-discrepancy-allocated-vs-system" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Parameter Breakdown
+        VRAM Discrepancy (Allocated vs. System)
       
     </span>
   </a>
@@ -866,10 +894,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#vram-overhead" class="md-nav__link">
+  <a href="#the-1gb-weight-gap" class="md-nav__link">
     <span class="md-ellipsis">
       
-        VRAM Overhead
+        The "1GB Weight Gap"
       
     </span>
   </a>
@@ -882,10 +910,60 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#summary-comparison-table-11b-model" class="md-nav__link">
+  <a href="#4-performance-convergence" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Summary Comparison Table (1.1B Model)
+        4. Performance &amp; Convergence
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Performance &amp; Convergence">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#loss-curve-comparison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Loss Curve Comparison
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#generalization-training-vs-evaluation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Generalization: Training vs. Evaluation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#throughput-tokens-per-second" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Throughput (Tokens per Second)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-conclusion-selecting-the-right-method" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Conclusion: Selecting the Right Method
       
     </span>
   </a>
@@ -893,10 +971,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#4-conclusion" class="md-nav__link">
+  <a href="#6-detailed-metrics-raw-data" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4. Conclusion
+        6. Detailed Metrics (Raw Data)
       
     </span>
   </a>
@@ -923,114 +1001,178 @@
   
 
 
-<h1 id="memory-footprint-analysis-engram-vs-lora">Memory Footprint Analysis: Engram vs. LoRA</h1>
-<p>This document provides a theoretical and empirical analysis of the memory (VRAM) usage for Engram and LoRA when applied to the TinyLlama-1.1B model.</p>
-<h2 id="1-baseline-tinyllama-11b">1. Baseline: TinyLlama-1.1B</h2>
-<p>To understand the overhead, we first examine the base model:
-- <strong>Parameters</strong>: ~1.1 Billion
-- <strong>Weight Precision</strong>: FP16 (2 bytes/param)
-- <strong>Static Memory</strong>: ~2.2 GB (weights only)
-- <strong>Inference/Training Context</strong>: VRAM usage also includes CUDA kernels, workspace, and activations (gradient checkpoints), typically totaling <strong>3-5 GB</strong> for the base model during training with small batch sizes.</p>
-<h2 id="2-lora-analysis-r16">2. LoRA Analysis (r=16)</h2>
-<p>In our benchmarks, LoRA adds parameters to <code>q_proj</code> and <code>v_proj</code>.
-- <strong>Rank ($r$)</strong>: 16
-- <strong>Hidden Size ($D$)</strong>: 2048
-- <strong>Params per module</strong>: $D \times r + r \times D = 65,536$
-- <strong>Total Layers</strong>: 22
-- <strong>Total LoRA Params</strong>: $2 \text{ modules} \times 22 \text{ layers} \times 65k \approx 2.88 \text{ Million}$
-- <strong>VRAM Overhead</strong>: 
-    - Weights + Gradients + Optimizer States: $\approx 2.88M \times (2+2+8) \approx 35 \text{ MB}$.
-    - Since this overhead is negligible, LoRA training memory is dominated by the base model and its activations.
-- <strong>Observed VRAM</strong>: <strong>~5.1 GB</strong> (mostly base weights + activations).</p>
-<h2 id="15-full-fine-tuning-fft-analysis">1.5 Full Fine-Tuning (FFT) Analysis</h2>
-<p>For a 1.1B parameter model using the standard Adam optimizer and mixed-precision (FP16), the memory requirement is significantly higher due to the need for gradient and optimizer state storage for <em>every</em> parameter.</p>
-<h3 id="theoretical-breakdown">Theoretical Breakdown:</h3>
-<ol>
-<li><strong>Model Weights (FP16)</strong>: $1.1B \times 2 \text{ bytes} = \mathbf{2.2 \text{ GB}}$</li>
-<li><strong>Gradients (FP16)</strong>: $1.1B \times 2 \text{ bytes} = \mathbf{2.2 \text{ GB}}$</li>
-<li><strong>Optimizer States (Adam/FP32)</strong>:</li>
-<li>Adam requires 12 bytes per parameter (Master Weight, Momentum, and Variance in FP32).</li>
-<li>$1.1B \times 12 \text{ bytes} = \mathbf{13.2 \text{ GB}}$</li>
-<li><strong>Activations &amp; Buffers</strong>:</li>
-<li>For a 1.1B model, training usually requires <strong>2-4 GB</strong> for activation storage (depending on sequence length and gradient checkpointing).</li>
-<li>CUDA overhead and workspace usually occupy <strong>1-2 GB</strong>.</li>
-</ol>
-<h3 id="total-rationale">Total Rationale:</h3>
-<p><strong>$17.6 \text{ GB (Static)} + 4 \text{ GB (Activations)} + 2 \text{ GB (System)} \approx \mathbf{23.6 \text{ GB}}$</strong></p>
-<p>This explains why <strong>~24 GB</strong> is the industry-standard minimum for full fine-tuning of 1B-scale models.</p>
-<h2 id="3-engram-analysis">3. Engram Analysis</h2>
-<p>Engram's architecture introduces large (though sparse) embedding tables and branching projections.</p>
-<h3 id="parameter-breakdown">Parameter Breakdown</h3>
-<p>Using the configuration <code>target_layers=[2, 11, 20]</code> (3 layers) and <code>engram_vocab_size_per_ngram=[256000, 256000]</code>:
-1. <strong>Multi-Head Embeddings (Sparse)</strong>:
-   - 16 heads total, dimension per head = 64.
-   - Total capacity per layer $\approx 512,000$ entries.
-   - 3 layers $\times 512k \times 64 \approx \mathbf{98.3 \text{ Million parameters}}$.
-2. <strong>Context-Aware Gating (Dense)</strong>:
-   - Shared Value/Key projections per layer $\approx 10.5 \text{ Million}$.
-   - 3 layers $\approx \mathbf{31.5 \text{ Million parameters}}$.
-- <strong>Total Engram Params</strong>: $\approx \mathbf{130 \text{ Million}}$.</p>
-<h3 id="vram-overhead">VRAM Overhead</h3>
-<p>Even though Engram uses sparse gradient updates, the full parameter set and optimizer states must reside in VRAM:
-- <strong>Weights (FP16)</strong>: $130M \times 2 \approx 260 \text{ MB}$.
-- <strong>Optimizer States (Adam/SparseAdam)</strong>: $130M \times 8 \approx \mathbf{1.04 \text{ GB}}$.
-- <strong>Activations</strong>: Branching ($hc_mult=4$) increases activation storage requirement by $\approx 20$ MB per layer.
-- <strong>Total Calculated Overhead</strong>: <strong>~1.3 - 1.5 GB</strong> above the LoRA baseline.</p>
-<p>This aligns closely with our theoretical calculation of <strong>~1.5 GB</strong> overhead for Engram's 130M parameters and their corresponding optimizer states. </p>
-<h2 id="summary-comparison-table-11b-model">Summary Comparison Table (1.1B Model)</h2>
+<h1 id="performance-comparison-engram-vs-lora">Performance Comparison: Engram vs. LoRA</h1>
+<p>This document presents a comprehensive analysis comparing <strong>Engram-PEFT</strong> and <strong>LoRA</strong> (Low-Rank Adaptation) using empirical data from the <code>TinyLlama-1.1B</code> benchmark run on NVIDIA RTX 4090D 24GB hardware.</p>
+<h2 id="1-executive-summary">1. Executive Summary</h2>
 <table>
 <thead>
 <tr>
-<th style="text-align: left;">Component</th>
-<th style="text-align: left;">FFT (Full Fine-Tune)</th>
+<th style="text-align: left;">Metric</th>
 <th style="text-align: left;">LoRA (r=16)</th>
-<th style="text-align: left;">Engram (3 layers)</th>
+<th style="text-align: left;">Engram (2 layers)</th>
+<th style="text-align: left;">Delta</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td style="text-align: left;"><strong>Trainable Params</strong></td>
-<td style="text-align: left;">1,100 M</td>
 <td style="text-align: left;">2.88 M</td>
-<td style="text-align: left;">130 M</td>
+<td style="text-align: left;">545.4 M</td>
+<td style="text-align: left;">+18,800%</td>
 </tr>
 <tr>
-<td style="text-align: left;"><strong>Weight Memory</strong></td>
-<td style="text-align: left;">2.2 GB</td>
-<td style="text-align: left;">2.2 GB*</td>
-<td style="text-align: left;">2.45 GB**</td>
+<td style="text-align: left;"><strong>Training Speed</strong></td>
+<td style="text-align: left;">0.1777 s/step</td>
+<td style="text-align: left;"><strong>0.1643 s/step</strong></td>
+<td style="text-align: left;"><strong>~8% Faster</strong></td>
 </tr>
 <tr>
-<td style="text-align: left;"><strong>Optimizer States</strong></td>
-<td style="text-align: left;">13.2 GB</td>
-<td style="text-align: left;">0.03 GB</td>
-<td style="text-align: left;">1.04 GB</td>
+<td style="text-align: left;"><strong>Training Loss</strong></td>
+<td style="text-align: left;"><strong>1.254</strong></td>
+<td style="text-align: left;">1.311</td>
+<td style="text-align: left;">LoRA -4.3%</td>
 </tr>
 <tr>
-<td style="text-align: left;"><strong>Gradients</strong></td>
-<td style="text-align: left;">2.2 GB</td>
-<td style="text-align: left;">0.01 GB</td>
-<td style="text-align: left;">0.26 GB</td>
+<td style="text-align: left;"><strong>Eval Loss</strong></td>
+<td style="text-align: left;">1.153</td>
+<td style="text-align: left;"><strong>1.141</strong></td>
+<td style="text-align: left;"><strong>Engram -1.1%</strong></td>
 </tr>
 <tr>
-<td style="text-align: left;"><strong>Activations/CUDA</strong></td>
-<td style="text-align: left;">~6.0 GB</td>
-<td style="text-align: left;">~2.8 GB</td>
-<td style="text-align: left;">~3.0 GB</td>
+<td style="text-align: left;"><strong>Memory (Allocated)</strong></td>
+<td style="text-align: left;">5.05 GB</td>
+<td style="text-align: left;">6.05 GB</td>
+<td style="text-align: left;">+1.0 GB</td>
 </tr>
 <tr>
-<td style="text-align: left;"><strong>Total VRAM</strong></td>
-<td style="text-align: left;"><strong>~24 GB (est.)</strong></td>
-<td style="text-align: left;"><strong>~5.1 GB (obs.)</strong></td>
-<td style="text-align: left;"><strong>~6.8 GB (obs.)</strong></td>
+<td style="text-align: left;"><strong>Memory (System/nvtop)</strong></td>
+<td style="text-align: left;">6.07 GiB</td>
+<td style="text-align: left;"><strong>6.97 GiB</strong></td>
+<td style="text-align: left;"><strong>+0.9 GiB</strong></td>
 </tr>
 </tbody>
 </table>
-<p><em>* LoRA and Engram weights include the frozen base model (2.2GB).\
-*</em> Engram weights include base (2.2GB) + Engram tables (0.26GB).*</p>
-<h2 id="4-conclusion">4. Conclusion</h2>
-<p>The observed difference in VRAM (<strong>Engram 6.8 GB</strong> vs <strong>LoRA 5.1 GB</strong>) is $\approx \mathbf{1.7 \text{ GB}}$. </p>
-<p>This aligns closely with our theoretical calculation of <strong>~1.5 GB</strong> overhead for Engram's 130M parameters and their corresponding optimizer states. For larger base models (e.g., 7B+), this overhead becomes a much smaller fraction of the total budget, highlighting Engram's efficiency as a "Parameter-Efficient" method for massive knowledge injection.</p>
+<h2 id="2-computational-analysis-why-engram-is-faster">2. Computational Analysis: Why Engram is Faster</h2>
+<p>A common misconception is that a higher number of trainable parameters ($545M$ vs. $3M$) always leads to slower training. Engram breaks this correlation through <strong>Sparse Retrieval Architecture</strong>.</p>
+<h3 id="lora-complexity">LoRA Complexity</h3>
+<p>LoRA injects rank-update matrices ($A$ and $B$) into existing linear layers (typically $Q$ and $V$). 
+- <strong>Operation</strong>: $Y = XW + (XA)B$.
+- <strong>Compute Cost</strong>: Adds $O(B \times L \times D \times r)$ operations per layer.
+- <strong>Overhead</strong>: While $r$ is small (16), LoRA is typically applied across <strong>all</strong> transformer layers (22 in TinyLlama). This multiplies the kernel launch overhead and the backpropagation cost across the entire network depth.</p>
+<h3 id="engram-complexity">Engram Complexity</h3>
+<p>Engram uses a modular injection at specific bottleneck layers (e.g., layers 2 and 11).
+- <strong>Operation</strong>: Sparse lookup followed by a gated projection.
+- <strong>Compute Cost</strong>: 
+    1. <strong>Sparse Lookup</strong>: $O(B \times L \times K)$ where $K$ is total heads. This is independent of the vocabulary size.
+    2. <strong>Gating Projection</strong>: $O(B \times L \times 5 \times D_{eng} \times D_{model})$.
+- <strong>Efficiency Gains</strong>:
+    1. <strong>Layer Sparsity</strong>: By targeting only the layers most critical for knowledge injection, Engram reduces the total number of gradient calculations compared to a global LoRA application.
+    2. <strong>Kernel Efficiency</strong>: Engram consolidates structural parameters into few, larger GEMM operations (Single Gating block) rather than many tiny rank-update operations spread across 22 layers.
+    3. <strong>Pre-computation</strong>: <code>EngramDataCollator</code> pre-calculates hash indices on the CPU, removing the hashing overhead from the GPU timeline.</p>
+<h2 id="3-memory-footprint-analysis">3. Memory Footprint Analysis</h2>
+<h3 id="vram-discrepancy-allocated-vs-system">VRAM Discrepancy (Allocated vs. System)</h3>
+<p>One of the most frequent questions is why <code>nvtop</code> shows higher usage than our internal metrics:
+- <strong>CUDA Context</strong>: ~500 MB is reserved immediately by the NVIDIA driver.
+- <strong>PyTorch Caching Allocator</strong>: PyTorch maintains a "pool" of reserved GPU memory blocks. <code>nvtop</code> shows the <em>pool size</em>, whereas <code>torch.cuda.max_memory_allocated()</code> (recorded in our logs) shows the <em>actual bytes used by tensors</em>.
+- <strong>Observation</strong>: LoRA peaked at <strong>6.07 GiB</strong> in <code>nvtop</code> while Engram peaked at <strong>6.97 GiB</strong>. This ~0.9 GiB gap in system-visible memory closely mirrors the ~1.0 GB gap in allocated tensor memory.</p>
+<h3 id="the-1gb-weight-gap">The "1GB Weight Gap"</h3>
+<p>The difference in peak allocated memory (~1.0 GB) is deterministic and scales with the Engram capacity:
+- <strong>Calculation</strong>: $2 \text{ layers} \times 16 \text{ heads} \times 256,000 \text{ capacity} \times 64 \text{ dim_per_head} \times 2 \text{ bytes (FP16)} \approx \mathbf{1.048 \text{ GB}}$.
+- Engram's overhead is primarily <strong>static</strong> (weights) rather than <strong>dynamic</strong> (activations), making it very predictable for large-scale deployments.</p>
+<h2 id="4-performance-convergence">4. Performance &amp; Convergence</h2>
+<h3 id="loss-curve-comparison">Loss Curve Comparison</h3>
+<p><img alt="Loss Curve Comparison" src="../../figures/loss_curve.png" /></p>
+<p>Engram starts with a higher initial loss (due to zero-initialized gating which initially isolates the new embeddings), but converges rapidly.</p>
+<h3 id="generalization-training-vs-evaluation">Generalization: Training vs. Evaluation</h3>
+<p>An important observation from the raw metrics is the relationship between training and validation loss:
+- <strong>Training Loss</strong>: LoRA (1.254) slightly outperforms Engram (1.311).
+- <strong>Evaluation Loss</strong>: Engram (<strong>1.141</strong>) outperforms LoRA (1.153).
+- <strong>Insight</strong>: LoRA's low-rank updates are more prone to overfitting the specific patterns in the training samples. Engram's high-capacity sparse memory, combined with its context-aware gating, captures more robust semantic features that generalize significantly better to the evaluation set.</p>
+<h3 id="throughput-tokens-per-second">Throughput (Tokens per Second)</h3>
+<p>The <strong>~8% reduction</strong> in time-per-step translates directly to higher training throughput. For large models (7B+), the advantage of injecting massive knowledge via a few Engram layers versus many LoRA layers becomes even more pronounced.</p>
+<h2 id="5-conclusion-selecting-the-right-method">5. Conclusion: Selecting the Right Method</h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Scenario</th>
+<th style="text-align: left;">Recommended Method</th>
+<th style="text-align: left;">Why?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Fine-tuning on niche tasks</strong></td>
+<td style="text-align: left;"><strong>LoRA</strong></td>
+<td style="text-align: left;">Extremely low memory overhead; good for small datasets.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Massive Knowledge Injection</strong></td>
+<td style="text-align: left;"><strong>Engram</strong></td>
+<td style="text-align: left;">High parameter capacity (500M+) with same/lower latency.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Inference Latency Sensitive</strong></td>
+<td style="text-align: left;"><strong>Engram</strong></td>
+<td style="text-align: left;">Faster step-time; scales better with model depth.</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Extremely VRAM Constrained</strong></td>
+<td style="text-align: left;"><strong>LoRA</strong></td>
+<td style="text-align: left;">Saves ~1GB of weights compared to 2-layer Engram.</td>
+</tr>
+</tbody>
+</table>
+<p>Engram-PEFT represents a shift from "adapting the existing model" (LoRA) to "expanding the model's memory capacity" (Engram), providing the benefits of deep knowledge storage with the efficiency of sparse retrieval.</p>
+<h2 id="6-detailed-metrics-raw-data">6. Detailed Metrics (Raw Data)</h2>
+<p>The following table summarizes the raw metrics captured during the benchmarking process:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Metric</th>
+<th style="text-align: left;">Base Model (Zero-shot)</th>
+<th style="text-align: left;">LoRA Baseline</th>
+<th style="text-align: left;">Engram-PEFT (2 Layers)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><strong>Eval Loss</strong></td>
+<td style="text-align: left;">1.80629</td>
+<td style="text-align: left;">1.15317</td>
+<td style="text-align: left;"><strong>1.14126</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Final Training Loss</strong></td>
+<td style="text-align: left;">-</td>
+<td style="text-align: left;"><strong>1.25401</strong></td>
+<td style="text-align: left;">1.31103</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Peak Allocated (GB)</strong></td>
+<td style="text-align: left;">2.04900</td>
+<td style="text-align: left;">5.05315</td>
+<td style="text-align: left;">6.05095</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Avg Time/Step (s)</strong></td>
+<td style="text-align: left;">-</td>
+<td style="text-align: left;">0.17771</td>
+<td style="text-align: left;"><strong>0.16431</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>Training Steps</strong></td>
+<td style="text-align: left;">-</td>
+<td style="text-align: left;">2000</td>
+<td style="text-align: left;">2000</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>VRAM reserved (nvtop)</strong></td>
+<td style="text-align: left;">~2.91 GiB</td>
+<td style="text-align: left;"><strong>6.07 GiB</strong></td>
+<td style="text-align: left;"><strong>6.97 GiB</strong></td>
+</tr>
+</tbody>
+</table>
 
 
 

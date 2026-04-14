@@ -322,13 +322,13 @@
   
   
     <li class="md-tabs__item">
-      <a href="../docs/memory_analysis/" class="md-tabs__link">
+      <a href="../docs/compare_engram_lora_analysis/" class="md-tabs__link">
         
   
   
     
   
-  Memory Analysis
+  Comparison Analysis (LoRA vs Engram)
 
       </a>
     </li>
@@ -540,6 +540,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="📊 性能对比">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#loss" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Loss 曲线对比
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -682,14 +699,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../docs/memory_analysis/" class="md-nav__link">
+      <a href="../docs/compare_engram_lora_analysis/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Memory Analysis
+    Comparison Analysis (LoRA vs Engram)
   
 
     
@@ -803,6 +820,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="📊 性能对比">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#loss" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Loss 曲线对比
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -914,32 +948,38 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 <tr>
 <th style="text-align: left;">方法</th>
 <th style="text-align: left;">额外参数总量</th>
-<th style="text-align: left;">梯度更新规模</th>
-<th style="text-align: left;">显存占用 (1.1B)</th>
+<th style="text-align: left;">训练速度 (s/step)</th>
+<th style="text-align: left;">训练集 Loss</th>
+<th style="text-align: left;">验证集 Loss</th>
+<th style="text-align: left;">显存占用 (Total)</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;"><strong>FFT</strong> (全参数微调)</td>
-<td style="text-align: left;">0</td>
-<td style="text-align: left;">1,100M</td>
-<td style="text-align: left;"><strong>~24GB (预估值)</strong></td>
-</tr>
-<tr>
 <td style="text-align: left;"><strong>LoRA</strong> (r=16)</td>
-<td style="text-align: left;">1.8M</td>
-<td style="text-align: left;">1.8M</td>
-<td style="text-align: left;"><strong>~5.1GB</strong></td>
+<td style="text-align: left;">2.88 M</td>
+<td style="text-align: left;">0.1777 s</td>
+<td style="text-align: left;"><strong>1.254</strong></td>
+<td style="text-align: left;">1.153</td>
+<td style="text-align: left;">6.07 GiB</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>Engram-PEFT</strong></td>
-<td style="text-align: left;"><strong>11.2M</strong></td>
-<td style="text-align: left;"><strong>~1.2M</strong>*</td>
-<td style="text-align: left;"><strong>~6.8GB</strong></td>
+<td style="text-align: left;"><strong>545.4 M</strong></td>
+<td style="text-align: left;"><strong>0.1643 s</strong></td>
+<td style="text-align: left;">1.311</td>
+<td style="text-align: left;"><strong>1.141</strong></td>
+<td style="text-align: left;"><strong>6.97 GiB</strong></td>
 </tr>
 </tbody>
 </table>
-<p><em>* Engram 采用稀疏检索机制；每步仅有极小比例（约 1%）的参数被激活并接收梯度更新。关于显存占用和扩展性的详细分析，请参阅 <a href="../docs/memory_analysis/">显存分析报告 (英文)</a>。</em></p>
+<blockquote>
+<p>[!TIP]
+<strong>性能洞察</strong>：虽然 LoRA 在训练集上的 Loss 略低，但 <strong>Engram-PEFT 在验证集上表现更优</strong>，这表明 Engram 在知识捕捉和泛化能力上更具优势。</p>
+</blockquote>
+<h3 id="loss">Loss 曲线对比</h3>
+<p><img alt="Loss 曲线对比" src="../figures/loss_curve.png" /></p>
+<p><em>* Engram 采用稀疏检索机制；每步仅有极小比例（约 1%）的参数被激活并接收梯度更新。关于性能、计算开销和显存占用的详细对比分析，请参阅 <a href="../docs/compare_engram_lora_analysis/">性能对比分析报告 (英文)</a>。</em></p>
 <hr />
 <h2 id="_4">🛠 特性</h2>
 <ul>

@@ -72,5 +72,5 @@ nav:
   - Tutorial: docs/tutorial.md
   - API Reference: docs/api.md
   - Paper Alignment: docs/paper_alignment.md
-  - Memory Analysis: docs/memory_analysis.md
+  - Comparison Analysis (LoRA vs Engram): docs/compare_engram_lora_analysis.md
   - Change Log: docs/fix_record.md

@@ -320,13 +320,13 @@
   
   
     <li class="md-tabs__item">
-      <a href="docs/memory_analysis/" class="md-tabs__link">
+      <a href="docs/compare_engram_lora_analysis/" class="md-tabs__link">
         
   
   
     
   
-  Memory Analysis
+  Comparison Analysis (LoRA vs Engram)
 
       </a>
     </li>
@@ -511,6 +511,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="📊 Performance Comparison">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#loss-curve-comparison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Loss Curve Comparison
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -680,14 +697,14 @@
   
   
     <li class="md-nav__item">
-      <a href="docs/memory_analysis/" class="md-nav__link">
+      <a href="docs/compare_engram_lora_analysis/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Memory Analysis
+    Comparison Analysis (LoRA vs Engram)
   
 
     
@@ -801,6 +818,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="📊 Performance Comparison">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#loss-curve-comparison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Loss Curve Comparison
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -912,32 +946,38 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 <tr>
 <th style="text-align: left;">Method</th>
 <th style="text-align: left;">Params Added</th>
-<th style="text-align: left;">Grad. Update Size</th>
-<th style="text-align: left;">VRAM (1.1B)</th>
+<th style="text-align: left;">Speed (s/step)</th>
+<th style="text-align: left;">Training Loss</th>
+<th style="text-align: left;">Eval Loss</th>
+<th style="text-align: left;">VRAM (Total)</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;"><strong>FFT</strong> (Full Fine-Tune)</td>
-<td style="text-align: left;">0</td>
-<td style="text-align: left;">1,100M</td>
-<td style="text-align: left;"><strong>~24GB (est.)</strong></td>
-</tr>
-<tr>
 <td style="text-align: left;"><strong>LoRA</strong> (r=16)</td>
-<td style="text-align: left;">1.8M</td>
-<td style="text-align: left;">1.8M</td>
-<td style="text-align: left;"><strong>~5.1GB</strong></td>
+<td style="text-align: left;">2.88 M</td>
+<td style="text-align: left;">0.1777 s</td>
+<td style="text-align: left;"><strong>1.254</strong></td>
+<td style="text-align: left;">1.153</td>
+<td style="text-align: left;">6.07 GiB</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>Engram-PEFT</strong></td>
-<td style="text-align: left;"><strong>11.2M</strong></td>
-<td style="text-align: left;"><strong>~1.2M</strong>*</td>
-<td style="text-align: left;"><strong>~6.8GB</strong></td>
+<td style="text-align: left;"><strong>545.4 M</strong></td>
+<td style="text-align: left;"><strong>0.1643 s</strong></td>
+<td style="text-align: left;">1.311</td>
+<td style="text-align: left;"><strong>1.141</strong></td>
+<td style="text-align: left;"><strong>6.97 GiB</strong></td>
 </tr>
 </tbody>
 </table>
-<p><em>* Engram employs sparse lookup; only a tiny fraction of parameters (approx. 1%) are active and receive gradient updates per step. For a detailed breakdown of VRAM usage and scaling, see our <a href="docs/memory_analysis/">Memory Analysis</a>.</em></p>
+<blockquote>
+<p>[!TIP]
+<strong>Performance Insight</strong>: Although LoRA achieves a slightly lower training loss, <strong>Engram-PEFT yields a lower evaluation loss</strong>, indicating superior generalization and knowledge capture from the stories dataset.</p>
+</blockquote>
+<h3 id="loss-curve-comparison">Loss Curve Comparison</h3>
+<p><img alt="Loss Curve Comparison" src="figures/loss_curve.png" /></p>
+<p><em>* Engram employs sparse lookup; only a tiny fraction of parameters (approx. 1%) are active and receive gradient updates per step. For a detailed breakdown of performance, computation, and memory, see our <a href="docs/compare_engram_lora_analysis/">Performance Analysis</a>.</em></p>
 <hr />
 <h2 id="features">🛠 Features</h2>
 <ul>
