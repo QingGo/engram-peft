@@ -3,7 +3,7 @@ from typing import Any, Dict, List, cast
 import pytest
 import torch
 import torch.nn as nn
-from torch.optim import Adam # type: ignore
+from torch.optim import Adam  # type: ignore
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel
 
 

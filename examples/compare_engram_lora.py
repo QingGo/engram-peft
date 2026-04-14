@@ -209,9 +209,9 @@ def train_engram_model(
         torch.cuda.reset_peak_memory_stats()
 
     config = EngramConfig(
-        target_layers=[2, 11, 20],
+        target_layers=[2, 11],
         engram_vocab_size_per_ngram=[256000, 256000],
-        hidden_size=2048,
+        hidden_size=base_model.config.hidden_size,
         embedding_dim=1024,
         enable_tokenizer_compression=True,
         tokenizer_name_or_path=MODEL_NAME,
@@ -443,12 +443,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    
+
     # Setup logging to file
     log_path = os.path.join(OUTPUT_DIR, "training.log")
     sys.stdout = Logger(log_path)  # type: ignore
     sys.stderr = sys.stdout  # Redirect stderr as well
-    
+
     print(f"Logging started. Saving to {log_path}")
 
     print(f"Loading tokenizer & base model: {MODEL_NAME}")

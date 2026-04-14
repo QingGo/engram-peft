@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from transformers import Trainer
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Union
 
 
 class EngramTrainer(Trainer):
@@ -16,10 +16,9 @@ class EngramTrainer(Trainer):
     def _compute_total_norm(self, model: nn.Module) -> Optional[torch.Tensor]:
         """Computes the total gradient norm across dense and sparse parameters."""
         grads = []
-        for p in model.parameters():
+        for _, p in model.named_parameters():
             if p.grad is not None:
                 if p.grad.is_sparse:
-                    # coalesce() ensures indices are unique; values() is a dense view
                     grads.append(p.grad.coalesce().values())
                 else:
                     grads.append(p.grad)
@@ -31,6 +30,20 @@ class EngramTrainer(Trainer):
         device = grads[0].device
         norms = [torch.norm(g.detach(), 2).to(device) for g in grads]
         return torch.norm(torch.stack(norms), 2)
+
+    def training_step(
+        self,
+        model: nn.Module,
+        inputs: Dict[str, Union[torch.Tensor, Any]],
+        num_items_in_batch: Optional[int] = None,
+    ) -> torch.Tensor:
+        """Standard training step handles both old and new Transformers Trainer signatures."""
+        try:
+            return super().training_step(
+                model, inputs, num_items_in_batch=num_items_in_batch
+            )
+        except TypeError:
+            return super().training_step(model, inputs)
 
     def _clip_grad_norm(
         self, model: nn.Module, max_norm: Optional[float] = None
@@ -59,9 +72,15 @@ class EngramTrainer(Trainer):
 
         return total_norm
 
-    def _get_grad_norm(self, model: nn.Module, grad_norm: Optional[float] = None) -> Optional[torch.Tensor]:
+    def _get_grad_norm(
+        self, model: nn.Module, grad_norm: Optional[float] = None
+    ) -> Optional[torch.Tensor]:
         """Override _get_grad_norm to avoid SparseCPU NotImplementedError during logging."""
         if grad_norm is not None:
-            return torch.tensor(grad_norm) if not isinstance(grad_norm, torch.Tensor) else grad_norm
-        
+            return (
+                torch.tensor(grad_norm)
+                if not isinstance(grad_norm, torch.Tensor)
+                else grad_norm
+            )
+
         return self._compute_total_norm(model)

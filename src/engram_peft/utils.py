@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union, overload
 
 import torch
+import torch.nn as nn
 from torch.optim.adam import Adam
 from torch.optim.optimizer import Optimizer
 from torch.optim.sparse_adam import SparseAdam
@@ -21,9 +22,8 @@ class MixedOptimizer(Optimizer):
         self.optimizers = optimizers
         # Combine parameter groups for transparency and compatibility
         param_groups = []
-        for opt in optimizers:
+        for i, opt in enumerate(optimizers):
             param_groups.extend(opt.param_groups)
-
         # We call super().__init__ to ensure the base Optimizer class
         # is correctly initialized (state, etc.)
         super().__init__(param_groups, {})
@@ -39,14 +39,37 @@ class MixedOptimizer(Optimizer):
     def step(self, closure: Callable[[], float]) -> float: ...
 
     def step(self, closure: Optional[Callable[[], float]] = None) -> Optional[float]:
-        """Performs a single optimization step."""
+        """Performs a single optimization step, ensuring hyperparams are synced."""
         loss = None
         if closure is not None:
             with torch.enable_grad():
                 loss = closure()
 
+        # IMPORTANT: Sync hyperparams from MixedOptimizer.param_groups to sub-optimizers.
+        # This is CRITICAL when using Accelerate, which might deep-copy param_groups.
+        current_idx = 0
         for opt in self.optimizers:
-            opt.step()
+            for sub_pg in opt.param_groups:
+                parent_pg = self.param_groups[current_idx]
+                # Sync all key hyperparameters
+                for key in ["lr", "weight_decay", "betas", "eps"]:
+                    if key in parent_pg:
+                        sub_pg[key] = parent_pg[key]
+                current_idx += 1
+
+        for i, opt in enumerate(self.optimizers):
+            # Check if gradients exist in this sub-optimizer
+            has_grads = False
+            for pg in opt.param_groups:
+                for p in pg["params"]:
+                    if p.grad is not None:
+                        has_grads = True
+                        break
+                if has_grads:
+                    break
+
+            if has_grads:
+                opt.step()
 
         return loss
 

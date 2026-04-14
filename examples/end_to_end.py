@@ -88,9 +88,9 @@ def train_engram(
         torch.cuda.reset_peak_memory_stats()
 
     config = EngramConfig(
-        target_layers=[2, 11, 20],
+        target_layers=[2, 11],
         engram_vocab_size_per_ngram=[256000, 256000],
-        hidden_size=2048,
+        hidden_size=base_model.config.hidden_size,
         embedding_dim=1024,
         enable_tokenizer_compression=True,
         tokenizer_name_or_path=MODEL_NAME,
