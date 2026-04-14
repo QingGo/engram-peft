@@ -951,7 +951,7 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 <th style="text-align: left;">训练速度 (s/step)</th>
 <th style="text-align: left;">训练集 Loss</th>
 <th style="text-align: left;">验证集 Loss</th>
-<th style="text-align: left;">显存占用 (nvtop)</th>
+<th style="text-align: left;">峰值显存 (JSON)</th>
 </tr>
 </thead>
 <tbody>
@@ -959,23 +959,31 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 <td style="text-align: left;"><strong>LoRA</strong> (r=16)</td>
 <td style="text-align: left;">~2.25 M</td>
 <td style="text-align: left;"><strong>0.2738 s</strong></td>
-<td style="text-align: left;"><strong>1.231</strong></td>
-<td style="text-align: left;"><strong>0.989</strong></td>
-<td style="text-align: left;">9.35 GiB</td>
+<td style="text-align: left;">1.231</td>
+<td style="text-align: left;">0.9890</td>
+<td style="text-align: left;">8.07 GB</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>Engram-PEFT</strong></td>
 <td style="text-align: left;"><strong>545.4 M</strong></td>
 <td style="text-align: left;">0.2961 s</td>
 <td style="text-align: left;">1.263</td>
-<td style="text-align: left;">1.017</td>
-<td style="text-align: left;">10.82 GiB</td>
+<td style="text-align: left;">1.0165</td>
+<td style="text-align: left;">9.38 GB</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>LoRA+Engram</strong></td>
+<td style="text-align: left;">~547.7 M</td>
+<td style="text-align: left;">0.3360 s</td>
+<td style="text-align: left;"><strong>1.214</strong></td>
+<td style="text-align: left;"><strong>0.9656</strong></td>
+<td style="text-align: left;">10.33 GB</td>
 </tr>
 </tbody>
 </table>
 <blockquote>
 <p>[!TIP]
-<strong>性能洞察</strong>：在 RTX 4090D 上的最新 3000 步基准测试中，LoRA 展现了稍好的 Loss 和速度。然而，Engram-PEFT 提供了 <strong>240 倍的参数容量</strong> (545M) 用于知识存储，且仅带来了约 8% 的延迟增加。这使其成为需要大规模事实记忆 recall 任务的理想选择。</p>
+<strong>性能洞察</strong>：在最新的基准测试（Test 8 &amp; 9, TinyLlama-1.1B, 3000 步）中，<strong>LoRA+Engram</strong> 实现了最佳的收敛效果（最低验证集 Loss），相比独立 LoRA 提升了约 2.3%。Engram-PEFT 提供了 <strong>240 倍的参数容量</strong> (545M) 用于知识存储，且延迟增加极低。推荐使用 LoRA+Engram 以同时获得结构微调与高容量稀疏记忆。</p>
 </blockquote>
 <h3 id="loss">Loss 曲线对比</h3>
 <p><img alt="Loss 曲线对比" src="../figures/loss_curve.png" /></p>
@@ -989,8 +997,10 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 <li><strong>跨模型权重迁移</strong>：独有特性（详见 <code>weight_transfer.py</code>），支持通过语料库的字符级对齐，在不同模型（如 Llama 到 Qwen）之间迁移 Engram 权重——实现知识的“回收再利用”。</li>
 <li><strong>零侵入性</strong>：通过 forward hook 注入；无需修改基础模型架构源码。</li>
 <li><strong>类 PEFT API</strong>：提供 <code>print_trainable_parameters()</code> 和 <code>save_pretrained()</code> 等熟悉的方法。</li>
+<li><strong>联合训练 (LoRA+Engram)</strong>: 支持 Adapter 叠加。可在单个模型中同时注入 LoRA 进行结构微调和 Engram 进行稀疏知识检索。</li>
 <li><strong>命名适配器 (Named Adapters)</strong>：完全兼容 PEFT 风格的 Adapter 管理（add/set/unload），支持多领域知识包并行管理。</li>
 <li><strong>自动化训练流程</strong>：内置 <code>EngramTrainer</code>，自动处理稀疏 Adam 优化、梯度管理与学习率倍率同步。</li>
+<li><strong>灵活的层发现 (Flexible Layer Discovery)</strong>：采用递归逻辑定位 Transformer 层，无视 PEFT 包装嵌套深度。</li>
 </ul>
 <hr />
 <h2 id="_5">📖 文档</h2>

@@ -1039,12 +1039,13 @@
 <hr />
 <h2 id="model-wrapping">Model Wrapping</h2>
 <h3 id="get_engram_model"><code>get_engram_model</code></h3>
-<p><code>engram_peft.model.get_engram_model(model, config, tokenizer=None)</code></p>
+<p><code>engram_peft.model.get_engram_model(model, config, tokenizer=None, wrap_peft=False)</code></p>
 <p>Injects Engram layers into a base Transformer model and freezes all base parameters.</p>
 <p><strong>Args:</strong>
 - <code>model</code> (<code>PreTrainedModel</code>): The Hugging Face model to wrap (e.g., Llama, Qwen).
 - <code>config</code> (<code>EngramConfig</code>): Engram configuration.
-- <code>tokenizer</code> (<code>Optional[PreTrainedTokenizer]</code>): Tokenizer for vocabulary/compression.</p>
+- <code>tokenizer</code> (<code>Optional[PreTrainedTokenizer]</code>): Tokenizer for vocabulary/compression.
+- <code>wrap_peft</code> (<code>bool</code>, default: <code>False</code>): If <code>True</code>, preserves existing trainable parameters (e.g., from a previously applied LoRA adapter) while freezing the rest of the base model. Essential for stacking multiple adapters.</p>
 <p><strong>Returns:</strong>
 - <code>EngramModel</code>: The wrapped model with injected forward hooks.</p>
 <h3 id="engrammodel"><code>EngramModel</code></h3>
