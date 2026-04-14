@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
 from transformers import Trainer
-from typing import Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
+
+if TYPE_CHECKING:
+    from torch import Tensor
 
 
 class EngramTrainer(Trainer):
@@ -29,13 +32,13 @@ class EngramTrainer(Trainer):
         # Compute the global L2 norm
         device = grads[0].device
         norms = [torch.norm(g.detach(), 2).to(device) for g in grads]
-        return torch.norm(torch.stack(norms), 2)
+        return cast(torch.Tensor, torch.norm(torch.stack(norms), 2))
 
     def training_step(
         self,
         model: nn.Module,
         inputs: Dict[str, Union[torch.Tensor, Any]],
-        num_items_in_batch: Optional[int] = None,
+        num_items_in_batch: Tensor | int | None = None,
     ) -> torch.Tensor:
         """Standard training step handles both old and new Transformers Trainer signatures."""
         try:

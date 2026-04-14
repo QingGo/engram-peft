@@ -64,12 +64,12 @@ class Logger:
         self.terminal = sys.stdout
         self.log = open(filename, "w", encoding="utf-8")
 
-    def write(self, message: str):
+    def write(self, message: str) -> None:
         self.terminal.write(message)
         self.log.write(message)
         self.log.flush()
 
-    def flush(self):
+    def flush(self) -> None:
         self.terminal.flush()
         self.log.flush()
 
