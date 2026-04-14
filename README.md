@@ -55,13 +55,14 @@ model.print_trainable_parameters()
 
 ## 📊 Performance Comparison
 
-| Method | Params Added | Speed (s/step) | Training Loss | Eval Loss | VRAM (nvtop) |
+| Method | Params Added | Speed (s/step) | Training Loss | Eval Loss | Peak Memory (JSON) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **LoRA** (r=16) | ~2.25 M | **0.2738 s** | **1.231** | **0.989** | 9.35 GiB |
-| **Engram-PEFT** | **545.4 M** | 0.2961 s | 1.263 | 1.017 | 10.82 GiB |
+| **LoRA** (r=16) | ~2.25 M | **0.2738 s** | 1.231 | 0.9890 | 8.07 GB |
+| **Engram-PEFT** | **545.4 M** | 0.2961 s | 1.263 | 1.0165 | 9.38 GB |
+| **LoRA+Engram** | ~547.7 M | 0.3360 s | **1.214** | **0.9656** | 10.33 GB |
 
 > [!TIP]
-> **Performance Insight**: In our latest 3000-step benchmark on RTX 4090D, LoRA achieved slightly better loss and speed. However, Engram-PEFT provides **240x more parameter capacity** (545M) for knowledge storage with only a ~8% latency penalty, making it ideal for tasks requiring massive factual recall.
+> **Performance Insight**: In our latest benchmark (Test 8 & 9, TinyLlama-1.1B, 3000 steps), **LoRA+Engram** achieved the best convergence (lowest eval loss), outperforming standalone LoRA by ~2.3%. Engram-PEFT provides **240x more parameter capacity** (545M) for knowledge storage with minimal latency penalty. Use LoRA+Engram to leverage both structural adaptation and high-capacity sparse memory.
 
 ### Loss Curve Comparison
 ![Loss Curve Comparison](figures/loss_curve.png)
@@ -78,8 +79,10 @@ model.print_trainable_parameters()
 - **Cross-Model Weight Migration**: A unique feature (see `weight_transfer.py`) that allows migrating Engram weights between different models (e.g., Llama to Qwen) using character-level alignment on a corpus—effectively "recycling" learned knowledge.
 - **Zero-Invasive**: Injects via forward hooks; no modification to your base model architecture required.
 - **Peft-like API**: Familiar methods like `print_trainable_parameters()` and `save_pretrained()`.
+- **Combined Training (LoRA+Engram)**: Support for stacking adapters. Injects LoRA for structural fine-tuning and Engram for sparse knowledge retrieval in a single model.
 - **Named Adapters**: Industry-standard named adapter management (add/set/unload) for modular knowledge packs.
 - **Automated Training**: Native `EngramTrainer` with built-in sparse Adam support and automatic sync of optimizer hyperparameters.
+- **Flexible Layer Discovery**: Recursive logic to find transformer layers regardless of PEFT wrapper nesting.
 
 ---
 

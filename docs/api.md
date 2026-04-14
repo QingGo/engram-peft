@@ -43,7 +43,7 @@ config = EngramConfig(
 ## Model Wrapping
 
 ### `get_engram_model`
-`engram_peft.model.get_engram_model(model, config, tokenizer=None)`
+`engram_peft.model.get_engram_model(model, config, tokenizer=None, wrap_peft=False)`
 
 Injects Engram layers into a base Transformer model and freezes all base parameters.
 
@@ -51,6 +51,7 @@ Injects Engram layers into a base Transformer model and freezes all base paramet
 - `model` (`PreTrainedModel`): The Hugging Face model to wrap (e.g., Llama, Qwen).
 - `config` (`EngramConfig`): Engram configuration.
 - `tokenizer` (`Optional[PreTrainedTokenizer]`): Tokenizer for vocabulary/compression.
+- `wrap_peft` (`bool`, default: `False`): If `True`, preserves existing trainable parameters (e.g., from a previously applied LoRA adapter) while freezing the rest of the base model. Essential for stacking multiple adapters.
 
 **Returns:**
 - `EngramModel`: The wrapped model with injected forward hooks.

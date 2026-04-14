@@ -505,7 +505,7 @@ wheels = [
 
 [[package]]
 name = "engram-peft"
-version = "1.0.3"
+version = "1.0.4"
 source = { editable = "." }
 dependencies = [
     { name = "accelerate" },

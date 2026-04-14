@@ -8,7 +8,7 @@ This script demonstrates how Engram compares against standard PEFT methods (like
 4. Lifecycle: Demonstrates full training and dynamic management.
 
 Usage:
-    uv run python examples/compare_engram_lora.py --max_steps 3000 --batch_size 16 --grad_accum 2 --num_workers 4 --subset 100000
+    uv run python examples/compare_engram_lora.py --max_steps 3000 --batch_size 16 --grad_accum 2 --num_workers 4 --subset 100000 --methods lora engram lora+engram
 """
 
 import argparse
@@ -48,6 +48,7 @@ MODEL_NAME = "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T"
 OUTPUT_DIR = "outputs/engram_test"
 ENGRAM_WEIGHTS_DIR = os.path.join(OUTPUT_DIR, "engram_weights")
 LORA_WEIGHTS_DIR = os.path.join(OUTPUT_DIR, "lora_weights")
+LORA_ENGRAM_DIR = os.path.join(OUTPUT_DIR, "lora_engram_weights")
 SEED = 42
 
 set_seed(SEED)
@@ -346,6 +347,124 @@ def train_engram_model(
     }
 
 
+def train_lora_engram(
+    base_model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizerBase,
+    train_dataset: Any,
+    eval_dataset: Any,
+    args: argparse.Namespace,
+) -> Dict[str, Any]:
+    print(f"\n>>> Phase 2+3: Training LoRA + Engram on {MODEL_NAME}")
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+
+    # 1. Apply LoRA
+    peft_config = LoraConfig(
+        task_type=TaskType.CAUSAL_LM,
+        r=16,
+        lora_alpha=32,
+        lora_dropout=0.05,
+        target_modules=["q_proj", "v_proj"],
+    )
+    model = get_peft_model(base_model, peft_config)
+
+    # 2. Apply Engram
+    engram_config = EngramConfig(
+        target_layers=[2, 11],
+        engram_vocab_size_per_ngram=[256000, 256000],
+        hidden_size=base_model.config.hidden_size,
+        embedding_dim=1024,
+        enable_tokenizer_compression=True,
+        tokenizer_name_or_path=MODEL_NAME,
+        pad_id=tokenizer.pad_token_id if isinstance(tokenizer.pad_token_id, int) else 0,
+        learning_rate_multiplier=3.0,
+    )
+    model = get_engram_model(cast(PreTrainedModel, model), engram_config, tokenizer, wrap_peft=True)
+    model.print_trainable_parameters()
+
+    warmup_steps = int(args.max_steps * 0.03)
+    num_decay_steps = int(args.max_steps * 0.77)
+    scheduler_kwargs = {
+        "num_decay_steps": num_decay_steps,
+        "min_lr_ratio": 1e-6 / 3e-4,
+    }
+
+    collator = EngramDataCollator(tokenizer=tokenizer, config=engram_config)
+    training_args = TrainingArguments(
+        output_dir=os.path.join(OUTPUT_DIR, "lora_engram_outputs"),
+        per_device_train_batch_size=args.batch_size,
+        gradient_accumulation_steps=args.grad_accum,
+        max_steps=args.max_steps,
+        learning_rate=3e-4,
+        lr_scheduler_type="warmup_stable_decay",
+        lr_scheduler_kwargs=scheduler_kwargs,
+        warmup_steps=warmup_steps,
+        logging_steps=20,
+        save_strategy="no",
+        bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
+        fp16=not (torch.cuda.is_available() and torch.cuda.is_bf16_supported())
+        and torch.cuda.is_available(),
+        report_to="none",
+        remove_unused_columns=True,
+        dataloader_num_workers=args.num_workers,
+        dataloader_pin_memory=True,
+        eval_strategy="steps",
+        eval_steps=100,
+    )
+
+    trainer = EngramTrainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        data_collator=collator,
+    )
+
+    print("Starting LoRA + Engram training...")
+    train_result = trainer.train()
+
+    print("Evaluating Combined Model...")
+    eval_results = trainer.evaluate()
+    eval_loss = cast(float, eval_results.get("eval_loss", 0.0))
+
+    avg_time_per_step = train_result.metrics["train_runtime"] / train_result.global_step
+    print(f"Combined Avg Time Per Step: {avg_time_per_step:.4f}s")
+
+    peak_memory = (
+        torch.cuda.max_memory_allocated() / (1024**3)
+        if torch.cuda.is_available()
+        else 0.0
+    )
+    print(f"Combined Peak Memory: {peak_memory:.2f} GB")
+
+    log_history = []
+    for log in trainer.state.log_history:
+        if "step" in log:
+            entry = {"step": log["step"]}
+            if "loss" in log:
+                entry["loss"] = log["loss"]
+            if "eval_loss" in log:
+                entry["eval_loss"] = log["eval_loss"]
+            if len(entry) > 1:
+                log_history.append(entry)
+
+    print(f"Saving Combined weights to {LORA_ENGRAM_DIR}")
+    model.save_pretrained(LORA_ENGRAM_DIR)
+    # Also save LoRA part
+    model.base_model.save_pretrained(LORA_ENGRAM_DIR)
+
+    # Unload both
+    model.unload_engram()
+    model = model.base_model.unload()
+
+    return {
+        "log_history": log_history,
+        "peak_memory_gb": peak_memory,
+        "avg_time_per_step": avg_time_per_step,
+        "eval_loss": eval_loss,
+    }
+
+
 def save_and_plot_results(results: Dict[str, Any]) -> None:
     print(f"\n>>> Saving outputs and generating plot in {OUTPUT_DIR}")
 
@@ -358,114 +477,113 @@ def save_and_plot_results(results: Dict[str, Any]) -> None:
     # Print Summary comparison
     print("\n" + "=" * 20 + " Performance Summary " + "=" * 20)
     print(
-        f"{'Method':<12} | {'Peak Mem (GB)':<15} | {'Avg Time/Step (s)':<18} | {'Eval Loss':<10}"
+        f"{'Method':<15} | {'Peak Mem (GB)':<15} | {'Avg Time/Step (s)':<18} | {'Eval Loss':<10}"
     )
     print("-" * 65)
 
     base = results.get("base_model", {})
     print(
-        f"{'Base':<12} | {base.get('peak_memory_gb', 0):<15.2f} | {'N/A':<18} | {base.get('eval_loss', 0):.4f}"
+        f"{'Base':<15} | {base.get('peak_memory_gb', 0):<15.2f} | {'N/A':<18} | {base.get('eval_loss', 0):.4f}"
     )
 
-    lora = results.get("lora", {})
-    print(
-        f"{'LoRA':<12} | {lora.get('peak_memory_gb', 0):<15.2f} | {lora.get('avg_time_per_step', 0):<18.4f} | {lora.get('eval_loss', 0):.4f}"
-    )
-
-    engram = results.get("engram", {})
-    print(
-        f"{'Engram':<12} | {engram.get('peak_memory_gb', 0):<15.2f} | {engram.get('avg_time_per_step', 0):<18.4f} | {engram.get('eval_loss', 0):.4f}"
-    )
-    print("=" * 61 + "\n")
+    for method in ["lora", "engram", "lora+engram"]:
+        if method in results:
+            data = results[method]
+            print(
+                f"{method.capitalize():<15} | {data.get('peak_memory_gb', 0):<15.2f} | {data.get('avg_time_per_step', 0):<18.4f} | {data.get('eval_loss', 0):.4f}"
+            )
+    print("=" * 65 + "\n")
 
     # Set premium Seaborn theme
     sns.set_theme(style="whitegrid", context="talk")
     plt.figure(figsize=(12, 7))
 
+    import pandas as pd
+
     # Prepare data for Seaborn
     plot_data = []
-    intermediate_eval_data = []
+    total_eval_df = []
 
-    # Engram Logs
-    engram_logs = results.get("engram", {}).get("log_history", [])
-    for item in engram_logs:
-        if "loss" in item:
-            plot_data.append(
-                {"Step": item["step"], "Loss": item["loss"], "Method": "Engram (Train)"}
-            )
-        if "eval_loss" in item:
-            intermediate_eval_data.append(
+    palette_train = {
+        "engram": "seagreen",
+        "lora": "royalblue",
+        "lora+engram": "darkviolet",
+    }
+    palette_eval = {
+        "engram": "springgreen",
+        "lora": "skyblue",
+        "lora+engram": "plum",
+        "engram_final": "darkgreen",
+        "lora_final": "midnightblue",
+        "lora+engram_final": "indigo",
+    }
+
+    for method, data in results.items():
+        if method == "base_model":
+            continue
+
+        method_logs = data.get("log_history", [])
+        for item in method_logs:
+            if "loss" in item:
+                plot_data.append(
+                    {
+                        "Step": item["step"],
+                        "Loss": item["loss"],
+                        "Method": f"{method} (Train)",
+                    }
+                )
+            if "eval_loss" in item:
+                total_eval_df.append(
+                    {
+                        "Step": item["step"],
+                        "Loss": item["eval_loss"],
+                        "Method": f"{method} (Eval)",
+                    }
+                )
+
+        # Add final eval point
+        if "eval_loss" in data:
+            max_step = max([item["step"] for item in method_logs]) if method_logs else 0
+            total_eval_df.append(
                 {
-                    "Step": item["step"],
-                    "Loss": item["eval_loss"],
-                    "Method": "Engram (Eval)",
+                    "Step": max_step,
+                    "Loss": data["eval_loss"],
+                    "Method": f"{method} (Final Eval)",
                 }
             )
-
-    # LoRA Logs
-    lora_logs = results.get("lora", {}).get("log_history", [])
-    for item in lora_logs:
-        if "loss" in item:
-            plot_data.append(
-                {"Step": item["step"], "Loss": item["loss"], "Method": "LoRA (Train)"}
-            )
-        if "eval_loss" in item:
-            intermediate_eval_data.append(
-                {
-                    "Step": item["step"],
-                    "Loss": item["eval_loss"],
-                    "Method": "LoRA (Eval)",
-                }
-            )
-
-    # Create the line plot
-    import pandas as pd
 
     ax = plt.gca()
 
     if plot_data:
         df = pd.DataFrame(plot_data)
+        # Create mapping for lineplot palette
+        line_palette = {
+            f"{m} (Train)": palette_train.get(m, "gray")
+            for m in results.keys()
+            if m != "base_model"
+        }
         sns.lineplot(
             data=df,
             x="Step",
             y="Loss",
             hue="Method",
             linewidth=2.5,
-            palette={"Engram (Train)": "seagreen", "LoRA (Train)": "royalblue"},
+            palette=line_palette,
             ax=ax,
         )
 
-    # Plot Intermediate and Final Evaluation Points
-    eval_points = []
-    # Add final eval points
-    if "engram" in results and "eval_loss" in results["engram"]:
-        max_step = max([item["step"] for item in engram_logs]) if engram_logs else 0
-        eval_points.append(
-            {
-                "Step": max_step,
-                "Loss": results["engram"]["eval_loss"],
-                "Method": "Engram (Final Eval)",
-            }
-        )
-    if "lora" in results and "eval_loss" in results["lora"]:
-        max_step = max([item["step"] for item in lora_logs]) if lora_logs else 0
-        eval_points.append(
-            {
-                "Step": max_step,
-                "Loss": results["lora"]["eval_loss"],
-                "Method": "LoRA (Final Eval)",
-            }
-        )
-
-    # Combine intermediate and final evals
-    total_eval_df = []
-    if intermediate_eval_data:
-        total_eval_df.extend(intermediate_eval_data)
-    if eval_points:
-        total_eval_df.extend(eval_points)
-
     if total_eval_df:
         eval_df = pd.DataFrame(total_eval_df)
+        # Create mapping for scatter palette
+        scatter_palette = {}
+        for m in results.keys():
+            if m == "base_model":
+                continue
+            scatter_palette[f"{m} (Eval)"] = palette_eval.get(m, "gray")
+            scatter_palette[f"{m} (Final Eval)"] = palette_eval.get(
+                f"{m}_final", "black"
+            )
+
         sns.scatterplot(
             data=eval_df,
             x="Step",
@@ -473,12 +591,7 @@ def save_and_plot_results(results: Dict[str, Any]) -> None:
             hue="Method",
             s=120,
             marker="o",
-            palette={
-                "Engram (Eval)": "springgreen",
-                "LoRA (Eval)": "skyblue",
-                "Engram (Final Eval)": "darkgreen",
-                "LoRA (Final Eval)": "midnightblue",
-            },
+            palette=scatter_palette,
             legend=True,
             ax=ax,
             edgecolor="white",
@@ -510,7 +623,9 @@ def save_and_plot_results(results: Dict[str, Any]) -> None:
 
 
 def inference_demo(
-    base_model: PreTrainedModel, tokenizer: PreTrainedTokenizerBase
+    base_model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizerBase,
+    results: Dict[str, Any],
 ) -> None:
     print(f"\n>>> Phase 4: Inference & Gating Visualization")
 
@@ -529,60 +644,64 @@ def inference_demo(
     )
 
     # 2. LoRA Inference
-    print(f"\nLoading trained LoRA from {LORA_WEIGHTS_DIR}")
-    lora_model = PeftModel.from_pretrained(base_model, LORA_WEIGHTS_DIR)
-    print("Generating with LoRA ENABLED...")
-    output_lora = lora_model.generate(
-        **inputs, max_new_tokens=40, max_length=None, do_sample=False
-    )
-    print(
-        f"Output (LoRA):   {tokenizer.decode(output_lora[0], skip_special_tokens=True)}"
-    )
-    lora_model = lora_model.unload()  # Back to base
+    if "lora" in results:
+        print(f"\nLoading trained LoRA from {LORA_WEIGHTS_DIR}")
+        lora_model = PeftModel.from_pretrained(base_model, LORA_WEIGHTS_DIR)
+        print("Generating with LoRA ENABLED...")
+        output_lora = lora_model.generate(
+            **inputs, max_new_tokens=40, max_length=None, do_sample=False
+        )
+        print(
+            f"Output (LoRA):   {tokenizer.decode(output_lora[0], skip_special_tokens=True)}"
+        )
+        lora_model = lora_model.unload()  # Back to base
 
     # 3. Engram Inference
-    print(f"\nLoading trained Engram from {ENGRAM_WEIGHTS_DIR}")
-    model = EngramModel.from_pretrained(base_model, ENGRAM_WEIGHTS_DIR)
+    if "engram" in results:
+        print(f"\nLoading trained Engram from {ENGRAM_WEIGHTS_DIR}")
+        model = EngramModel.from_pretrained(base_model, ENGRAM_WEIGHTS_DIR)
 
-    # Generate with Engram enabled
-    print("Generating with Engram ENABLED...")
-    output_engram = model.generate(
-        **inputs, max_new_tokens=40, max_length=None, do_sample=False
-    )
-    print(
-        f"Output (Engram): {tokenizer.decode(output_engram[0], skip_special_tokens=True)}"
-    )
+        # Generate with Engram enabled
+        print("Generating with Engram ENABLED...")
+        output_engram = model.generate(
+            **inputs, max_new_tokens=40, max_length=None, do_sample=False
+        )
+        print(
+            f"Output (Engram): {tokenizer.decode(output_engram[0], skip_special_tokens=True)}"
+        )
 
-    # Visualization: Print gates for the target layers
-    print("\nCapture Gating Activation (Mean per branch):")
-    for layer_id in model.config.target_layers:
-        engram_layer = cast(EngramLayer, model.engram_layers[str(layer_id)])
-        gate = engram_layer.gating.last_gate  # [B, L, M, 1]
-        if gate is not None:
-            mean_gates = gate.mean(dim=(0, 1, 3)).cpu().tolist()
-            gate_str = " | ".join([f"B{i}: {g:.3f}" for i, g in enumerate(mean_gates)])
-            print(f"Layer {layer_id}: {gate_str}")
+        # Visualization: Print gates for the target layers
+        print("\nCapture Gating Activation (Mean per branch):")
+        for layer_id in model.config.target_layers:
+            engram_layer = cast(EngramLayer, model.engram_layers[str(layer_id)])
+            gate = engram_layer.gating.last_gate  # [B, L, M, 1]
+            if gate is not None:
+                mean_gates = gate.mean(dim=(0, 1, 3)).cpu().tolist()
+                gate_str = " | ".join(
+                    [f"B{i}: {g:.3f}" for i, g in enumerate(mean_gates)]
+                )
+                print(f"Layer {layer_id}: {gate_str}")
+        model.unload_engram()
 
-    # Dynamic Switching Demo
-    print(f"\n>>> Phase 5: Dynamic Switching Demo")
+    # 4. LoRA + Engram Inference (Optional)
+    if "lora+engram" in results:
+        print(f"\nLoading trained Combined Model from {LORA_ENGRAM_DIR}")
+        # Load LoRA first
+        combined_model = PeftModel.from_pretrained(base_model, LORA_ENGRAM_DIR)
+        # Load Engram wrapper
+        combined_model = EngramModel.from_pretrained(
+            cast(PreTrainedModel, combined_model), LORA_ENGRAM_DIR
+        )
 
-    print("Unloading Engram (Switch back to Base Model)...")
-    model.unload_engram()
-    output_base = model.generate(
-        **inputs, max_new_tokens=40, max_length=None, do_sample=False
-    )
-    print(
-        f"Output (Base):   {tokenizer.decode(output_base[0], skip_special_tokens=True)}"
-    )
-
-    print("Reloading Engram weights...")
-    model.load_engram(ENGRAM_WEIGHTS_DIR)
-    output_reloaded = model.generate(
-        **inputs, max_new_tokens=40, max_length=None, do_sample=False
-    )
-    print(
-        f"Output (Reload): {tokenizer.decode(output_reloaded[0], skip_special_tokens=True)}"
-    )
+        print("Generating with LoRA + Engram ENABLED...")
+        output_combined = combined_model.generate(
+            **inputs, max_new_tokens=40, max_length=None, do_sample=False
+        )
+        print(
+            f"Output (Combined): {tokenizer.decode(output_combined[0], skip_special_tokens=True)}"
+        )
+        combined_model.unload_engram()
+        combined_model = combined_model.base_model.unload()
 
     print("\nEnd-to-end example completed successfully!")
 
@@ -612,6 +731,14 @@ if __name__ == "__main__":
         type=int,
         default=128,
         help="Maximum sequence length (Increase to fill GPU)",
+    )
+    parser.add_argument(
+        "--methods",
+        type=str,
+        nargs="+",
+        default=["lora", "engram"],
+        choices=["lora", "engram", "lora+engram"],
+        help="Methods to benchmark",
     )
     args = parser.parse_args()
 
@@ -663,22 +790,26 @@ if __name__ == "__main__":
         "peak_memory_gb": base_mem,
     }
 
-    # 3. Train LoRA setup
-    print("\n" + "=" * 50)
-    lora_results = train_lora(base_model, tokenizer, train_dataset, eval_dataset, args)
-    results["lora"] = lora_results
+    # 3. Iterate through methods
+    for method in args.methods:
+        print("\n" + "=" * 50)
+        if method == "lora":
+            results["lora"] = train_lora(
+                base_model, tokenizer, train_dataset, eval_dataset, args
+            )
+        elif method == "engram":
+            results["engram"] = train_engram_model(
+                base_model, tokenizer, train_dataset, eval_dataset, args
+            )
+        elif method == "lora+engram":
+            results["lora+engram"] = train_lora_engram(
+                base_model, tokenizer, train_dataset, eval_dataset, args
+            )
 
-    # 4. Train Engram setup
-    print("\n" + "=" * 50)
-    engram_results = train_engram_model(
-        base_model, tokenizer, train_dataset, eval_dataset, args
-    )
-    results["engram"] = engram_results
-
-    # 5. Save & Plot
+    # 4. Save & Plot
     print("\n" + "=" * 50)
     save_and_plot_results(results)
 
-    # 6. Inference & dynamic usage Demo
+    # 5. Inference & dynamic usage Demo
     print("\n" + "=" * 50)
-    inference_demo(base_model, tokenizer)
+    inference_demo(base_model, tokenizer, results)

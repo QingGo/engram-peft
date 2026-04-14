@@ -150,15 +150,34 @@ class EngramModel(nn.Module):
         self.adapters[adapter_name] = new_layers
 
     def _find_transformer_layers(self) -> nn.ModuleList:
-        """Find the main transformer layers module list."""
-        if hasattr(self.base_model, "model") and hasattr(
-            self.base_model.model, "layers"
-        ):
-            return cast(nn.ModuleList, self.base_model.model.layers)
-        if hasattr(self.base_model, "transformer") and hasattr(
-            self.base_model.transformer, "h"
-        ):
-            return cast(nn.ModuleList, self.base_model.transformer.h)
+        """
+        Find the main transformer layers module list by recursively searching
+        through nested modules (e.g., PeftModel, LlamaForCausalLM).
+        """
+
+        def _search(m: nn.Module, depth: int = 0) -> Optional[nn.ModuleList]:
+            if depth > 5:
+                return None
+
+            # 1. Direct check for common ModuleList names
+            for attr in ["layers", "h", "blocks"]:
+                if hasattr(m, attr):
+                    layers = getattr(m, attr)
+                    if isinstance(layers, nn.ModuleList):
+                        return layers
+
+            # 2. Recursive unwrapping of common wrapper attributes
+            for attr in ["model", "transformer", "base_model"]:
+                if hasattr(m, attr):
+                    res = _search(getattr(m, attr), depth + 1)
+                    if res is not None:
+                        return res
+            return None
+
+        layers = _search(self.base_model)
+        if layers is not None:
+            return layers
+
         raise ValueError("Could not find transformer layers in the base model.")
 
     def _create_pre_hook(self, layer_id: int) -> Callable[[nn.Module, tuple], tuple]:
@@ -544,13 +563,30 @@ def get_engram_model(
     model: PreTrainedModel,
     config: EngramConfig,
     tokenizer: Optional[PreTrainedTokenizerBase] = None,
+    wrap_peft: bool = False,
 ) -> EngramModel:
     """
     Wraps a base model with Engram layers.
-    Freezes the base model and only leaves Engram Layer parameters trainable.
+
+    Args:
+        model: The PreTrainedModel to wrap.
+        config: EngramConfig for the Engram layers.
+        tokenizer: Optional tokenizer.
+        wrap_peft: If True, preserves existing trainable parameters (e.g., LoRA) 
+                  while freezing the base weights. If False (default), performs
+                   a standard blanket freeze of the entire model.
     """
-    # Freeze the base model completely
-    model.requires_grad_(False)
+    if wrap_peft:
+        # Record parameters that were already trainable (e.g., from LoRA)
+        trainable_before = [p for p in model.parameters() if p.requires_grad]
+        # Freeze the entire model
+        model.requires_grad_(False)
+        # Restore requires_grad=True for those parameters
+        for p in trainable_before:
+            p.requires_grad_(True)
+    else:
+        # Standard vanilla model, freeze everything
+        model.requires_grad_(False)
 
     # Ensure config has the correct hidden_size if it was using default
     base_config = getattr(model, "config", None)

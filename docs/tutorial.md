@@ -81,7 +81,7 @@ Engram and LoRA can be used together! LoRA is excellent for **task adaptation** 
 
 ### The "Double Adapter" Strategy
 1.  **Apply LoRA** to the base model's Attention or MLP layers.
-2.  **Apply Engram** to the Transformer Blocks.
+2.  **Apply Engram** to the Transformer Blocks using the `wrap_peft=True` flag to keep LoRA weights trainable.
 3.  **Result**: A model that has the reasoning style of LoRA and the factual memory of Engram.
 
 ```python
@@ -94,11 +94,15 @@ model = get_peft_model(base_model, lora_config)
 
 # 2. Inject Engram on top
 engram_config = EngramConfig(target_layers=[2, 15])
-model = get_engram_model(model, engram_config) # Engram handles the nesting
+# IMPORTANT: Use wrap_peft=True so Engram doesn't freeze your LoRA parameters!
+model = get_engram_model(model, engram_config, wrap_peft=True) 
 
 # Now both LoRA and Engram parameters are trainable!
-# Base model parameters remain frozen.
+model.print_trainable_parameters()
 ```
+
+> [!IMPORTANT]
+> When stacking adapters, ensure you pass `wrap_peft=True` to `get_engram_model`. This instructs Engram to identify and preserve the `requires_grad=True` status of existing parameters (like LoRA weights) instead of performing a blanket freeze on the entire input model.
 
 ---
 

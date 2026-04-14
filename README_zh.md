@@ -55,13 +55,14 @@ model.print_trainable_parameters()
 
 ## 📊 性能对比
 
-| 方法 | 额外参数总量 | 训练速度 (s/step) | 训练集 Loss | 验证集 Loss | 显存占用 (nvtop) |
+| 方法 | 额外参数总量 | 训练速度 (s/step) | 训练集 Loss | 验证集 Loss | 峰值显存 (JSON) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **LoRA** (r=16) | ~2.25 M | **0.2738 s** | **1.231** | **0.989** | 9.35 GiB |
-| **Engram-PEFT** | **545.4 M** | 0.2961 s | 1.263 | 1.017 | 10.82 GiB |
+| **LoRA** (r=16) | ~2.25 M | **0.2738 s** | 1.231 | 0.9890 | 8.07 GB |
+| **Engram-PEFT** | **545.4 M** | 0.2961 s | 1.263 | 1.0165 | 9.38 GB |
+| **LoRA+Engram** | ~547.7 M | 0.3360 s | **1.214** | **0.9656** | 10.33 GB |
 
 > [!TIP]
-> **性能洞察**：在 RTX 4090D 上的最新 3000 步基准测试中，LoRA 展现了稍好的 Loss 和速度。然而，Engram-PEFT 提供了 **240 倍的参数容量** (545M) 用于知识存储，且仅带来了约 8% 的延迟增加。这使其成为需要大规模事实记忆 recall 任务的理想选择。
+> **性能洞察**：在最新的基准测试（Test 8 & 9, TinyLlama-1.1B, 3000 步）中，**LoRA+Engram** 实现了最佳的收敛效果（最低验证集 Loss），相比独立 LoRA 提升了约 2.3%。Engram-PEFT 提供了 **240 倍的参数容量** (545M) 用于知识存储，且延迟增加极低。推荐使用 LoRA+Engram 以同时获得结构微调与高容量稀疏记忆。
 
 ### Loss 曲线对比
 ![Loss 曲线对比](figures/loss_curve.png)
@@ -78,8 +79,10 @@ model.print_trainable_parameters()
 - **跨模型权重迁移**：独有特性（详见 `weight_transfer.py`），支持通过语料库的字符级对齐，在不同模型（如 Llama 到 Qwen）之间迁移 Engram 权重——实现知识的“回收再利用”。
 - **零侵入性**：通过 forward hook 注入；无需修改基础模型架构源码。
 - **类 PEFT API**：提供 `print_trainable_parameters()` 和 `save_pretrained()` 等熟悉的方法。
+- **联合训练 (LoRA+Engram)**: 支持 Adapter 叠加。可在单个模型中同时注入 LoRA 进行结构微调和 Engram 进行稀疏知识检索。
 - **命名适配器 (Named Adapters)**：完全兼容 PEFT 风格的 Adapter 管理（add/set/unload），支持多领域知识包并行管理。
 - **自动化训练流程**：内置 `EngramTrainer`，自动处理稀疏 Adam 优化、梯度管理与学习率倍率同步。
+- **灵活的层发现 (Flexible Layer Discovery)**：采用递归逻辑定位 Transformer 层，无视 PEFT 包装嵌套深度。
 
 ---
 
