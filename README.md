@@ -55,13 +55,18 @@ model.print_trainable_parameters()
 
 ## 📊 Performance Comparison
 
-| Method | Params Added | Grad. Update Size | VRAM (1.1B) |
-| :--- | :--- | :--- | :--- |
-| **FFT** (Full Fine-Tune) | 0 | 1,100M | **~24GB (est.)** |
-| **LoRA** (r=16) | 1.8M | 1.8M | **~5.1GB** |
-| **Engram-PEFT** | **11.2M** | **~1.2M*** | **~6.8GB** |
+| Method | Params Added | Speed (s/step) | Training Loss | Eval Loss | VRAM (Total) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **LoRA** (r=16) | 2.88 M | 0.1777 s | **1.254** | 1.153 | 6.07 GiB |
+| **Engram-PEFT** | **545.4 M** | **0.1643 s** | 1.311 | **1.141** | **6.97 GiB** |
 
-*\* Engram employs sparse lookup; only a tiny fraction of parameters (approx. 1%) are active and receive gradient updates per step. For a detailed breakdown of VRAM usage and scaling, see our [Memory Analysis](docs/memory_analysis.md).*
+> [!TIP]
+> **Performance Insight**: Although LoRA achieves a slightly lower training loss, **Engram-PEFT yields a lower evaluation loss**, indicating superior generalization and knowledge capture from the stories dataset.
+
+### Loss Curve Comparison
+![Loss Curve Comparison](figures/loss_curve.png)
+
+*\* Engram employs sparse lookup; only a tiny fraction of parameters (approx. 1%) are active and receive gradient updates per step. For a detailed breakdown of performance, computation, and memory, see our [Performance Analysis](docs/compare_engram_lora_analysis.md).*
 
 ---
 

@@ -16,7 +16,7 @@ import copy
 import json
 import os
 import sys
-from typing import Any, Callable, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -73,8 +73,11 @@ class Logger:
 
 
 def prepare_dataset(
-    tokenizer: PreTrainedTokenizerBase, subset_size: int, max_length: int
-) -> Any:
+    tokenizer: PreTrainedTokenizerBase,
+    subset_size: int,
+    eval_size: int,
+    max_length: int,
+) -> Tuple[Any, Any]:
     dataset = load_dataset("roneneldan/TinyStories", split="train", streaming=True)
 
     def tokenize_function(examples: Dict[str, Any]) -> Dict[str, Any]:
@@ -89,18 +92,24 @@ def prepare_dataset(
         tokenized_dict["labels"] = copy.deepcopy(tokenized_dict["input_ids"])
         return tokenized_dict
 
-    train_data = []
+    total_data = []
     for i, item in enumerate(dataset):
-        if i >= subset_size:
+        if i >= subset_size + eval_size:
             break
-        train_data.append(item)
+        total_data.append(item)
 
     from datasets import Dataset
 
-    train_dataset = Dataset.from_list(train_data).map(
+    # Create full dataset and then split
+    full_dataset = Dataset.from_list(total_data).map(
         tokenize_function, batched=True, remove_columns=["text"]
     )
-    return train_dataset
+    
+    train_dataset = full_dataset.select(range(subset_size))
+    eval_dataset = full_dataset.select(range(subset_size, subset_size + eval_size))
+    
+    print(f"Dataset prepared: {len(train_dataset)} train samples, {len(eval_dataset)} eval samples (strict split).")
+    return train_dataset, eval_dataset
 
 
 def get_base_model_eval_loss(
@@ -353,8 +362,31 @@ def save_and_plot_results(results: Dict[str, Any]) -> None:
             y="Loss",
             hue="Method",
             linewidth=2.5,
-            palette="viridis",
+            palette={"Engram": "seagreen", "LoRA": "royalblue"},
         )
+
+        # Plot Evaluation Loss as Markers
+        eval_points = []
+        if "engram" in results and "eval_loss" in results["engram"]:
+            eval_points.append({"Step": df[df["Method"] == "Engram"]["Step"].max(), "Loss": results["engram"]["eval_loss"], "Method": "Engram (Eval)"})
+        if "lora" in results and "eval_loss" in results["lora"]:
+            eval_points.append({"Step": df[df["Method"] == "LoRA"]["Step"].max(), "Loss": results["lora"]["eval_loss"], "Method": "LoRA (Eval)"})
+        
+        if eval_points:
+            eval_df = pd.DataFrame(eval_points)
+            sns.scatterplot(
+                data=eval_df,
+                x="Step",
+                y="Loss",
+                hue="Method",
+                s=300,
+                marker="*",
+                palette={"Engram (Eval)": "springgreen", "LoRA (Eval)": "skyblue"},
+                legend=True,
+                ax=ax,
+                edgecolor="black",
+                zorder=5
+            )
     else:
         ax = plt.gca()
 
@@ -502,15 +534,16 @@ if __name__ == "__main__":
     else:
         base_mem = 0.0
 
-    # 1. Prepare Data
-    train_dataset = prepare_dataset(tokenizer, subset_size=args.subset, max_length=128)
+    # 1. Prepare Data (Training + Unseen Validation)
+    train_dataset, eval_dataset = prepare_dataset(
+        tokenizer, subset_size=args.subset, eval_size=50, max_length=128
+    )
 
     results: Dict[str, Any] = {}
 
-    # 2. Get baseline performance (Zero-shot loss on some eval data)
-    eval_subset = train_dataset.select(range(min(len(train_dataset), 50)))
+    # 2. Get baseline performance (Zero-shot loss on unseen eval data)
     base_loss = get_base_model_eval_loss(
-        base_model, tokenizer, eval_subset, batch_size=args.batch_size
+        base_model, tokenizer, eval_dataset, batch_size=args.batch_size
     )
     results["base_model"] = {
         "eval_loss": base_loss,
@@ -519,13 +552,13 @@ if __name__ == "__main__":
 
     # 3. Train LoRA setup
     print("\n" + "=" * 50)
-    lora_results = train_lora(base_model, tokenizer, train_dataset, eval_subset, args)
+    lora_results = train_lora(base_model, tokenizer, train_dataset, eval_dataset, args)
     results["lora"] = lora_results
 
     # 4. Train Engram setup
     print("\n" + "=" * 50)
     engram_results = train_engram_model(
-        base_model, tokenizer, train_dataset, eval_subset, args
+        base_model, tokenizer, train_dataset, eval_dataset, args
     )
     results["engram"] = engram_results
 
