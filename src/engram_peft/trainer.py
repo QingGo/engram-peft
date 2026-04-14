@@ -38,7 +38,7 @@ class EngramTrainer(Trainer):
         self,
         model: nn.Module,
         inputs: Dict[str, Union[torch.Tensor, Any]],
-        num_items_in_batch: Tensor | int | None = None,
+        num_items_in_batch: torch.Tensor | int | None = None,
     ) -> torch.Tensor:
         """Standard training step handles both old and new Transformers Trainer signatures."""
         try:

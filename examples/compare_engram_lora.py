@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
 from datasets import load_dataset  # type: ignore
-from peft import LoraConfig, TaskType, get_peft_model
+from peft import LoraConfig, PeftModel, TaskType, get_peft_model
 
 from transformers import (
     AutoModelForCausalLM,
@@ -133,6 +133,7 @@ def train_lora(
     base_model: PreTrainedModel,
     tokenizer: PreTrainedTokenizerBase,
     train_dataset: Any,
+    eval_dataset: Any,
     args: argparse.Namespace,
 ) -> Dict[str, Any]:
     print(f"\n>>> Phase 2: Training LoRA Baseline on {MODEL_NAME}")
@@ -152,7 +153,7 @@ def train_lora(
     training_args = TrainingArguments(
         output_dir=os.path.join(OUTPUT_DIR, "lora_outputs"),
         per_device_train_batch_size=args.batch_size,
-        gradient_accumulation_steps=2,
+        gradient_accumulation_steps=args.grad_accum,
         max_steps=args.max_steps,
         learning_rate=4e-4,
         logging_steps=5,
@@ -167,11 +168,17 @@ def train_lora(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
         data_collator=DefaultDataCollator(),
     )
 
     print("Starting LoRA training...")
     train_result = trainer.train()
+
+    print(f"Evaluating LoRA and saving to {LORA_WEIGHTS_DIR}...")
+    eval_results = trainer.evaluate()
+    eval_loss = cast(float, eval_results.get("eval_loss", 0.0))
+    trainer.save_model(LORA_WEIGHTS_DIR)
 
     avg_time_per_step = train_result.metrics["train_runtime"] / train_result.global_step
     print(f"LoRA Avg Time Per Step: {avg_time_per_step:.4f}s")
@@ -195,6 +202,7 @@ def train_lora(
         "log_history": log_history,
         "peak_memory_gb": peak_memory,
         "avg_time_per_step": avg_time_per_step,
+        "eval_loss": eval_loss,
     }
 
 
@@ -202,6 +210,7 @@ def train_engram_model(
     base_model: PreTrainedModel,
     tokenizer: PreTrainedTokenizerBase,
     train_dataset: Any,
+    eval_dataset: Any,
     args: argparse.Namespace,
 ) -> Dict[str, Any]:
     print(f"\n>>> Phase 3: Training Engram on {MODEL_NAME}")
@@ -230,7 +239,7 @@ def train_engram_model(
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
         per_device_train_batch_size=args.batch_size,
-        gradient_accumulation_steps=2,
+        gradient_accumulation_steps=args.grad_accum,
         max_steps=args.max_steps,
         logging_steps=5,
         save_strategy="no",
@@ -244,12 +253,17 @@ def train_engram_model(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
         data_collator=collator,
         optimizers=(optimizer, scheduler),
     )
 
     print("Starting Engram training...")
     train_result = trainer.train()
+
+    print("Evaluating Engram...")
+    eval_results = trainer.evaluate()
+    eval_loss = cast(float, eval_results.get("eval_loss", 0.0))
 
     avg_time_per_step = train_result.metrics["train_runtime"] / train_result.global_step
     print(f"Engram Avg Time Per Step: {avg_time_per_step:.4f}s")
@@ -277,6 +291,7 @@ def train_engram_model(
         "log_history": log_history,
         "peak_memory_gb": peak_memory,
         "avg_time_per_step": avg_time_per_step,
+        "eval_loss": eval_loss,
     }
 
 
@@ -303,12 +318,12 @@ def save_and_plot_results(results: Dict[str, Any]) -> None:
 
     lora = results.get("lora", {})
     print(
-        f"{'LoRA':<12} | {lora.get('peak_memory_gb', 0):<15.2f} | {lora.get('avg_time_per_step', 0):<18.4f} | {'N/A':<10}"
+        f"{'LoRA':<12} | {lora.get('peak_memory_gb', 0):<15.2f} | {lora.get('avg_time_per_step', 0):<18.4f} | {lora.get('eval_loss', 0):.4f}"
     )
 
     engram = results.get("engram", {})
     print(
-        f"{'Engram':<12} | {engram.get('peak_memory_gb', 0):<15.2f} | {engram.get('avg_time_per_step', 0):<18.4f} | {'N/A':<10}"
+        f"{'Engram':<12} | {engram.get('peak_memory_gb', 0):<15.2f} | {engram.get('avg_time_per_step', 0):<18.4f} | {engram.get('eval_loss', 0):.4f}"
     )
     print("=" * 61 + "\n")
 
@@ -341,7 +356,6 @@ def save_and_plot_results(results: Dict[str, Any]) -> None:
             x="Step",
             y="Loss",
             hue="Method",
-            marker="o",
             linewidth=2.5,
             palette="viridis",
         )
@@ -377,19 +391,40 @@ def inference_demo(
 ) -> None:
     print(f"\n>>> Phase 4: Inference & Gating Visualization")
 
-    # Load trained Engram onto the base model
-    print(f"Loading trained Engram from {ENGRAM_WEIGHTS_DIR}")
-    model = EngramModel.from_pretrained(base_model, ENGRAM_WEIGHTS_DIR)
-
     prompt = "Once upon a time, there was a little robot named"
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.base_model.device)
+    inputs = tokenizer(prompt, return_tensors="pt").to(base_model.device)
 
     print(f"\nPrompt: {prompt}")
+
+    # 1. Base Model Inference (Zero-shot)
+    print("\nGenerating with Base Model (No PEFT)...")
+    output_base = base_model.generate(
+        **inputs, max_new_tokens=40, max_length=None, do_sample=False
+    )
+    print(
+        f"Output (Base):   {tokenizer.decode(output_base[0], skip_special_tokens=True)}"
+    )
+
+    # 2. LoRA Inference
+    print(f"\nLoading trained LoRA from {LORA_WEIGHTS_DIR}")
+    lora_model = PeftModel.from_pretrained(base_model, LORA_WEIGHTS_DIR)
+    print("Generating with LoRA ENABLED...")
+    output_lora = lora_model.generate(
+        **inputs, max_new_tokens=40, max_length=None, do_sample=False
+    )
+    print(
+        f"Output (LoRA):   {tokenizer.decode(output_lora[0], skip_special_tokens=True)}"
+    )
+    lora_model = lora_model.unload()  # Back to base
+
+    # 3. Engram Inference
+    print(f"\nLoading trained Engram from {ENGRAM_WEIGHTS_DIR}")
+    model = EngramModel.from_pretrained(base_model, ENGRAM_WEIGHTS_DIR)
 
     # Generate with Engram enabled
     print("Generating with Engram ENABLED...")
     output_engram = model.generate(
-        **inputs, max_new_tokens=20, max_length=None, do_sample=False
+        **inputs, max_new_tokens=40, max_length=None, do_sample=False
     )
     print(
         f"Output (Engram): {tokenizer.decode(output_engram[0], skip_special_tokens=True)}"
@@ -411,7 +446,7 @@ def inference_demo(
     print("Unloading Engram (Switch back to Base Model)...")
     model.unload_engram()
     output_base = model.generate(
-        **inputs, max_new_tokens=20, max_length=None, do_sample=False
+        **inputs, max_new_tokens=40, max_length=None, do_sample=False
     )
     print(
         f"Output (Base):   {tokenizer.decode(output_base[0], skip_special_tokens=True)}"
@@ -420,7 +455,7 @@ def inference_demo(
     print("Reloading Engram weights...")
     model.load_engram(ENGRAM_WEIGHTS_DIR)
     output_reloaded = model.generate(
-        **inputs, max_new_tokens=20, max_length=None, do_sample=False
+        **inputs, max_new_tokens=40, max_length=None, do_sample=False
     )
     print(
         f"Output (Reload): {tokenizer.decode(output_reloaded[0], skip_special_tokens=True)}"
@@ -439,6 +474,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--subset", type=int, default=1000, help="Dataset subset size to load"
+    )
+    parser.add_argument(
+        "--grad_accum", type=int, default=2, help="Gradient accumulation steps"
     )
     args = parser.parse_args()
 
@@ -485,12 +523,14 @@ if __name__ == "__main__":
 
     # 3. Train LoRA setup
     print("\n" + "=" * 50)
-    lora_results = train_lora(base_model, tokenizer, train_dataset, args)
+    lora_results = train_lora(base_model, tokenizer, train_dataset, eval_subset, args)
     results["lora"] = lora_results
 
     # 4. Train Engram setup
     print("\n" + "=" * 50)
-    engram_results = train_engram_model(base_model, tokenizer, train_dataset, args)
+    engram_results = train_engram_model(
+        base_model, tokenizer, train_dataset, eval_subset, args
+    )
     results["engram"] = engram_results
 
     # 5. Save & Plot

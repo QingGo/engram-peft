@@ -229,6 +229,8 @@ class EngramModel(nn.Module):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         engram_hash_indices: Optional[torch.Tensor] = None,
         **kwargs: Any,
     ) -> Any:
@@ -257,7 +259,12 @@ class EngramModel(nn.Module):
                     )
                     self._current_hash_indices = self.hash_mapping.hash(input_ids_np)
 
-        return self.base_model(input_ids=input_ids, **kwargs)
+        return self.base_model(
+            input_ids=input_ids,
+            labels=labels,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
 
     def generate(self, *args: Any, **kwargs: Any) -> Any:
         """Delegates generation to the underlying base_model."""
