@@ -982,7 +982,7 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 <h2 id="features">🛠 Features</h2>
 <ul>
 <li><strong>100% Paper Alignment</strong>: Implements Appendix A Table 5 parameters and the official DeepSeek gating/hashing logic.</li>
-<li><strong>CPU-Side Precomputation</strong>: <code>EngramDataCollator</code> precomputes multi-head hashes on CPU, ensuring 100% GPU utilization.</li>
+<li><strong>Vectorized CPU-Side Precomputation</strong>: <code>EngramDataCollator</code> uses highly optimized NumPy broadcasting to precompute hashes on CPU. Supports multi-process loading (<code>num_workers &gt; 0</code>) to ensure 100% GPU utilization.</li>
 <li><strong>Tokenizer Compression</strong>: Built-in NFKC and lowercase normalization for 23% vocabulary reduction.</li>
 <li><strong>Zero-Invasive</strong>: Injects via forward hooks; no modification to your base model architecture required.</li>
 <li><strong>Peft-like API</strong>: Familiar methods like <code>print_trainable_parameters()</code> and <code>save_pretrained()</code>.</li>

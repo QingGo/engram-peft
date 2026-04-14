@@ -1068,7 +1068,7 @@
 - <strong>Efficiency Gains</strong>:
     1. <strong>Layer Sparsity</strong>: By targeting only the layers most critical for knowledge injection, Engram reduces the total number of gradient calculations compared to a global LoRA application.
     2. <strong>Kernel Efficiency</strong>: Engram consolidates structural parameters into few, larger GEMM operations (Single Gating block) rather than many tiny rank-update operations spread across 22 layers.
-    3. <strong>Pre-computation</strong>: <code>EngramDataCollator</code> pre-calculates hash indices on the CPU, removing the hashing overhead from the GPU timeline.</p>
+    3. <strong>Pre-computation</strong>: <code>EngramDataCollator</code> pre-calculates hash indices on the CPU, removing the hashing overhead from the GPU timeline. In our latest version, this is <strong>highly vectorized</strong> using NumPy broadcasting and supports <strong>multi-process workers</strong> (<code>num_workers</code>), effectively parallelizing the most CPU-intensive part of the Engram pipeline across multiple cores.</p>
 <h2 id="3-memory-footprint-analysis">3. Memory Footprint Analysis</h2>
 <h3 id="vram-discrepancy-allocated-vs-system">VRAM Discrepancy (Allocated vs. System)</h3>
 <p>One of the most frequent questions is why <code>nvtop</code> shows higher usage than our internal metrics:

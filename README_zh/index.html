@@ -984,7 +984,7 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 <h2 id="_4">🛠 特性</h2>
 <ul>
 <li><strong>100% 对齐论文</strong>：实现了附录 A 表 5 的参数以及 DeepSeek 官方的门控/哈希逻辑。</li>
-<li><strong>CPU 端预计算</strong>：<code>EngramDataCollator</code> 在 CPU 上预计算多头哈希，确保 100% 的 GPU 利用率。</li>
+<li><strong>向量化 CPU 端预计算</strong>：<code>EngramDataCollator</code> 使用高度优化的 NumPy 广播机制在 CPU 上预计算哈希。支持多进程加载 (<code>num_workers &gt; 0</code>)，确保 100% 的 GPU 利用率。</li>
 <li><strong>分词器压缩 (Tokenizer Compression)</strong>：内置 NFKC 和小写归一化，实现 23% 的词表缩减。</li>
 <li><strong>零侵入性</strong>：通过 forward hook 注入；无需修改基础模型架构源码。</li>
 <li><strong>类 PEFT API</strong>：提供 <code>print_trainable_parameters()</code> 和 <code>save_pretrained()</code> 等熟悉的方法。</li>
