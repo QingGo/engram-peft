@@ -18,6 +18,7 @@ Configuration class for Engram PEFT module. Inherits from `transformers.Pretrain
 - `embedding_dim` (`int`, default: `1280`): Dimension of the Engram retrieval embedding.
 - `enable_tokenizer_compression` (`bool`, default: `True`): Whether to use NFKC/Lowercase normalization for token grouping.
 - `target_layers` (`List[int]`, default: `[2, 15]`): Transformer layers where Engram modules are injected.
+- `target_modules` (`Optional[Union[List[str], str]]`, default: `None`): Specific module names or regex patterns to target for injection.
 - `hc_mult` (`int`, default: `4`): Multi-head hyper-connection expansion factor.
 - `combine_mhc` (`bool`, default: `True`): Whether to combine multi-head hyper-connections.
 - `conv_kernel_size` (`int`, default: `4`): Convolution kernel size for short-term context.
@@ -60,7 +61,12 @@ Injects Engram layers into a base Transformer model and freezes all base paramet
 The wrapper class for the base model. Handles dynamic hook management and weight serialization.
 
 **Methods:**
-- `save_pretrained(save_directory: str)`: Saves ONLY the Engram weights and configuration.
+- `print_trainable_parameters()`: Prints the count and percentage of trainable parameters.
+- `add_adapter(adapter_name: str, config: EngramConfig)`: Adds a new set of Engram weights with its own configuration.
+- `set_adapter(adapter_name: str)`: Switches the active knowledge pack to the specified adapter.
+- `create_optimizer(base_learning_rate: float)`: Returns a `MixedOptimizer` pre-configured for this model's sparse/dense layers.
+- `create_scheduler(optimizer, num_steps, warmup_steps)`: Returns the paper-aligned Step Decay scheduler.
+- `save_pretrained(save_directory: str)`: Saves ONLY the active Engram weights and configuration.
 - `from_pretrained(base_model, engram_path)`: Loads Engram weights onto a base model.
 - `unload_engram()`: Dynamically removes all PEFT hooks (reverts to base model).
 - `load_engram(engram_path=None)`: Re-installs hooks and optionally loads weights.

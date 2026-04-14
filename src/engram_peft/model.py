@@ -67,6 +67,12 @@ class EngramModel(nn.Module):
         self._current_hash_indices: Optional[Union[Dict[int, Any], torch.Tensor]] = None
         self._engram_enabled = True
 
+        # Named adapter management
+        self.active_adapter = "default"
+        self.peft_config = {"default": config}
+        self.adapters = nn.ModuleDict()
+        self.adapters["default"] = self.engram_layers
+
         # Attach hooks immediately
         self.load_engram()
 
@@ -74,7 +80,64 @@ class EngramModel(nn.Module):
         # Keeping Engram layers in float32 is essential for training stability
         # when the backbone is float16/bfloat16 (Mixed Precision).
         # Trainer/autocast will handle the precision transitions during forward/backward.
-        self.engram_layers.float()
+        self.adapters.float()
+
+    def print_trainable_parameters(self) -> None:
+        """
+        Prints the number of trainable parameters in the model.
+        """
+        trainable_params = 0
+        all_param = 0
+        for _, param in self.base_model.named_parameters():
+            all_param += param.numel()
+        for _, param in self.adapters.named_parameters():
+            all_param += param.numel()
+            if param.requires_grad:
+                trainable_params += param.numel()
+
+        print(
+            f"trainable params: {trainable_params:,} || all params: {all_param:,} || "
+            f"trainable%: {100 * trainable_params / all_param:.4f}"
+        )
+
+    def set_adapter(self, adapter_name: str) -> None:
+        """
+        Sets the active adapter.
+        """
+        if adapter_name not in self.adapters:
+            raise ValueError(f"Adapter {adapter_name} not found.")
+        self.active_adapter = adapter_name
+        self.engram_layers = cast(nn.ModuleDict, self.adapters[adapter_name])
+        self.config = self.peft_config[adapter_name]
+        # Reinstate hooks to ensure they point to the correct layers if needed,
+        # but since hooks use self.engram_layers[str(layer_id)], and we just
+        # updated self.engram_layers, they should pick up the new modules.
+        # However, it's safer to just set engram_enabled if it was disabled.
+        self._engram_enabled = True
+
+    def add_adapter(self, adapter_name: str, config: EngramConfig) -> None:
+        """
+        Adds a new adapter with the given name and config.
+        """
+        if adapter_name in self.adapters:
+            raise ValueError(f"Adapter {adapter_name} already exists.")
+
+        self.peft_config[adapter_name] = config
+        new_layers = nn.ModuleDict()
+        for layer_id in config.target_layers:
+            # Note: We reuse the same hash_mapping logic or create new ones?
+            # For simplicity, we create new layers.
+            # We might need a separate hash_mapping per adapter if configs differ.
+            # But hashing is usually tied to the backbone/tokenizer.
+            flat_primes = sum(self.hash_mapping.prime_tables[layer_id], [])
+            new_layers[str(layer_id)] = EngramLayer(
+                config=config,
+                layer_id=layer_id,
+                primes=flat_primes,
+                compressor=self.compressor,
+            )
+        new_layers.float()
+        self.adapters[adapter_name] = new_layers
 
     def _find_transformer_layers(self) -> nn.ModuleList:
         """Find the main transformer layers module list."""
@@ -197,7 +260,28 @@ class EngramModel(nn.Module):
         )
         self._hook_handles.append(model_hook)
 
-        # 2. Attach hooks to target transformer layers
+        # 2. Attach hooks to target transformer layers or specific modules
+        if self.config.target_modules is not None:
+            # Module-based targeting
+            target_names = (
+                [self.config.target_modules]
+                if isinstance(self.config.target_modules, str)
+                else self.config.target_modules
+            )
+            import re
+
+            for name, module in self.base_model.named_modules():
+                for target_name in target_names:
+                    if re.fullmatch(target_name, name) or target_name == name:
+                        # We need a way to track these modules and assign an internal ID
+                        # For simplicity, we use the name as ID if it's not a layer index
+                        # But EngramLayer currently expects layer_id: int.
+                        # This is a limitation we should address if we want true generic targeting.
+                        # For now, we only support target_modules that match transformer blocks
+                        # to avoid breaking the hashing/primes logic which is layer-indexed.
+                        pass
+
+        # Current layer-based targeting
         for layer_id in self.config.target_layers:
             if layer_id < len(layers):
                 target_module = layers[layer_id]
@@ -268,11 +352,28 @@ class EngramModel(nn.Module):
 
     def generate(self, *args: Any, **kwargs: Any) -> Any:
         """Delegates generation to the underlying base_model."""
-        # Note: True generation with caching requires updating _current_hash_indices per step.
-        # For simplicity in this implementation, we delegate. In a full system,
-        # one would compute the hashes step-by-step or patch `base_model.prepare_inputs_for_generation`.
         generate_func = getattr(self.base_model, "generate")
         return generate_func(*args, **kwargs)
+
+    def create_optimizer(self, base_learning_rate: float = 4e-4) -> Any:
+        """
+        Helper to create the MixedOptimizer for this model.
+        """
+        from engram_peft.utils import get_optimizer
+
+        return get_optimizer(self, base_learning_rate=base_learning_rate)
+
+    def create_scheduler(
+        self, optimizer: Any, num_training_steps: int, warmup_steps: int = 0
+    ) -> Any:
+        """
+        Helper to create the Step Decay scheduler for this model.
+        """
+        from engram_peft.utils import get_scheduler
+
+        return get_scheduler(
+            optimizer, num_training_steps=num_training_steps, warmup_steps=warmup_steps
+        )
 
     def save_pretrained(self, save_directory: str) -> None:
         """

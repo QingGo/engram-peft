@@ -114,8 +114,9 @@ def get_base_model_eval_loss(
         output_dir=os.path.join(OUTPUT_DIR, "base_eval"),
         per_device_eval_batch_size=batch_size,
         report_to="none",
-        bf16=torch.cuda.is_bf16_supported(),
-        fp16=not torch.cuda.is_bf16_supported() and torch.cuda.is_available(),
+        bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
+        fp16=not (torch.cuda.is_available() and torch.cuda.is_bf16_supported())
+        and torch.cuda.is_available(),
     )
     trainer = Trainer(
         model=model,
@@ -156,8 +157,9 @@ def train_lora(
         learning_rate=4e-4,
         logging_steps=5,
         save_strategy="no",
-        bf16=torch.cuda.is_bf16_supported(),
-        fp16=not torch.cuda.is_bf16_supported() and torch.cuda.is_available(),
+        bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
+        fp16=not (torch.cuda.is_available() and torch.cuda.is_bf16_supported())
+        and torch.cuda.is_available(),
         report_to="none",
         remove_unused_columns=True,
     )
@@ -227,13 +229,9 @@ def train_engram_model(
 
     print("Injecting Engram layers and freezing base model...")
     model = get_engram_model(base_model, config, tokenizer)
+    model.print_trainable_parameters()
 
     collator = EngramDataCollator(tokenizer=tokenizer, config=config)
-    optimizer = get_optimizer(model, base_learning_rate=4e-4)
-    scheduler = get_scheduler(
-        optimizer, num_training_steps=args.max_steps, warmup_steps=10
-    )
-
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
         per_device_train_batch_size=args.batch_size,
@@ -241,8 +239,9 @@ def train_engram_model(
         max_steps=args.max_steps,
         logging_steps=5,
         save_strategy="no",
-        bf16=torch.cuda.is_bf16_supported(),
-        fp16=not torch.cuda.is_bf16_supported() and torch.cuda.is_available(),
+        bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
+        fp16=not (torch.cuda.is_available() and torch.cuda.is_bf16_supported())
+        and torch.cuda.is_available(),
         report_to="none",
         remove_unused_columns=True,
     )
@@ -253,7 +252,6 @@ def train_engram_model(
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         data_collator=collator,
-        optimizers=(optimizer, scheduler),
     )
 
     print("Starting Engram training...")

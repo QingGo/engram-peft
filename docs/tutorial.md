@@ -29,16 +29,22 @@ config = EngramConfig(
 base_model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16)
 model = get_engram_model(base_model, config, tokenizer)
 
+# Quick check on overhead
+model.print_trainable_parameters()
+
 # 4. Train
 collator = EngramDataCollator(tokenizer=tokenizer, config=config)
-optimizer = get_optimizer(model)
 
-# Standard HF Trainer usage...
-trainer = Trainer(
+# EngramTrainer handles the MixedOptimizer and Step Decay scheduler automatically
+from engram_peft import EngramTrainer
+trainer = EngramTrainer(
     model=model,
-    args=TrainingArguments(output_dir="engram_out", per_device_train_batch_size=4),
+    args=TrainingArguments(
+        output_dir="engram_out",
+        per_device_train_batch_size=4,
+        learning_rate=4e-4  # Automatically passed to MixedOptimizer
+    ),
     data_collator=collator,
-    optimizers=(optimizer, None), # Scheduler handled automatically by get_optimizer in full flow
     train_dataset=my_dataset
 )
 trainer.train()
@@ -92,4 +98,26 @@ model = get_engram_model(model, engram_config) # Engram handles the nesting
 
 # Now both LoRA and Engram parameters are trainable!
 # Base model parameters remain frozen.
+```
+
+---
+
+## Tutorial 4: Managing Multiple Knowledge Packs
+
+Engram-PEFT supports a "Named Adapter" system similar to `peft`. You can load multiple specialized knowledge packs into the same base model and switch between them at runtime.
+
+```python
+# Assuming you have an engram model with 'default' knowledge
+engram_model.print_trainable_parameters()
+
+# 1. Add a second adapter for a different domain
+legal_config = EngramConfig(target_layers=[2, 11, 20], embedding_dim=1024)
+engram_model.add_adapter("legal", legal_config)
+
+# 2. Switch to the new adapter for training
+engram_model.set_adapter("legal")
+# ... run training for legal knowledge ...
+
+# 3. Switch back to medical knowledge
+engram_model.set_adapter("default")
 ```

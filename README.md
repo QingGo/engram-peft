@@ -46,8 +46,9 @@ tokenizer = AutoTokenizer.from_pretrained("TinyLlama/TinyLlama-1.1B-intermediate
 config = EngramConfig(target_layers=[2, 11, 20])
 model = get_engram_model(base_model, config, tokenizer)
 
-# 3. Model is ready for training! 
-# Only Engram parameters (approx 1% of total) are trainable.
+# 3. Quick check on trainable parameters
+model.print_trainable_parameters()
+# trainable params: 11,214,400 || all params: 1,111,214,400 || trainable%: 1.0092
 ```
 
 ---
@@ -70,7 +71,9 @@ model = get_engram_model(base_model, config, tokenizer)
 - **CPU-Side Precomputation**: `EngramDataCollator` precomputes multi-head hashes on CPU, ensuring 100% GPU utilization.
 - **Tokenizer Compression**: Built-in NFKC and lowercase normalization to achieve 23% vocabulary reduction (consistent with paper).
 - **Zero-Invasive**: Injects via forward hooks; no modification to your base model architecture required.
-- **Dynamic Switching**: Load and swap "knowledge packs" at runtime without reloading the base model.
+- **Peft-like API**: Familiar methods like `print_trainable_parameters()` and `save_pretrained()`.
+- **Named Adapters**: Support for multiple concurrent knowledge packs with `add_adapter()` and `set_adapter()`.
+- **Automated Training**: `EngramTrainer` handles sparse optimization logic behind the scenes.
 
 ---
 

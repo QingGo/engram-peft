@@ -2,7 +2,7 @@ import dataclasses
 import json
 import os
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from transformers import PretrainedConfig
 
@@ -27,15 +27,14 @@ class EngramConfig(PretrainedConfig):
     )
     ngram_sizes: List[int] = field(
         default_factory=lambda: [2, 3],
-        metadata={
-            "help": "Explicit list of N-gram sizes to use (e.g., [2, 3])."
-        },
+        metadata={"help": "Explicit list of N-gram sizes to use (e.g., [2, 3])."},
     )
     max_ngram_size: int = 3
     n_head_per_ngram: int = 8
     embedding_dim: int = 1280
     enable_tokenizer_compression: bool = True
     target_layers: List[int] = field(default_factory=lambda: [2, 15])
+    target_modules: Optional[Union[List[str], str]] = None
     hc_mult: int = 4
     combine_mhc: bool = True
     hidden_size: int = 2048

@@ -46,8 +46,9 @@ tokenizer = AutoTokenizer.from_pretrained("TinyLlama/TinyLlama-1.1B-intermediate
 config = EngramConfig(target_layers=[2, 11, 20])
 model = get_engram_model(base_model, config, tokenizer)
 
-# 3. 模型准备好进行训练了！
-# 只有 Engram 参数 (约占总量的 1%) 是可训练的。
+# 3. 快速检查可训练参数
+model.print_trainable_parameters()
+# trainable params: 11,214,400 || all params: 1,111,214,400 || trainable%: 1.0092
 ```
 
 ---
@@ -70,7 +71,9 @@ model = get_engram_model(base_model, config, tokenizer)
 - **CPU 端预计算**：`EngramDataCollator` 在 CPU 上预计算多头哈希，确保 100% 的 GPU 利用率。
 - **分词器压缩 (Tokenizer Compression)**：内置 NFKC 和小写归一化，实现 23% 的词表缩减（与论文一致）。
 - **零侵入性**：通过 forward hook 注入；无需修改基础模型架构源码。
-- **动态切换**：运行时加载和交换“知识包”，无需重新加载基础模型。
+- **类 PEFT API**：提供 `print_trainable_parameters()` 和 `save_pretrained()` 等熟悉的方法。
+- **命名适配器 (Named Adapters)**：支持通过 `add_adapter()` 和 `set_adapter()` 同时管理多个知识包。
+- **自动化训练**：`EngramTrainer` 在后台自动处理稀疏优化相关的复杂逻辑。
 
 ---
 

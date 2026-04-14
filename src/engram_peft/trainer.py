@@ -4,7 +4,7 @@ from transformers import Trainer
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
 
 if TYPE_CHECKING:
-    from torch import Tensor
+    from torch.optim import Optimizer  # type: ignore
 
 
 class EngramTrainer(Trainer):
@@ -15,6 +15,61 @@ class EngramTrainer(Trainer):
     does not support SparseCPU tensors. This trainer overrides both clipping and norm
     calculation to correctly handle SparseCPU/SparseCUDA tensors.
     """
+
+    def create_optimizer(self, model: Any = None) -> Optimizer:
+        """
+        Creates the MixedOptimizer if not provided.
+        """
+        if self.optimizer is None:
+            # Check if model has the helper
+            from engram_peft.model import EngramModel
+
+            if isinstance(self.model, EngramModel) and hasattr(
+                self.model, "create_optimizer"
+            ):
+                self.optimizer = self.model.create_optimizer(
+                    base_learning_rate=self.args.learning_rate
+                )
+            else:
+                from engram_peft.utils import get_optimizer
+
+                if self.model is None:
+                    raise ValueError("Trainer.model is None")
+                self.optimizer = get_optimizer(
+                    cast(EngramModel, self.model),
+                    base_learning_rate=self.args.learning_rate,
+                )
+        return self.optimizer
+
+    def create_scheduler(
+        self, num_training_steps: int, optimizer: Optional[Optimizer] = None
+    ) -> torch.optim.lr_scheduler.LRScheduler:
+        """
+        Creates the Step Decay scheduler if not provided.
+        """
+        if self.lr_scheduler is None:
+            if optimizer is None:
+                optimizer = self.create_optimizer()
+
+            from engram_peft.model import EngramModel
+
+            if isinstance(self.model, EngramModel) and hasattr(
+                self.model, "create_scheduler"
+            ):
+                self.lr_scheduler = self.model.create_scheduler(
+                    optimizer,
+                    num_training_steps=num_training_steps,
+                    warmup_steps=self.args.get_warmup_steps(num_training_steps),
+                )
+            else:
+                from engram_peft.utils import get_scheduler
+
+                self.lr_scheduler = get_scheduler(
+                    optimizer,
+                    num_training_steps=num_training_steps,
+                    warmup_steps=self.args.get_warmup_steps(num_training_steps),
+                )
+        return self.lr_scheduler
 
     def _compute_total_norm(self, model: nn.Module) -> Optional[torch.Tensor]:
         """Computes the total gradient norm across dense and sparse parameters."""
