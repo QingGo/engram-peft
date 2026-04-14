@@ -8,7 +8,7 @@ This script demonstrates how Engram compares against standard PEFT methods (like
 4. Lifecycle: Demonstrates full training and dynamic management.
 
 Usage:
-    uv run python examples/compare_engram_lora.py --max_steps 50 --batch_size 4 --num_workers 4
+    uv run python examples/compare_engram_lora.py --max_steps 3000 --batch_size 16 --grad_accum 2 --num_workers 4 --subset 100000
 """
 
 import argparse
@@ -16,7 +16,7 @@ import copy
 import json
 import os
 import sys
-from typing import Any, Callable, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, Tuple, cast
 
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -42,8 +42,6 @@ from engram_peft import (
     EngramModel,
     EngramTrainer,
     get_engram_model,
-    get_optimizer,
-    get_scheduler,
 )
 
 MODEL_NAME = "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T"
@@ -77,8 +75,16 @@ def prepare_dataset(
     subset_size: int,
     eval_size: int,
     max_length: int,
+    num_proc: int = 4,
 ) -> Tuple[Any, Any]:
-    dataset = load_dataset("roneneldan/TinyStories", split="train", streaming=True)
+    print(f"Loading TinyStories dataset (train split)...")
+    train_ds = load_dataset("roneneldan/TinyStories", split="train", streaming=False)
+    print(f"Loading TinyStories dataset (validation split)...")
+    val_ds = load_dataset("roneneldan/TinyStories", split="validation", streaming=False)
+
+    # Subsample immediately for speed
+    train_ds = train_ds.select(range(subset_size))
+    val_ds = val_ds.select(range(min(len(val_ds), eval_size)))
 
     def tokenize_function(examples: Dict[str, Any]) -> Dict[str, Any]:
         tokenized = tokenizer(
@@ -92,26 +98,17 @@ def prepare_dataset(
         tokenized_dict["labels"] = copy.deepcopy(tokenized_dict["input_ids"])
         return tokenized_dict
 
-    total_data = []
-    for i, item in enumerate(dataset):
-        if i >= subset_size + eval_size:
-            break
-        total_data.append(item)
-
-    from datasets import Dataset
-
-    # Create full dataset and then split
-    full_dataset = Dataset.from_list(total_data).map(
-        tokenize_function, batched=True, remove_columns=["text"]
+    print(f"Tokenizing datasets with {num_proc} processes...")
+    train_dataset = train_ds.map(
+        tokenize_function, batched=True, remove_columns=["text"], num_proc=num_proc
     )
-    
-    # Shuffle dataset to ensure representative eval set
-    full_dataset = full_dataset.shuffle(seed=42)
-    
-    train_dataset = full_dataset.select(range(subset_size))
-    eval_dataset = full_dataset.select(range(subset_size, subset_size + eval_size))
-    
-    print(f"Dataset prepared: {len(train_dataset)} train samples, {len(eval_dataset)} eval samples (shuffled split).")
+    eval_dataset = val_ds.map(
+        tokenize_function, batched=True, remove_columns=["text"], num_proc=num_proc
+    )
+
+    print(
+        f"Dataset prepared: {len(train_dataset)} train samples, {len(eval_dataset)} eval samples (official split)."
+    )
     return train_dataset, eval_dataset
 
 
@@ -163,13 +160,25 @@ def train_lora(
     model = get_peft_model(base_model, peft_config)
     model.print_trainable_parameters()
 
+    warmup_steps = int(args.max_steps * 0.03)
+    # Configure Warmup-Stable-Decay (WSD) parameters
+    # 3% Warmup, 20% Stable (Hold), 77% Decay
+    num_decay_steps = int(args.max_steps * 0.77)
+    scheduler_kwargs = {
+        "num_decay_steps": num_decay_steps,
+        "min_lr_ratio": 1e-6 / 3e-4,
+    }
+
     training_args = TrainingArguments(
         output_dir=os.path.join(OUTPUT_DIR, "lora_outputs"),
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
         max_steps=args.max_steps,
-        learning_rate=4e-4,
-        logging_steps=5,
+        learning_rate=3e-4,
+        lr_scheduler_type="warmup_stable_decay",
+        lr_scheduler_kwargs=scheduler_kwargs,
+        warmup_steps=warmup_steps,
+        logging_steps=20,
         save_strategy="no",
         bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
         fp16=not (torch.cuda.is_available() and torch.cuda.is_bf16_supported())
@@ -178,11 +187,11 @@ def train_lora(
         remove_unused_columns=True,
         dataloader_num_workers=args.num_workers,
         dataloader_pin_memory=True,
-        evaluation_strategy="steps",
+        eval_strategy="steps",
         eval_steps=100,
     )
 
-    trainer = Trainer(
+    trainer = EngramTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
@@ -210,8 +219,14 @@ def train_lora(
 
     log_history = []
     for log in trainer.state.log_history:
-        if "loss" in log and "step" in log:
-            log_history.append({"step": log["step"], "loss": log["loss"]})
+        if "step" in log:
+            entry = {"step": log["step"]}
+            if "loss" in log:
+                entry["loss"] = log["loss"]
+            if "eval_loss" in log:
+                entry["eval_loss"] = log["eval_loss"]
+            if len(entry) > 1:
+                log_history.append(entry)
 
     # Restore base model to normal by unloading LoRA (clean slate for Engram)
     model = model.unload()
@@ -243,11 +258,19 @@ def train_engram_model(
         enable_tokenizer_compression=True,
         tokenizer_name_or_path=MODEL_NAME,
         pad_id=tokenizer.pad_token_id if isinstance(tokenizer.pad_token_id, int) else 0,
+        learning_rate_multiplier=3.0,
     )
 
     print("Injecting Engram layers and freezing base model...")
     model = get_engram_model(base_model, config, tokenizer)
     model.print_trainable_parameters()
+
+    warmup_steps = int(args.max_steps * 0.03)
+    num_decay_steps = int(args.max_steps * 0.77)
+    scheduler_kwargs = {
+        "num_decay_steps": num_decay_steps,
+        "min_lr_ratio": 1e-6 / 3e-4,
+    }
 
     collator = EngramDataCollator(tokenizer=tokenizer, config=config)
     training_args = TrainingArguments(
@@ -255,7 +278,11 @@ def train_engram_model(
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
         max_steps=args.max_steps,
-        logging_steps=5,
+        learning_rate=3e-4,
+        lr_scheduler_type="warmup_stable_decay",
+        lr_scheduler_kwargs=scheduler_kwargs,
+        warmup_steps=warmup_steps,
+        logging_steps=20,
         save_strategy="no",
         bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
         fp16=not (torch.cuda.is_available() and torch.cuda.is_bf16_supported())
@@ -264,7 +291,7 @@ def train_engram_model(
         remove_unused_columns=True,
         dataloader_num_workers=args.num_workers,
         dataloader_pin_memory=True,
-        evaluation_strategy="steps",
+        eval_strategy="steps",
         eval_steps=100,
     )
 
@@ -295,8 +322,14 @@ def train_engram_model(
 
     log_history = []
     for log in trainer.state.log_history:
-        if "loss" in log and "step" in log:
-            log_history.append({"step": log["step"], "loss": log["loss"]})
+        if "step" in log:
+            entry = {"step": log["step"]}
+            if "loss" in log:
+                entry["loss"] = log["loss"]
+            if "eval_loss" in log:
+                entry["eval_loss"] = log["eval_loss"]
+            if len(entry) > 1:
+                log_history.append(entry)
 
     print(f"Saving Engram weights to {ENGRAM_WEIGHTS_DIR}")
     model.save_pretrained(ENGRAM_WEIGHTS_DIR)
@@ -351,57 +384,106 @@ def save_and_plot_results(results: Dict[str, Any]) -> None:
 
     # Prepare data for Seaborn
     plot_data = []
+    intermediate_eval_data = []
 
     # Engram Logs
     engram_logs = results.get("engram", {}).get("log_history", [])
     for item in engram_logs:
-        plot_data.append(
-            {"Step": item["step"], "Loss": item["loss"], "Method": "Engram"}
-        )
+        if "loss" in item:
+            plot_data.append(
+                {"Step": item["step"], "Loss": item["loss"], "Method": "Engram (Train)"}
+            )
+        if "eval_loss" in item:
+            intermediate_eval_data.append(
+                {
+                    "Step": item["step"],
+                    "Loss": item["eval_loss"],
+                    "Method": "Engram (Eval)",
+                }
+            )
 
     # LoRA Logs
     lora_logs = results.get("lora", {}).get("log_history", [])
     for item in lora_logs:
-        plot_data.append({"Step": item["step"], "Loss": item["loss"], "Method": "LoRA"})
+        if "loss" in item:
+            plot_data.append(
+                {"Step": item["step"], "Loss": item["loss"], "Method": "LoRA (Train)"}
+            )
+        if "eval_loss" in item:
+            intermediate_eval_data.append(
+                {
+                    "Step": item["step"],
+                    "Loss": item["eval_loss"],
+                    "Method": "LoRA (Eval)",
+                }
+            )
 
     # Create the line plot
-    if plot_data:
-        import pandas as pd
+    import pandas as pd
 
+    ax = plt.gca()
+
+    if plot_data:
         df = pd.DataFrame(plot_data)
-        ax = sns.lineplot(
+        sns.lineplot(
             data=df,
             x="Step",
             y="Loss",
             hue="Method",
             linewidth=2.5,
-            palette={"Engram": "seagreen", "LoRA": "royalblue"},
+            palette={"Engram (Train)": "seagreen", "LoRA (Train)": "royalblue"},
+            ax=ax,
         )
 
-        # Plot Evaluation Loss as Markers
-        eval_points = []
-        if "engram" in results and "eval_loss" in results["engram"]:
-            eval_points.append({"Step": df[df["Method"] == "Engram"]["Step"].max(), "Loss": results["engram"]["eval_loss"], "Method": "Engram (Eval)"})
-        if "lora" in results and "eval_loss" in results["lora"]:
-            eval_points.append({"Step": df[df["Method"] == "LoRA"]["Step"].max(), "Loss": results["lora"]["eval_loss"], "Method": "LoRA (Eval)"})
-        
-        if eval_points:
-            eval_df = pd.DataFrame(eval_points)
-            sns.scatterplot(
-                data=eval_df,
-                x="Step",
-                y="Loss",
-                hue="Method",
-                s=300,
-                marker="*",
-                palette={"Engram (Eval)": "springgreen", "LoRA (Eval)": "skyblue"},
-                legend=True,
-                ax=ax,
-                edgecolor="black",
-                zorder=5
-            )
-    else:
-        ax = plt.gca()
+    # Plot Intermediate and Final Evaluation Points
+    eval_points = []
+    # Add final eval points
+    if "engram" in results and "eval_loss" in results["engram"]:
+        max_step = max([item["step"] for item in engram_logs]) if engram_logs else 0
+        eval_points.append(
+            {
+                "Step": max_step,
+                "Loss": results["engram"]["eval_loss"],
+                "Method": "Engram (Final Eval)",
+            }
+        )
+    if "lora" in results and "eval_loss" in results["lora"]:
+        max_step = max([item["step"] for item in lora_logs]) if lora_logs else 0
+        eval_points.append(
+            {
+                "Step": max_step,
+                "Loss": results["lora"]["eval_loss"],
+                "Method": "LoRA (Final Eval)",
+            }
+        )
+
+    # Combine intermediate and final evals
+    total_eval_df = []
+    if intermediate_eval_data:
+        total_eval_df.extend(intermediate_eval_data)
+    if eval_points:
+        total_eval_df.extend(eval_points)
+
+    if total_eval_df:
+        eval_df = pd.DataFrame(total_eval_df)
+        sns.scatterplot(
+            data=eval_df,
+            x="Step",
+            y="Loss",
+            hue="Method",
+            s=120,
+            marker="o",
+            palette={
+                "Engram (Eval)": "springgreen",
+                "LoRA (Eval)": "skyblue",
+                "Engram (Final Eval)": "darkgreen",
+                "LoRA (Final Eval)": "midnightblue",
+            },
+            legend=True,
+            ax=ax,
+            edgecolor="white",
+            zorder=5,
+        )
 
     # Base Loss (Zero-shot)
     base_loss = results.get("base_model", {}).get("eval_loss", 0.0)
@@ -511,7 +593,10 @@ if __name__ == "__main__":
         "--max_steps", type=int, default=50, help="Number of training steps"
     )
     parser.add_argument(
-        "--batch_size", type=int, default=4, help="Batch size per device"
+        "--batch_size",
+        type=int,
+        default=8,
+        help="Batch size per device (Recommended 8-32 for 4090)",
     )
     parser.add_argument(
         "--subset", type=int, default=1000, help="Dataset subset size to load"
@@ -521,6 +606,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--num_workers", type=int, default=4, help="Number of dataloader workers"
+    )
+    parser.add_argument(
+        "--max_length",
+        type=int,
+        default=128,
+        help="Maximum sequence length (Increase to fill GPU)",
     )
     args = parser.parse_args()
 
@@ -551,9 +642,14 @@ if __name__ == "__main__":
         base_mem = 0.0
 
     # 1. Prepare Data (Training + Unseen Validation)
-    # Increased eval_size to 500 for better representativeness
+    # Increased eval_size to 200 for better representativeness
+    # Added num_proc for parallel tokenization
     train_dataset, eval_dataset = prepare_dataset(
-        tokenizer, subset_size=args.subset, eval_size=500, max_length=128
+        tokenizer,
+        subset_size=args.subset,
+        eval_size=200,
+        max_length=args.max_length,
+        num_proc=args.num_workers,
     )
 
     results: Dict[str, Any] = {}

@@ -217,6 +217,11 @@ class EngramModel(nn.Module):
             if not self._engram_enabled:
                 return None
 
+            # PERFORMANCE OPTIMIZATION:
+            # If indices are already precomputed (e.g. by DataLoader or previous hook), Skip!
+            if self._current_hash_indices is not None:
+                return None
+
             # Try to get input_ids from kwargs then args
             input_ids = kwargs.get("input_ids")
             if input_ids is None and len(args) > 0:
@@ -336,6 +341,9 @@ class EngramModel(nn.Module):
         # technically redundant but kept for cases where forward is called
         # directly on the EngramModel wrapper.
         if self._engram_enabled:
+            # Crucial: Reset stale indices before setting new ones
+            self._current_hash_indices = None
+
             input_ids_to_hash = input_ids
             if engram_hash_indices is not None:
                 self._current_hash_indices = engram_hash_indices

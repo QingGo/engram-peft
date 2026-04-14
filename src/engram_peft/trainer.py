@@ -1,9 +1,8 @@
 import torch
 import torch.nn as nn
-from torch.optim import Optimizer
+from torch.optim import Optimizer # type: ignore
 from transformers import Trainer
 from typing import Any, Dict, List, Optional, Union, cast
-
 
 class EngramTrainer(Trainer):
     """
@@ -43,9 +42,15 @@ class EngramTrainer(Trainer):
         self, num_training_steps: int, optimizer: Optional[Optimizer] = None
     ) -> torch.optim.lr_scheduler.LRScheduler:
         """
-        Creates the Step Decay scheduler if not provided.
+        Creates the scheduler. Uses standard Transformers schedulers if requested,
+        otherwise falls back to Engram-specific Step Decay.
         """
         if self.lr_scheduler is None:
+            # If the user explicitly requested a specific scheduler type (like cosine or wsd), use it.
+            # We only use our custom Step Decay fallback if it's 'constant' or 'constant_with_warmup'.
+            if self.args.lr_scheduler_type not in ["constant", "constant_with_warmup"]:
+                return super().create_scheduler(num_training_steps, optimizer)
+
             if optimizer is None:
                 optimizer = self.create_optimizer()
 

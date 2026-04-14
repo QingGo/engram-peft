@@ -1,87 +1,54 @@
-# Performance Comparison: Engram vs. LoRA
+# Performance Comparison: Engram vs. LoRA (Test 8 Analysis)
 
-This document presents a comprehensive analysis comparing **Engram-PEFT** and **LoRA** (Low-Rank Adaptation) using empirical data from the `TinyLlama-1.1B` benchmark run on NVIDIA RTX 4090D 24GB hardware.
+This document presents a detailed analysis comparing **Engram-PEFT** and **LoRA** (Low-Rank Adaptation) using empirical data from the `engram_test8` run on **NVIDIA RTX 4090D 24GB**.
 
-## 1. Executive Summary
+## 1. Metric Overview (Latest Run)
 
-| Metric | LoRA (r=16) | Engram (2 layers) | Delta |
-| :--- | :--- | :--- | :--- |
-| **Trainable Params** | 2.88 M | 545.4 M | +18,800% |
-| **Training Speed** | 0.1777 s/step | **0.1643 s/step** | **~8% Faster** |
-| **Training Loss** | **1.254** | 1.311 | LoRA -4.3% |
-| **Eval Loss** | 1.153 | **1.141** | **Engram -1.1%** |
-| **Memory (Allocated)** | 5.05 GB | 6.05 GB | +1.0 GB |
-| **Memory (System/nvtop)**| 6.07 GiB | **6.97 GiB** | **+0.9 GiB** |
+The table below summarizes the key performance indicators from the 3000-step benchmark (`--batch_size 16`, `--grad_accum 2`, `--subset 30000`).
 
-## 2. Computational Analysis: Why Engram is Faster
-A common misconception is that a higher number of trainable parameters ($545M$ vs. $3M$) always leads to slower training. Engram breaks this correlation through **Sparse Retrieval Architecture**.
+| Metric | Base Model (Zero-shot) | LoRA (Baseline) | Engram (2 Layers) | Delta (Engram vs LoRA) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Eval Loss** | 1.7401 | **0.9890** | 1.0165 | +2.7% |
+| **Training Steps** | - | 3000 | 3000 | - |
+| **Peak Allocated (GB)**| 2.05 | 8.07 | 9.38 | +1.31 GB |
+| **Peak VRAM (nvtop)** | 2.91 GiB | 9.35 GiB | 10.82 GiB | +1.47 GiB |
+| **Avg Time/Step (s)** | - | **0.2738** | 0.2961 | +8.1% (Slower) |
 
-### LoRA Complexity
-LoRA injects rank-update matrices ($A$ and $B$) into existing linear layers (typically $Q$ and $V$). 
-- **Operation**: $Y = XW + (XA)B$.
-- **Compute Cost**: Adds $O(B \times L \times D \times r)$ operations per layer.
-- **Overhead**: While $r$ is small (16), LoRA is typically applied across **all** transformer layers (22 in TinyLlama). This multiplies the kernel launch overhead and the backpropagation cost across the entire network depth.
+## 2. Memory Discrepancy Analysis: JSON vs. nvtop
 
-### Engram Complexity
-Engram uses a modular injection at specific bottleneck layers (e.g., layers 2 and 11).
-- **Operation**: Sparse lookup followed by a gated projection.
-- **Compute Cost**: 
-    1. **Sparse Lookup**: $O(B \times L \times K)$ where $K$ is total heads. This is independent of the vocabulary size.
-    2. **Gating Projection**: $O(B \times L \times 5 \times D_{eng} \times D_{model})$.
-- **Efficiency Gains**:
-    1. **Layer Sparsity**: By targeting only the layers most critical for knowledge injection, Engram reduces the total number of gradient calculations compared to a global LoRA application.
-    2. **Kernel Efficiency**: Engram consolidates structural parameters into few, larger GEMM operations (Single Gating block) rather than many tiny rank-update operations spread across 22 layers.
-    3. **Pre-computation**: `EngramDataCollator` pre-calculates hash indices on the CPU, removing the hashing overhead from the GPU timeline. In our latest version, this is **highly vectorized** using NumPy broadcasting and supports **multi-process workers** (`num_workers`), effectively parallelizing the most CPU-intensive part of the Engram pipeline across multiple cores.
+A consistent observation is that `nvtop` (system-level) reports higher VRAM usage than the JSON training metrics (tensor-level). 
 
-## 3. Memory Footprint Analysis
+### Why nvtop is higher:
+1. **CUDA Context Overhead**: Initializing the GPU driver and context consumes a baseline of VRAM. Our baseline measurements (Idle: 0.47G, Base Loaded: 2.91G) indicate that the TinyLlama-1.1B weights + CUDA context take ~2.44 GiB, even before training allocations begin.
+2. **PyTorch Caching Allocator**: PyTorch's `peak_memory_gb` records `torch.cuda.max_memory_allocated()`, which only counts active tensors. However, the allocator keeps a pool of "Reserved" memory to speed up future allocations. `nvtop` shows this **Reserved memory + Context memory**.
+3. **Workspace Buffers**: Operations like large GEMMs or cross-entropy loss gradients often require temporary workspace buffers managed internally by cuBLAS or cuDNN, which may not be fully tracked as allocated tensors in PyTorch metrics.
 
-### VRAM Discrepancy (Allocated vs. System)
-One of the most frequent questions is why `nvtop` shows higher usage than our internal metrics:
-- **CUDA Context**: ~500 MB is reserved immediately by the NVIDIA driver.
-- **PyTorch Caching Allocator**: PyTorch maintains a "pool" of reserved GPU memory blocks. `nvtop` shows the *pool size*, whereas `torch.cuda.max_memory_allocated()` (recorded in our logs) shows the *actual bytes used by tensors*.
-- **Observation**: LoRA peaked at **6.07 GiB** in `nvtop` while Engram peaked at **6.97 GiB**. This ~0.9 GiB gap in system-visible memory closely mirrors the ~1.0 GB gap in allocated tensor memory.
+### Observations:
+- In this run, the gap between "Allocated" and "nvtop" is **~1.3–1.4 GiB**.
+- This gap is relatively stable regardless of whether LoRA or Engram is running, confirming it is an infrastructure overhead rather than an adapter-specific leak.
 
-### The "1GB Weight Gap"
-The difference in peak allocated memory (~1.0 GB) is deterministic and scales with the Engram capacity:
-- **Calculation**: $2 \text{ layers} \times 16 \text{ heads} \times 256,000 \text{ capacity} \times 64 \text{ dim\_per\_head} \times 2 \text{ bytes (FP16)} \approx \mathbf{1.048 \text{ GB}}$.
-- Engram's overhead is primarily **static** (weights) rather than **dynamic** (activations), making it very predictable for large-scale deployments.
+## 3. Convergence & Speed Analysis
 
-## 4. Performance & Convergence
+### Loss Comparison
 
-### Loss Curve Comparison
 ![Loss Curve Comparison](../figures/loss_curve.png)
 
-Engram starts with a higher initial loss (due to zero-initialized gating which initially isolates the new embeddings), but converges rapidly.
+- **LoRA** achieved a slightly better final evaluation loss (**0.989**) compared to **Engram** (**1.017**). 
+- In this specific configuration, LoRA's global adaptation across all layers provided a stronger signal than Engram's localized sparse injection at layers 2 and 11.
 
-### Generalization: Training vs. Evaluation
-An important observation from the raw metrics is the relationship between training and validation loss:
-- **Training Loss**: LoRA (1.254) slightly outperforms Engram (1.311).
-- **Evaluation Loss**: Engram (**1.141**) outperforms LoRA (1.153).
-- **Insight**: LoRA's low-rank updates are more prone to overfitting the specific patterns in the training samples. Engram's high-capacity sparse memory, combined with its context-aware gating, captures more robust semantic features that generalize significantly better to the evaluation set.
+### Computational Efficiency
+- **Engram** is approximately **8% slower** than LoRA in this run (0.296s vs 0.274s).
+- This is contrast to previous tests where Engram showed speed advantages. The increased step time is likely due to the overhead of the larger subset processing (`30,000` samples) and the specific gradient accumulation settings, which may shift the bottleneck towards the gated projection layers.
+- **Engram's Sparse Advantage**: While slightly slower in latency per step, Engram maintains a much higher parameter capacity (545M params) within a manageable VRAM footprint, allowing for potential scaling to tasks that require massive knowledge injection which LoRA might struggle to store.
 
-### Throughput (Tokens per Second)
-The **~8% reduction** in time-per-step translates directly to higher training throughput. For large models (7B+), the advantage of injecting massive knowledge via a few Engram layers versus many LoRA layers becomes even more pronounced.
+## 4. Hardware Utilization
 
-## 5. Conclusion: Selecting the Right Method
+- **GPU Utilization**: Both methods hit **~100% GPU utilization**, indicating high efficiency in kernel execution.
+- **Power/Thermal**: The RTX 4090D effectively handled the ~10GB footprint with significant headroom (24GB total), allowing for potential increases in batch size or Engram capacity (more layers or higher n-gram counts).
 
-| Scenario | Recommended Method | Why? |
-| :--- | :--- | :--- |
-| **Fine-tuning on niche tasks** | **LoRA** | Extremely low memory overhead; good for small datasets. |
-| **Massive Knowledge Injection** | **Engram** | High parameter capacity (500M+) with same/lower latency. |
-| **Inference Latency Sensitive** | **Engram** | Faster step-time; scales better with model depth. |
-| **Extremely VRAM Constrained** | **LoRA** | Saves ~1GB of weights compared to 2-layer Engram. |
+## 5. Conclusion
 
-Engram-PEFT represents a shift from "adapting the existing model" (LoRA) to "expanding the model's memory capacity" (Engram), providing the benefits of deep knowledge storage with the efficiency of sparse retrieval.
-
-## 6. Detailed Metrics (Raw Data)
-
-The following table summarizes the raw metrics captured during the benchmarking process:
-
-| Metric | Base Model (Zero-shot) | LoRA Baseline | Engram-PEFT (2 Layers) |
-| :--- | :--- | :--- | :--- |
-| **Eval Loss** | 1.80629 | 1.15317 | **1.14126** |
-| **Final Training Loss** | - | **1.25401** | 1.31103 |
-| **Peak Allocated (GB)** | 2.04900 | 5.05315 | 6.05095 |
-| **Avg Time/Step (s)** | - | 0.17771 | **0.16431** |
-| **Training Steps** | - | 2000 | 2000 |
-| **VRAM reserved (nvtop)** | ~2.91 GiB | **6.07 GiB** | **6.97 GiB** |
+For the TinyLlama-1.1B TinyStories task:
+1. **LoRA** remains the more efficient adapter for pure loss optimization on smaller datasets.
+2. **Engram** provides a path for massive parameter expansion with predictable VRAM scaling, though it incurs a small latency penalty (~8%) and slightly higher base memory footprint.
+3. The higher memory reported by `nvtop` is a physical reality of the CUDA ecosystem and should be anticipated (~1.5 GiB overhead) when planning deployments.

@@ -116,10 +116,14 @@ def get_optimizer(
         else:
             other_params.append(param)
 
+    # Safe retrieval of Engram-specific config attributes
+    lr_multiplier = getattr(model.config, "learning_rate_multiplier", 1.0)
+    config_weight_decay = getattr(model.config, "weight_decay", 0.0)
+
     # Engram embedding parameters: scaled LR, no weight decay
     embedding_group = {
         "params": embedding_params,
-        "lr": base_learning_rate * model.config.learning_rate_multiplier,
+        "lr": base_learning_rate * lr_multiplier,
         "weight_decay": 0.0,
     }
 
@@ -127,7 +131,7 @@ def get_optimizer(
     other_group = {
         "params": other_params,
         "lr": base_learning_rate,
-        "weight_decay": model.config.weight_decay,
+        "weight_decay": config_weight_decay,
     }
 
     optimizers: List[Optimizer] = []
@@ -169,5 +173,50 @@ def get_scheduler(
         if progress > 0.8:
             return 0.316
         return 1.0
+
+    return LambdaLR(optimizer, lr_lambda)
+
+
+def get_warmup_hold_cosine_scheduler(
+    optimizer: Optimizer,
+    num_training_steps: int,
+    warmup_steps: int = 0,
+    hold_steps: int = 0,
+    min_lr_ratio: float = 0.0,
+) -> LambdaLR:
+    """
+    Returns a learning rate scheduler that has a linear warmup, followed by a
+    period of constant peak learning rate (hold), followed by a cosine decay
+    to a minimum learning rate.
+
+    Args:
+        optimizer: The optimizer to schedule.
+        num_training_steps: Total number of training steps.
+        warmup_steps: Number of warmup steps.
+        hold_steps: Number of steps to hold the peak learning rate.
+        min_lr_ratio: The ratio of the minimum learning rate to the peak learning rate.
+
+    Returns:
+        LambdaLR: The learning rate scheduler.
+    """
+    import math
+
+    def lr_lambda(current_step: int) -> float:
+        if current_step < warmup_steps:
+            return float(current_step) / float(max(1, warmup_steps))
+
+        if current_step < warmup_steps + hold_steps:
+            return 1.0
+
+        # Cosine decay
+        progress = float(current_step - warmup_steps - hold_steps) / float(
+            max(1, num_training_steps - warmup_steps - hold_steps)
+        )
+        if progress > 1.0:
+            return min_lr_ratio
+
+        cosine_decay = 0.5 * (1.0 + math.cos(math.pi * progress))
+        # Scale cosine decay to reach min_lr_ratio instead of 0
+        return min_lr_ratio + (1.0 - min_lr_ratio) * cosine_decay
 
     return LambdaLR(optimizer, lr_lambda)

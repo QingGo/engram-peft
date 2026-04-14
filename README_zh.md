@@ -48,20 +48,20 @@ model = get_engram_model(base_model, config, tokenizer)
 
 # 3. 快速检查可训练参数
 model.print_trainable_parameters()
-# trainable params: 11,214,400 || all params: 1,111,214,400 || trainable%: 1.0092
+# trainable params: 86,938,368 || all params: 1,186,986,752 || trainable%: 7.3243
 ```
 
 ---
 
 ## 📊 性能对比
 
-| 方法 | 额外参数总量 | 训练速度 (s/step) | 训练集 Loss | 验证集 Loss | 显存占用 (Total) |
+| 方法 | 额外参数总量 | 训练速度 (s/step) | 训练集 Loss | 验证集 Loss | 显存占用 (nvtop) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **LoRA** (r=16) | 2.88 M | 0.1777 s | **1.254** | 1.153 | 6.07 GiB |
-| **Engram-PEFT** | **545.4 M** | **0.1643 s** | 1.311 | **1.141** | **6.97 GiB** |
+| **LoRA** (r=16) | ~2.25 M | **0.2738 s** | **1.231** | **0.989** | 9.35 GiB |
+| **Engram-PEFT** | **545.4 M** | 0.2961 s | 1.263 | 1.017 | 10.82 GiB |
 
 > [!TIP]
-> **性能洞察**：虽然 LoRA 在训练集上的 Loss 略低，但 **Engram-PEFT 在验证集上表现更优**，这表明 Engram 在知识捕捉和泛化能力上更具优势。
+> **性能洞察**：在 RTX 4090D 上的最新 3000 步基准测试中，LoRA 展现了稍好的 Loss 和速度。然而，Engram-PEFT 提供了 **240 倍的参数容量** (545M) 用于知识存储，且仅带来了约 8% 的延迟增加。这使其成为需要大规模事实记忆 recall 任务的理想选择。
 
 ### Loss 曲线对比
 ![Loss 曲线对比](figures/loss_curve.png)
@@ -73,13 +73,12 @@ model.print_trainable_parameters()
 ## 🛠 特性
 
 - **100% 对齐论文**：实现了附录 A 表 5 的参数以及 DeepSeek 官方的门控/哈希逻辑。
-- **向量化 CPU 端预计算**：`EngramDataCollator` 使用高度优化的 NumPy 广播机制在 CPU 上预计算哈希。支持多进程加载 (`num_workers > 0`)，确保 100% 的 GPU 利用率。
+- **CPU 预取与预计算**：`EngramDataCollator` 在 CPU 上预先计算多头哈希索引。配合 `num_workers > 0` 可实现与训练并行的异步预取，确保 GPU 零哈希开销。
 - **分词器压缩 (Tokenizer Compression)**：内置 NFKC 和小写归一化，实现 23% 的词表缩减。
+- **跨模型权重迁移**：独有特性（详见 `weight_transfer.py`），支持通过语料库的字符级对齐，在不同模型（如 Llama 到 Qwen）之间迁移 Engram 权重——实现知识的“回收再利用”。
 - **零侵入性**：通过 forward hook 注入；无需修改基础模型架构源码。
 - **类 PEFT API**：提供 `print_trainable_parameters()` 和 `save_pretrained()` 等熟悉的方法。
 - **命名适配器 (Named Adapters)**：完全兼容 PEFT 风格的 Adapter 管理（add/set/unload），支持多领域知识包并行管理。
-- **最佳实践权重迁移**：支持 **“跨分词器权重迁移”** 的实现（best effort）。通过字符级语义对齐，支持在 Llama、Qwen 等不同体系间复用知识。
-- **结构鲁棒性**：支持跨层映射、Bucket 容量动态扩缩容、N-gram 子集加载。
 - **自动化训练流程**：内置 `EngramTrainer`，自动处理稀疏 Adam 优化、梯度管理与学习率倍率同步。
 
 ---
