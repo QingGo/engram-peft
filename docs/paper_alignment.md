@@ -39,3 +39,14 @@ The following specific implementation details from the DeepSeek official demo ar
     Embedding tables for all heads in a layer are concatenated into a single larger `nn.Embedding` and indexed using offsets for maximum GPU throughput.
 4.  **mHC (multi-Head Hyper-connection)**:
     We support `hc_mult=4` which expands the hidden states before gating, as described in the paper's efficient hyper-connection section.
+
+## Weight Reuse & Knowledge Transfer
+
+One of the key practical advantages of the Engram design—implied by its deterministic hashing and modular nature—is the ability to reuse learned memory across different environments. We implement several enhancements beyond the paper's base training logic:
+
+1.  **Structural Invariance**:
+    Because each N-gram head is independent, weights can be migrated between models with different `target_layers` or different `engram_vocab_size_per_ngram` (via slicing/padding).
+2.  **Logic Alignment (Seeds & Tokenizers)**:
+    The paper emphasizes "normalized textual equivalence." By leveraging this, we can align weights between different tokenizers (e.g., Llama-2 vs Qwen) by using character-level offset mappings on a reference corpus to synchronize the logical hashes.
+3.  **Cross-Model Knowledge Distillation**:
+    A trained Engram module can be treated as a portable "knowledge pack." Our implementation supports loading weights even when hashing seeds differ, by using a best-effort remapping strategy that recovers the semantic mapping from a sample of text data.

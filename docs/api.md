@@ -70,6 +70,8 @@ The wrapper class for the base model. Handles dynamic hook management and weight
 - `from_pretrained(base_model, engram_path)`: Loads Engram weights onto a base model.
 - `unload_engram()`: Dynamically removes all PEFT hooks (reverts to base model).
 - `load_engram(engram_path=None)`: Re-installs hooks and optionally loads weights.
+- `load_weights_flexible(checkpoint_path, layer_mapping=None, reuse_structural=False)`: Loads weights from a checkpoint even if configurations (layers, buckets, n-grams) differ.
+- `remap_from_corpus(corpus_tokens, checkpoint_path, layer_mapping=None, batch_size=32)`: "Best-effort" remapping for cases where seeds or tokenizers differ, using a reference corpus to align indices.
 
 ---
 

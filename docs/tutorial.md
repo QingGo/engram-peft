@@ -119,5 +119,32 @@ engram_model.set_adapter("legal")
 # ... run training for legal knowledge ...
 
 # 3. Switch back to medical knowledge
+# 3. Switch back to medical knowledge
 engram_model.set_adapter("default")
+```
+
+---
+
+## Tutorial 5: Flexible Weight Migration
+
+Engram-PEFT allows you to reuse pre-trained knowledge even if your target model has different layers, bucket capacities, or even a different tokenizer seed.
+
+### Case A: Structural Alignment (Different Layers/Buckets)
+If you have weights trained on layers `[0, 1]` but your new model uses layers `[5, 6]`:
+
+```python
+# Map layer 0 to 5, and layer 1 to 6
+model.load_weights_flexible(
+    "path/to/engram_weights.pt",
+    layer_mapping={0: 5, 1: 6},
+    reuse_structural=False # Recommended: Re-train Gating/Conv for the new layer position
+)
+```
+
+### Case B: Logic Alignment (Different Seeds/Tokenizer)
+If the hashing logic differs (e.g., a different `seed` was used in `EngramConfig`), use a reference corpus to "re-discover" the correct indices via best-effort remapping:
+
+```python
+# corpus_tokens should be a representative sample of your training data
+model.remap_from_corpus(corpus_tokens, "path/to/engram_weights.pt")
 ```

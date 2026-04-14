@@ -47,6 +47,36 @@ uv run python examples/end_to_end_cpu.py
 
 ---
 
+## 4. Flexible Weight Migration: `flexible_loading.py`
+
+Demonstrates how to migrate Engram weights between different model configurations (e.g., different layer counts or bucket sizes).
+
+### Features
+- **Automatic Resizing**: Slices or zero-pads embedding tables to match target bucket capacities.
+- **Layer Re-mapping**: Maps specific source layers to new target layers using a dictionary.
+
+### Running the Example
+```bash
+uv run python examples/flexible_loading.py
+```
+
+---
+
+## 5. Cross-Tokenizer Knowledge Transfer: `cross_tokenizer_migration.py`
+
+Showcase the unique ability of Engram to transfer specialized knowledge between models using completely **different tokenizers** (e.g., Llama vs. Qwen).
+
+### Features
+- **Semantic Alignment**: Uses a raw text corpus as a "bridge" to calculate hash correspondences.
+- **Best-Effort Remapping**: Transfers specialized "knowledge tokens" using character-level offset mapping.
+
+### Running the Example
+```bash
+uv run python examples/cross_tokenizer_migration.py
+```
+
+---
+
 ## 🛠 Prerequisites
 
 The examples require additional libraries (`matplotlib`, `seaborn`, `pandas`, `peft`, `datasets`) which are included in the project's dev dependencies.

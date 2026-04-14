@@ -1,6 +1,8 @@
+import logging
 import os
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
+import numpy as np
 import torch
 import torch.nn as nn
 from transformers import PreTrainedModel, PreTrainedTokenizerBase
@@ -9,6 +11,14 @@ from engram_peft.compression import CompressedTokenizer
 from engram_peft.config import EngramConfig
 from engram_peft.hashing import NgramHashMapping
 from engram_peft.layer import EngramLayer
+from engram_peft.weight_transfer import (
+    align_embedding_table,
+    check_compatibility,
+    get_layer_mapping,
+    remap_weights_from_corpus,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class EngramModel(nn.Module):
@@ -396,6 +406,130 @@ class EngramModel(nn.Module):
         model = cls(base_model, config, tokenizer=None)
         model.load_engram(engram_path)
         return model
+
+    def load_weights_flexible(
+        self,
+        checkpoint_path: str,
+        source_config_path: Optional[str] = None,
+        layer_mapping: Optional[Dict[int, int]] = None,
+        reuse_structural: bool = False,
+    ) -> None:
+        """
+        Loads weights from a checkpoint even if configurations differ.
+        If configurations differ (e.g. layers, ngram_sizes), it performs
+        best-effort alignment.
+        """
+        if source_config_path is None:
+            source_config_dir = os.path.dirname(checkpoint_path)
+            source_config_path = os.path.join(source_config_dir, "config.json")
+
+        if not os.path.exists(source_config_path):
+            raise FileNotFoundError(f"Source config not found at {source_config_path}")
+
+        src_config = EngramConfig.from_pretrained(os.path.dirname(source_config_path))
+        check_compatibility(src_config, self.config)
+
+        # Initialize src_mapper with full target_layers to ensure deterministic prime generation
+        src_mapper = NgramHashMapping(
+            engram_vocab_size_per_ngram=src_config.engram_vocab_size_per_ngram,
+            ngram_sizes=src_config.ngram_sizes,
+            n_head_per_ngram=src_config.n_head_per_ngram,
+            layer_ids=src_config.target_layers,
+            seed=src_config.seed,
+            tokenizer_name_or_path=src_config.tokenizer_name_or_path,
+        )
+        target_mapper = self.hash_mapping
+
+        src_state_dict = torch.load(
+            checkpoint_path, map_location="cpu", weights_only=True
+        )
+        mapping = get_layer_mapping(
+            src_config.target_layers, self.config.target_layers, layer_mapping
+        )
+
+        target_state_dict = self.engram_layers.state_dict()
+
+        for src_id, target_id in mapping.items():
+            logger.info(
+                f"Mapping weights: Source Layer {src_id} -> Target Layer {target_id}"
+            )
+
+            # 1. Align Embedding Table
+            src_emb_key = f"{src_id}.multi_head_embedding.embedding.weight"
+            target_emb_key = f"{target_id}.multi_head_embedding.embedding.weight"
+
+            if src_emb_key in src_state_dict:
+                target_state_dict[target_emb_key] = align_embedding_table(
+                    src_state_dict[src_emb_key],
+                    src_config,
+                    self.config,
+                    src_id,
+                    target_id,
+                    target_mapper=target_mapper,
+                    src_mapper=src_mapper,
+                )
+
+            # 2. Structural modules (Gating, Conv)
+            if reuse_structural:
+                # Try to copy weights if shapes match
+                for key in src_state_dict:
+                    if (
+                        key.startswith(f"{src_id}.")
+                        and "multi_head_embedding" not in key
+                    ):
+                        suffix = key[len(str(src_id)) + 1 :]
+                        target_key = f"{target_id}.{suffix}"
+                        if target_key in target_state_dict:
+                            if (
+                                src_state_dict[key].shape
+                                == target_state_dict[target_key].shape
+                            ):
+                                target_state_dict[target_key] = src_state_dict[
+                                    key
+                                ].clone()
+                            else:
+                                logger.warning(
+                                    f"Shape mismatch for {target_key}, skipping structural reuse."
+                                )
+
+        self.engram_layers.load_state_dict(target_state_dict)
+        logger.info("Flexible weight transfer complete.")
+
+    def remap_from_corpus(
+        self,
+        corpus: Union[List[str], List[int], np.ndarray, torch.Tensor],
+        checkpoint_path: str,
+        source_config_path: Optional[str] = None,
+        layer_mapping: Optional[Dict[int, int]] = None,
+        batch_size: int = 1024,
+    ) -> None:
+        """
+        Remaps weights using a corpus to handle seed or tokenizer mismatches.
+        If corpus is List[str], it performs cross-tokenizer alignment.
+        """
+        if source_config_path is None:
+            source_config_dir = os.path.dirname(checkpoint_path)
+            source_config_path = os.path.join(source_config_dir, "config.json")
+
+        src_config = EngramConfig.from_pretrained(os.path.dirname(source_config_path))
+        src_state_dict = torch.load(
+            checkpoint_path, map_location="cpu", weights_only=True
+        )
+
+        new_emb_weights = remap_weights_from_corpus(
+            self,
+            src_state_dict,
+            src_config,
+            corpus,
+            layer_mapping=layer_mapping,
+            batch_size=batch_size,
+        )
+
+        # Load into existing engram_layers
+        current_state_dict = self.engram_layers.state_dict()
+        current_state_dict.update(new_emb_weights)
+        self.engram_layers.load_state_dict(current_state_dict)
+        logger.info("Corpus-based remapping complete.")
 
 
 def get_engram_model(

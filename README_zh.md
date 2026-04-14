@@ -69,11 +69,13 @@ model.print_trainable_parameters()
 
 - **100% 对齐论文**：实现了附录 A 表 5 的参数以及 DeepSeek 官方的门控/哈希逻辑。
 - **CPU 端预计算**：`EngramDataCollator` 在 CPU 上预计算多头哈希，确保 100% 的 GPU 利用率。
-- **分词器压缩 (Tokenizer Compression)**：内置 NFKC 和小写归一化，实现 23% 的词表缩减（与论文一致）。
+- **分词器压缩 (Tokenizer Compression)**：内置 NFKC 和小写归一化，实现 23% 的词表缩减。
 - **零侵入性**：通过 forward hook 注入；无需修改基础模型架构源码。
 - **类 PEFT API**：提供 `print_trainable_parameters()` 和 `save_pretrained()` 等熟悉的方法。
-- **命名适配器 (Named Adapters)**：支持通过 `add_adapter()` 和 `set_adapter()` 同时管理多个知识包。
-- **自动化训练**：`EngramTrainer` 在后台自动处理稀疏优化相关的复杂逻辑。
+- **命名适配器 (Named Adapters)**：完全兼容 PEFT 风格的 Adapter 管理（add/set/unload），支持多领域知识包并行管理。
+- **最佳实践权重迁移**：支持 **“跨分词器权重迁移”** 的实现（best effort）。通过字符级语义对齐，支持在 Llama、Qwen 等不同体系间复用知识。
+- **结构鲁棒性**：支持跨层映射、Bucket 容量动态扩缩容、N-gram 子集加载。
+- **自动化训练流程**：内置 `EngramTrainer`，自动处理稀疏 Adam 优化、梯度管理与学习率倍率同步。
 
 ---
 

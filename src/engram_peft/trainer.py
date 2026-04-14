@@ -1,10 +1,8 @@
 import torch
 import torch.nn as nn
+from torch.optim import Optimizer
 from transformers import Trainer
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
-
-if TYPE_CHECKING:
-    from torch.optim import Optimizer  # type: ignore
+from typing import Any, Dict, List, Optional, Union, cast
 
 
 class EngramTrainer(Trainer):
