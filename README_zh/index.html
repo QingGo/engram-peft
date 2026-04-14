@@ -939,7 +939,7 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 
 <span class="c1"># 3. 快速检查可训练参数</span>
 <span class="n">model</span><span class="o">.</span><span class="n">print_trainable_parameters</span><span class="p">()</span>
-<span class="c1"># trainable params: 11,214,400 || all params: 1,111,214,400 || trainable%: 1.0092</span>
+<span class="c1"># trainable params: 86,938,368 || all params: 1,186,986,752 || trainable%: 7.3243</span>
 </code></pre></div>
 <hr />
 <h2 id="_3">📊 性能对比</h2>
@@ -951,31 +951,31 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 <th style="text-align: left;">训练速度 (s/step)</th>
 <th style="text-align: left;">训练集 Loss</th>
 <th style="text-align: left;">验证集 Loss</th>
-<th style="text-align: left;">显存占用 (Total)</th>
+<th style="text-align: left;">显存占用 (nvtop)</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td style="text-align: left;"><strong>LoRA</strong> (r=16)</td>
-<td style="text-align: left;">2.88 M</td>
-<td style="text-align: left;">0.1777 s</td>
-<td style="text-align: left;"><strong>1.254</strong></td>
-<td style="text-align: left;">1.153</td>
-<td style="text-align: left;">6.07 GiB</td>
+<td style="text-align: left;">~2.25 M</td>
+<td style="text-align: left;"><strong>0.2738 s</strong></td>
+<td style="text-align: left;"><strong>1.231</strong></td>
+<td style="text-align: left;"><strong>0.989</strong></td>
+<td style="text-align: left;">9.35 GiB</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>Engram-PEFT</strong></td>
 <td style="text-align: left;"><strong>545.4 M</strong></td>
-<td style="text-align: left;"><strong>0.1643 s</strong></td>
-<td style="text-align: left;">1.311</td>
-<td style="text-align: left;"><strong>1.141</strong></td>
-<td style="text-align: left;"><strong>6.97 GiB</strong></td>
+<td style="text-align: left;">0.2961 s</td>
+<td style="text-align: left;">1.263</td>
+<td style="text-align: left;">1.017</td>
+<td style="text-align: left;">10.82 GiB</td>
 </tr>
 </tbody>
 </table>
 <blockquote>
 <p>[!TIP]
-<strong>性能洞察</strong>：虽然 LoRA 在训练集上的 Loss 略低，但 <strong>Engram-PEFT 在验证集上表现更优</strong>，这表明 Engram 在知识捕捉和泛化能力上更具优势。</p>
+<strong>性能洞察</strong>：在 RTX 4090D 上的最新 3000 步基准测试中，LoRA 展现了稍好的 Loss 和速度。然而，Engram-PEFT 提供了 <strong>240 倍的参数容量</strong> (545M) 用于知识存储，且仅带来了约 8% 的延迟增加。这使其成为需要大规模事实记忆 recall 任务的理想选择。</p>
 </blockquote>
 <h3 id="loss">Loss 曲线对比</h3>
 <p><img alt="Loss 曲线对比" src="../figures/loss_curve.png" /></p>
@@ -984,13 +984,12 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 <h2 id="_4">🛠 特性</h2>
 <ul>
 <li><strong>100% 对齐论文</strong>：实现了附录 A 表 5 的参数以及 DeepSeek 官方的门控/哈希逻辑。</li>
-<li><strong>向量化 CPU 端预计算</strong>：<code>EngramDataCollator</code> 使用高度优化的 NumPy 广播机制在 CPU 上预计算哈希。支持多进程加载 (<code>num_workers &gt; 0</code>)，确保 100% 的 GPU 利用率。</li>
+<li><strong>CPU 预取与预计算</strong>：<code>EngramDataCollator</code> 在 CPU 上预先计算多头哈希索引。配合 <code>num_workers &gt; 0</code> 可实现与训练并行的异步预取，确保 GPU 零哈希开销。</li>
 <li><strong>分词器压缩 (Tokenizer Compression)</strong>：内置 NFKC 和小写归一化，实现 23% 的词表缩减。</li>
+<li><strong>跨模型权重迁移</strong>：独有特性（详见 <code>weight_transfer.py</code>），支持通过语料库的字符级对齐，在不同模型（如 Llama 到 Qwen）之间迁移 Engram 权重——实现知识的“回收再利用”。</li>
 <li><strong>零侵入性</strong>：通过 forward hook 注入；无需修改基础模型架构源码。</li>
 <li><strong>类 PEFT API</strong>：提供 <code>print_trainable_parameters()</code> 和 <code>save_pretrained()</code> 等熟悉的方法。</li>
 <li><strong>命名适配器 (Named Adapters)</strong>：完全兼容 PEFT 风格的 Adapter 管理（add/set/unload），支持多领域知识包并行管理。</li>
-<li><strong>最佳实践权重迁移</strong>：支持 <strong>“跨分词器权重迁移”</strong> 的实现（best effort）。通过字符级语义对齐，支持在 Llama、Qwen 等不同体系间复用知识。</li>
-<li><strong>结构鲁棒性</strong>：支持跨层映射、Bucket 容量动态扩缩容、N-gram 子集加载。</li>
 <li><strong>自动化训练流程</strong>：内置 <code>EngramTrainer</code>，自动处理稀疏 Adam 优化、梯度管理与学习率倍率同步。</li>
 </ul>
 <hr />

@@ -937,7 +937,7 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 
 <span class="c1"># 3. Quick check on trainable parameters</span>
 <span class="n">model</span><span class="o">.</span><span class="n">print_trainable_parameters</span><span class="p">()</span>
-<span class="c1"># trainable params: 11,214,400 || all params: 1,111,214,400 || trainable%: 1.0092</span>
+<span class="c1"># trainable params: 86,938,368 || all params: 1,186,986,752 || trainable%: 7.3243</span>
 </code></pre></div>
 <hr />
 <h2 id="performance-comparison">📊 Performance Comparison</h2>
@@ -949,31 +949,31 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 <th style="text-align: left;">Speed (s/step)</th>
 <th style="text-align: left;">Training Loss</th>
 <th style="text-align: left;">Eval Loss</th>
-<th style="text-align: left;">VRAM (Total)</th>
+<th style="text-align: left;">VRAM (nvtop)</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td style="text-align: left;"><strong>LoRA</strong> (r=16)</td>
-<td style="text-align: left;">2.88 M</td>
-<td style="text-align: left;">0.1777 s</td>
-<td style="text-align: left;"><strong>1.254</strong></td>
-<td style="text-align: left;">1.153</td>
-<td style="text-align: left;">6.07 GiB</td>
+<td style="text-align: left;">~2.25 M</td>
+<td style="text-align: left;"><strong>0.2738 s</strong></td>
+<td style="text-align: left;"><strong>1.231</strong></td>
+<td style="text-align: left;"><strong>0.989</strong></td>
+<td style="text-align: left;">9.35 GiB</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>Engram-PEFT</strong></td>
 <td style="text-align: left;"><strong>545.4 M</strong></td>
-<td style="text-align: left;"><strong>0.1643 s</strong></td>
-<td style="text-align: left;">1.311</td>
-<td style="text-align: left;"><strong>1.141</strong></td>
-<td style="text-align: left;"><strong>6.97 GiB</strong></td>
+<td style="text-align: left;">0.2961 s</td>
+<td style="text-align: left;">1.263</td>
+<td style="text-align: left;">1.017</td>
+<td style="text-align: left;">10.82 GiB</td>
 </tr>
 </tbody>
 </table>
 <blockquote>
 <p>[!TIP]
-<strong>Performance Insight</strong>: Although LoRA achieves a slightly lower training loss, <strong>Engram-PEFT yields a lower evaluation loss</strong>, indicating superior generalization and knowledge capture from the stories dataset.</p>
+<strong>Performance Insight</strong>: In our latest 3000-step benchmark on RTX 4090D, LoRA achieved slightly better loss and speed. However, Engram-PEFT provides <strong>240x more parameter capacity</strong> (545M) for knowledge storage with only a ~8% latency penalty, making it ideal for tasks requiring massive factual recall.</p>
 </blockquote>
 <h3 id="loss-curve-comparison">Loss Curve Comparison</h3>
 <p><img alt="Loss Curve Comparison" src="figures/loss_curve.png" /></p>
@@ -982,13 +982,12 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 <h2 id="features">🛠 Features</h2>
 <ul>
 <li><strong>100% Paper Alignment</strong>: Implements Appendix A Table 5 parameters and the official DeepSeek gating/hashing logic.</li>
-<li><strong>Vectorized CPU-Side Precomputation</strong>: <code>EngramDataCollator</code> uses highly optimized NumPy broadcasting to precompute hashes on CPU. Supports multi-process loading (<code>num_workers &gt; 0</code>) to ensure 100% GPU utilization.</li>
+<li><strong>CPU Prefetching &amp; Precomputation</strong>: <code>EngramDataCollator</code> pre-calculates multi-head hash indices on the CPU. By using <code>num_workers &gt; 0</code>, these indices are prefetched in parallel with training, ensuring zero hashing overhead on the GPU.</li>
 <li><strong>Tokenizer Compression</strong>: Built-in NFKC and lowercase normalization for 23% vocabulary reduction.</li>
+<li><strong>Cross-Model Weight Migration</strong>: A unique feature (see <code>weight_transfer.py</code>) that allows migrating Engram weights between different models (e.g., Llama to Qwen) using character-level alignment on a corpus—effectively "recycling" learned knowledge.</li>
 <li><strong>Zero-Invasive</strong>: Injects via forward hooks; no modification to your base model architecture required.</li>
 <li><strong>Peft-like API</strong>: Familiar methods like <code>print_trainable_parameters()</code> and <code>save_pretrained()</code>.</li>
 <li><strong>Named Adapters</strong>: Industry-standard named adapter management (add/set/unload) for modular knowledge packs.</li>
-<li><strong>Weight Migration</strong>: One-of-a-kind implementation supporting <strong>Best-effort Cross-Tokenizer Migration</strong> (best effort). Reuse weights between Llama, Qwen, and others via semantic offset alignment.</li>
-<li><strong>Structural Robustness</strong>: Supports cross-layer mapping, dynamic bucket resizing, and N-gram subset loading.</li>
 <li><strong>Automated Training</strong>: Native <code>EngramTrainer</code> with built-in sparse Adam support and automatic sync of optimizer hyperparameters.</li>
 </ul>
 <hr />
