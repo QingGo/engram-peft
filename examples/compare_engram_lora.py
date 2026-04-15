@@ -717,8 +717,10 @@ def inference_demo(
 
 
 if __name__ == "__main__":
-    # Set logging level to INFO to see Engram-PEFT injection logs
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    # Set logging level to WARNING for the root logger,
+    # but ALLOW INFO for engram_peft to see injection logs.
+    logging.basicConfig(level=logging.WARNING, format="%(message)s")
+    logging.getLogger("engram_peft").setLevel(logging.INFO)
 
     parser = argparse.ArgumentParser(description="Run Engram End-to-End Test")
     parser.add_argument(

@@ -282,8 +282,10 @@ def inference_demo(
 
 
 def main() -> None:
-    # Set logging level to INFO to see Engram-PEFT injection logs
-    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    # Set logging level to WARNING for the root logger,
+    # but ALLOW INFO for engram_peft to see injection logs.
+    logging.basicConfig(level=logging.WARNING, format="%(message)s")
+    logging.getLogger("engram_peft").setLevel(logging.INFO)
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--max_steps", type=int, default=300)
