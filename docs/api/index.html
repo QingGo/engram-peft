@@ -636,6 +636,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#engramtrainer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EngramTrainer
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -658,6 +669,17 @@
     <span class="md-ellipsis">
       
         get_optimizer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_trainable_param_groups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_trainable_param_groups
       
     </span>
   </a>
@@ -913,6 +935,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#engramtrainer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EngramTrainer
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -935,6 +968,17 @@
     <span class="md-ellipsis">
       
         get_optimizer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get_trainable_param_groups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_trainable_param_groups
       
     </span>
   </a>
@@ -1039,23 +1083,38 @@
 <hr />
 <h2 id="model-wrapping">Model Wrapping</h2>
 <h3 id="get_engram_model"><code>get_engram_model</code></h3>
-<p><code>engram_peft.model.get_engram_model(model, config, tokenizer=None, wrap_peft=False)</code></p>
-<p>Injects Engram layers into a base Transformer model and freezes all base parameters.</p>
+<p><code>engram_peft.model.get_engram_model(model, config, tokenizer=None, wrap_peft=False, train_mode=None)</code></p>
+<p>Injects Engram layers into a base Transformer model and configures which backbone
+parameters remain trainable.</p>
 <p><strong>Args:</strong>
 - <code>model</code> (<code>PreTrainedModel</code>): The Hugging Face model to wrap (e.g., Llama, Qwen).
 - <code>config</code> (<code>EngramConfig</code>): Engram configuration.
 - <code>tokenizer</code> (<code>Optional[PreTrainedTokenizer]</code>): Tokenizer for vocabulary/compression.
-- <code>wrap_peft</code> (<code>bool</code>, default: <code>False</code>): If <code>True</code>, preserves existing trainable parameters (e.g., from a previously applied LoRA adapter) while freezing the rest of the base model. Essential for stacking multiple adapters.</p>
+- <code>wrap_peft</code> (<code>bool</code>, default: <code>False</code>): Backward-compatible alias for <code>train_mode="preserve_trainable"</code>.
+- <code>train_mode</code> (<code>Literal["engram_only", "preserve_trainable", "full_finetune"]</code>, optional): Controls backbone trainability.
+  - <code>engram_only</code>: Freeze the backbone and train only Engram.
+  - <code>preserve_trainable</code>: Preserve parameters that were already trainable before wrapping (e.g., LoRA), then add trainable Engram layers.
+  - <code>full_finetune</code>: Train the full backbone together with Engram.</p>
 <p><strong>Returns:</strong>
 - <code>EngramModel</code>: The wrapped model with injected forward hooks.</p>
+<p><strong>Examples:</strong>
+<div class="highlight"><pre><span></span><code><span class="c1"># Pure Engram PEFT</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">get_engram_model</span><span class="p">(</span><span class="n">base_model</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">tokenizer</span><span class="p">,</span> <span class="n">train_mode</span><span class="o">=</span><span class="s2">&quot;engram_only&quot;</span><span class="p">)</span>
+
+<span class="c1"># LoRA + Engram</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">get_engram_model</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">tokenizer</span><span class="p">,</span> <span class="n">train_mode</span><span class="o">=</span><span class="s2">&quot;preserve_trainable&quot;</span><span class="p">)</span>
+
+<span class="c1"># Full finetuning + Engram</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">get_engram_model</span><span class="p">(</span><span class="n">base_model</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">tokenizer</span><span class="p">,</span> <span class="n">train_mode</span><span class="o">=</span><span class="s2">&quot;full_finetune&quot;</span><span class="p">)</span>
+</code></pre></div></p>
 <h3 id="engrammodel"><code>EngramModel</code></h3>
 <p><code>engram_peft.model.EngramModel</code></p>
 <p>The wrapper class for the base model. Handles dynamic hook management and weight serialization.</p>
 <p><strong>Methods:</strong>
-- <code>print_trainable_parameters()</code>: Prints the count and percentage of trainable parameters.
+- <code>print_trainable_parameters()</code>: Prints trainable counts for backbone, Engram, and total parameters.
 - <code>add_adapter(adapter_name: str, config: EngramConfig)</code>: Adds a new set of Engram weights with its own configuration.
 - <code>set_adapter(adapter_name: str)</code>: Switches the active knowledge pack to the specified adapter.
-- <code>create_optimizer(base_learning_rate: float)</code>: Returns a <code>MixedOptimizer</code> pre-configured for this model's sparse/dense layers.
+- <code>create_optimizer(base_learning_rate: float, **optimizer_kwargs)</code>: Returns a <code>MixedOptimizer</code> with configurable backbone/Engram optimizer groups.
 - <code>create_scheduler(optimizer, num_steps, warmup_steps)</code>: Returns the paper-aligned Step Decay scheduler.
 - <code>save_pretrained(save_directory: str)</code>: Saves ONLY the active Engram weights and configuration.
 - <code>from_pretrained(base_model, engram_path)</code>: Loads Engram weights onto a base model.
@@ -1079,11 +1138,53 @@
 <span class="n">collator</span> <span class="o">=</span> <span class="n">EngramDataCollator</span><span class="p">(</span><span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">)</span>
 <span class="n">trainer</span> <span class="o">=</span> <span class="n">Trainer</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">data_collator</span><span class="o">=</span><span class="n">collator</span><span class="p">)</span>
 </code></pre></div></p>
+<h3 id="engramtrainer"><code>EngramTrainer</code></h3>
+<p><code>engram_peft.trainer.EngramTrainer</code></p>
+<p>Trainer subclass that handles sparse gradient clipping and can build Engram's
+mixed optimizer automatically.</p>
+<p><strong>Notable Args:</strong>
+- <code>optimizer_kwargs</code> (<code>Optional[Dict[str, Any]]</code>): Extra keyword arguments forwarded to <code>model.create_optimizer(...)</code> / <code>get_optimizer(...)</code>. Use this to configure layered optimizer behavior when relying on the trainer's default optimizer creation path.</p>
+<p><strong>Example Usage:</strong>
+<div class="highlight"><pre><span></span><code><span class="n">trainer</span> <span class="o">=</span> <span class="n">EngramTrainer</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">args</span><span class="o">=</span><span class="n">training_args</span><span class="p">,</span>
+    <span class="n">train_dataset</span><span class="o">=</span><span class="n">train_dataset</span><span class="p">,</span>
+    <span class="n">optimizer_kwargs</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;backbone_learning_rate&quot;</span><span class="p">:</span> <span class="mf">5e-5</span><span class="p">,</span>
+        <span class="s2">&quot;engram_dense_learning_rate&quot;</span><span class="p">:</span> <span class="mf">4e-4</span><span class="p">,</span>
+        <span class="s2">&quot;engram_sparse_learning_rate&quot;</span><span class="p">:</span> <span class="mf">2e-3</span><span class="p">,</span>
+    <span class="p">},</span>
+<span class="p">)</span>
+</code></pre></div></p>
 <hr />
 <h2 id="optimization">Optimization</h2>
 <h3 id="get_optimizer"><code>get_optimizer</code></h3>
-<p><code>engram_peft.utils.get_optimizer(model, base_learning_rate=4e-4)</code></p>
-<p>Creates a <code>MixedOptimizer</code> that combines <code>SparseAdam</code> (for embeddings) and <code>Adam</code> (for dense layers).</p>
+<p><code>engram_peft.utils.get_optimizer(model, base_learning_rate=4e-4, ...)</code></p>
+<p>Creates a <code>MixedOptimizer</code> with separate optimizer groups for:
+- Engram sparse embeddings
+- Engram dense parameters
+- Backbone parameters</p>
+<p>Supported optimizer specs:
+- Built-in strings: <code>"adam"</code>, <code>"adamw"</code>, <code>"sgd"</code>, <code>"sparse_adam"</code>
+- Optimizer classes
+- Custom builder callables</p>
+<p><strong>Example Usage:</strong>
+<div class="highlight"><pre><span></span><code><span class="n">optimizer</span> <span class="o">=</span> <span class="n">get_optimizer</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">,</span>
+    <span class="n">backbone_learning_rate</span><span class="o">=</span><span class="mf">5e-5</span><span class="p">,</span>
+    <span class="n">engram_dense_learning_rate</span><span class="o">=</span><span class="mf">4e-4</span><span class="p">,</span>
+    <span class="n">engram_sparse_learning_rate</span><span class="o">=</span><span class="mf">2e-3</span><span class="p">,</span>
+    <span class="n">backbone_optimizer</span><span class="o">=</span><span class="s2">&quot;adamw&quot;</span><span class="p">,</span>
+    <span class="n">engram_dense_optimizer</span><span class="o">=</span><span class="s2">&quot;adam&quot;</span><span class="p">,</span>
+    <span class="n">engram_sparse_optimizer</span><span class="o">=</span><span class="s2">&quot;sparse_adam&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div></p>
+<h3 id="get_trainable_param_groups"><code>get_trainable_param_groups</code></h3>
+<p><code>engram_peft.utils.get_trainable_param_groups(model)</code></p>
+<p>Returns a dictionary with three trainable parameter lists:
+- <code>backbone</code>
+- <code>engram_dense</code>
+- <code>engram_sparse</code></p>
 <h3 id="get_scheduler"><code>get_scheduler</code></h3>
 <p><code>engram_peft.utils.get_scheduler(optimizer, num_training_steps, warmup_steps=0)</code></p>
 <p>Returns a <code>LambdaLR</code> scheduler implementing the Step Decay schedule from the DeepSeek paper (decay at 80% and 90% progress).</p>

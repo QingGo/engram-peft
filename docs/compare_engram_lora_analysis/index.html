@@ -671,10 +671,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#6-conclusion" class="md-nav__link">
+  <a href="#6-overfitting-analysis" class="md-nav__link">
     <span class="md-ellipsis">
       
-        6. Conclusion
+        6. Overfitting Analysis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-conclusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Conclusion
       
     </span>
   </a>
@@ -815,10 +826,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#6-conclusion" class="md-nav__link">
+  <a href="#6-overfitting-analysis" class="md-nav__link">
     <span class="md-ellipsis">
       
-        6. Conclusion
+        6. Overfitting Analysis
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-conclusion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Conclusion
       
     </span>
   </a>
@@ -857,6 +879,7 @@
 <th style="text-align: left;">LoRA (Baseline)</th>
 <th style="text-align: left;">Engram (2 Layers)</th>
 <th style="text-align: left;">LoRA+Engram</th>
+<th style="text-align: left;">Full Finetune+Engram</th>
 <th style="text-align: left;">Best Method</th>
 </tr>
 </thead>
@@ -867,11 +890,13 @@
 <td style="text-align: left;">0.9890</td>
 <td style="text-align: left;">1.0165</td>
 <td style="text-align: left;"><strong>0.9656</strong></td>
+<td style="text-align: left;">1.0944</td>
 <td style="text-align: left;"><strong>LoRA+Engram</strong></td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>Training Steps</strong></td>
 <td style="text-align: left;">-</td>
+<td style="text-align: left;">3000</td>
 <td style="text-align: left;">3000</td>
 <td style="text-align: left;">3000</td>
 <td style="text-align: left;">3000</td>
@@ -883,6 +908,7 @@
 <td style="text-align: left;">8.07</td>
 <td style="text-align: left;">9.38</td>
 <td style="text-align: left;">10.33</td>
+<td style="text-align: left;">15.32</td>
 <td style="text-align: left;">LoRA</td>
 </tr>
 <tr>
@@ -891,6 +917,7 @@
 <td style="text-align: left;">9.35 GiB</td>
 <td style="text-align: left;">10.82 GiB</td>
 <td style="text-align: left;">11.69 GiB</td>
+<td style="text-align: left;">16.80 GiB</td>
 <td style="text-align: left;">LoRA</td>
 </tr>
 <tr>
@@ -899,11 +926,13 @@
 <td style="text-align: left;"><strong>0.2738</strong></td>
 <td style="text-align: left;">0.2961</td>
 <td style="text-align: left;">0.3360</td>
+<td style="text-align: left;">0.3818</td>
 <td style="text-align: left;">LoRA</td>
 </tr>
 <tr>
 <td style="text-align: left;"><strong>GPU Utilization</strong></td>
 <td style="text-align: left;">-</td>
+<td style="text-align: left;">~100%</td>
 <td style="text-align: left;">~100%</td>
 <td style="text-align: left;">~100%</td>
 <td style="text-align: left;">~100%</td>
@@ -913,7 +942,7 @@
 </table>
 <blockquote>
 <p>[!IMPORTANT]
-The <strong>LoRA+Engram</strong> method achieved the best convergence (lowest evaluation loss), outperforming standalone LoRA by <strong>2.3%</strong> and Engram by <strong>5.0%</strong>. This demonstrates the clear synergy between structural adaptation and sparse knowledge injection.</p>
+The <strong>LoRA+Engram</strong> method achieved the best convergence (lowest evaluation loss), outperforming standalone LoRA by <strong>2.3%</strong>, Engram by <strong>5.0%</strong>, and Full Finetune+Engram by <strong>12.2%</strong>. This demonstrates the clear synergy between structural adaptation and sparse knowledge injection. Full Finetune+Engram, while more memory-intensive, shows competitive performance but requires significantly more GPU resources.</p>
 </blockquote>
 <h2 id="2-memory-discrepancy-analysis">2. Memory Discrepancy Analysis</h2>
 <p>A common observation is that system-level monitoring (<code>nvtop</code> / <code>nvidia-smi</code>) reports higher VRAM usage than PyTorch's internal metrics (<code>training_metrics.json</code>).</p>
@@ -939,13 +968,23 @@ The <strong>LoRA+Engram</strong> method achieved the best convergence (lowest ev
 <li><strong>CPU Prefetching (Potential)</strong>: The sparse retrieval nature of n-gram embeddings allows for future optimizations where embeddings are prefetched from CPU RAM to GPU VRAM based on the upcoming tokens, further reducing the GPU memory bottleneck for massive Engram tables.</li>
 </ol>
 <h2 id="5-loss-curve-comparison">5. Loss Curve Comparison</h2>
-<p>The following plot compares the three methods. Note how <strong>LoRA+Engram</strong> (purple) consistently stays below the other curves after the initial warmup.</p>
-<p><img alt="Loss Curve Comparison" src="../../figures/loss_curve.png" /></p>
-<h2 id="6-conclusion">6. Conclusion</h2>
+<p>The following plot compares all four methods. Note how <strong>LoRA+Engram</strong> (purple) consistently stays below the other curves after the initial warmup, while <strong>Full Finetune+Engram</strong> (red) shows a steady but slower convergence pattern.</p>
+<p><img alt="Loss Curve Comparison" src="../../figures/loss_curve_with_full.png" /></p>
+<h2 id="6-overfitting-analysis">6. Overfitting Analysis</h2>
+<p>An important observation from the loss curves is the <strong>unusual pattern in Full Finetune+Engram</strong>:</p>
+<ul>
+<li><strong>Train-Validation Loss Gap</strong>: Full Finetune+Engram shows a significantly smaller gap between training loss and validation loss compared to other methods.</li>
+<li><strong>Theoretical Expectation</strong>: Normally, training loss should be higher than validation loss because training includes dropout regularization, while validation does not.</li>
+<li><strong>Potential Overfitting</strong>: This compressed gap suggests that Full Finetune+Engram may be overfitting to the training data, despite the dropout regularization.</li>
+<li><strong>Possible Causes</strong>: The combination of full parameter updates and Engram's knowledge injection might be allowing the model to memorize training patterns rather than generalize effectively.</li>
+</ul>
+<h2 id="7-conclusion">7. Conclusion</h2>
 <p>For TinyLlama-1.1B training:
-1. <strong>LoRA</strong> is the most GPU-efficient choice for simple adaptation tasks.
+1. <strong>LoRA</strong> is the most GPU-efficient choice for simple adaptation tasks, offering the fastest training speed and lowest memory usage.
 2. <strong>Engram</strong> is superior for knowledge-heavy tasks where parameter count expansion is required without scaling dense compute.
-3. <strong>LoRA+Engram</strong> is the <strong>optimal configuration</strong> for maximizing model performance, providing significantly better convergence at the cost of moderate additional VRAM (~2.3 GB more than LoRA).</p>
+3. <strong>LoRA+Engram</strong> is the <strong>optimal configuration</strong> for maximizing model performance, providing significantly better convergence at the cost of moderate additional VRAM (~2.3 GB more than LoRA).
+4. <strong>Full Finetune+Engram</strong> offers competitive performance but requires substantially more GPU memory (~7.2 GB more than LoRA) and longer training time, with potential overfitting issues.</p>
+<p>The results clearly show that the LoRA+Engram combination provides the best balance of performance, efficiency, and generalization, outperforming both standalone methods and the full finetune approach.</p>
 
 
 

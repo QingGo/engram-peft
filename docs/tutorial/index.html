@@ -570,10 +570,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tutorial-4-managing-multiple-knowledge-packs" class="md-nav__link">
+  <a href="#tutorial-4-full-finetuning-with-engram" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tutorial 4: Managing Multiple Knowledge Packs
+        Tutorial 4: Full Finetuning with Engram
       
     </span>
   </a>
@@ -581,15 +581,26 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tutorial-5-flexible-weight-migration" class="md-nav__link">
+  <a href="#tutorial-5-managing-multiple-knowledge-packs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tutorial 5: Flexible Weight Migration
+        Tutorial 5: Managing Multiple Knowledge Packs
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Tutorial 5: Flexible Weight Migration">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tutorial-6-flexible-weight-migration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tutorial 6: Flexible Weight Migration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tutorial 6: Flexible Weight Migration">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -812,10 +823,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tutorial-4-managing-multiple-knowledge-packs" class="md-nav__link">
+  <a href="#tutorial-4-full-finetuning-with-engram" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tutorial 4: Managing Multiple Knowledge Packs
+        Tutorial 4: Full Finetuning with Engram
       
     </span>
   </a>
@@ -823,15 +834,26 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tutorial-5-flexible-weight-migration" class="md-nav__link">
+  <a href="#tutorial-5-managing-multiple-knowledge-packs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tutorial 5: Flexible Weight Migration
+        Tutorial 5: Managing Multiple Knowledge Packs
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Tutorial 5: Flexible Weight Migration">
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tutorial-6-flexible-weight-migration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tutorial 6: Flexible Weight Migration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tutorial 6: Flexible Weight Migration">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -904,7 +926,12 @@
 
 <span class="c1"># 3. Inject &amp; Freeze</span>
 <span class="n">base_model</span> <span class="o">=</span> <span class="n">AutoModelForCausalLM</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model_id</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">)</span>
-<span class="n">model</span> <span class="o">=</span> <span class="n">get_engram_model</span><span class="p">(</span><span class="n">base_model</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">tokenizer</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">get_engram_model</span><span class="p">(</span>
+    <span class="n">base_model</span><span class="p">,</span>
+    <span class="n">config</span><span class="p">,</span>
+    <span class="n">tokenizer</span><span class="p">,</span>
+    <span class="n">train_mode</span><span class="o">=</span><span class="s2">&quot;engram_only&quot;</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="c1"># Quick check on overhead</span>
 <span class="n">model</span><span class="o">.</span><span class="n">print_trainable_parameters</span><span class="p">()</span>
@@ -951,7 +978,7 @@
 <h3 id="the-double-adapter-strategy">The "Double Adapter" Strategy</h3>
 <ol>
 <li><strong>Apply LoRA</strong> to the base model's Attention or MLP layers.</li>
-<li><strong>Apply Engram</strong> to the Transformer Blocks using the <code>wrap_peft=True</code> flag to keep LoRA weights trainable.</li>
+<li><strong>Apply Engram</strong> to the Transformer Blocks using <code>train_mode="preserve_trainable"</code> to keep LoRA weights trainable.</li>
 <li><strong>Result</strong>: A model that has the reasoning style of LoRA and the factual memory of Engram.</li>
 </ol>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">LoraConfig</span><span class="p">,</span> <span class="n">get_peft_model</span>
@@ -963,18 +990,78 @@
 
 <span class="c1"># 2. Inject Engram on top</span>
 <span class="n">engram_config</span> <span class="o">=</span> <span class="n">EngramConfig</span><span class="p">(</span><span class="n">target_layers</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">15</span><span class="p">])</span>
-<span class="c1"># IMPORTANT: Use wrap_peft=True so Engram doesn&#39;t freeze your LoRA parameters!</span>
-<span class="n">model</span> <span class="o">=</span> <span class="n">get_engram_model</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">engram_config</span><span class="p">,</span> <span class="n">wrap_peft</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> 
+<span class="c1"># IMPORTANT: preserve_trainable keeps existing LoRA parameters trainable.</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">get_engram_model</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">,</span>
+    <span class="n">engram_config</span><span class="p">,</span>
+    <span class="n">train_mode</span><span class="o">=</span><span class="s2">&quot;preserve_trainable&quot;</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="c1"># Now both LoRA and Engram parameters are trainable!</span>
 <span class="n">model</span><span class="o">.</span><span class="n">print_trainable_parameters</span><span class="p">()</span>
 </code></pre></div>
 <blockquote>
 <p>[!IMPORTANT]
-When stacking adapters, ensure you pass <code>wrap_peft=True</code> to <code>get_engram_model</code>. This instructs Engram to identify and preserve the <code>requires_grad=True</code> status of existing parameters (like LoRA weights) instead of performing a blanket freeze on the entire input model.</p>
+When stacking adapters, use <code>train_mode="preserve_trainable"</code> so Engram keeps the <code>requires_grad=True</code> status of existing parameters (like LoRA weights). <code>wrap_peft=True</code> is still supported as a backward-compatible alias, but <code>train_mode</code> is the recommended API.</p>
 </blockquote>
 <hr />
-<h2 id="tutorial-4-managing-multiple-knowledge-packs">Tutorial 4: Managing Multiple Knowledge Packs</h2>
+<h2 id="tutorial-4-full-finetuning-with-engram">Tutorial 4: Full Finetuning with Engram</h2>
+<p>If you want to train the backbone together with Engram, use <code>train_mode="full_finetune"</code> and configure separate optimizer groups for backbone, Engram dense layers, and Engram sparse embeddings.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">torch.optim</span><span class="w"> </span><span class="kn">import</span> <span class="n">AdamW</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoModelForCausalLM</span><span class="p">,</span> <span class="n">AutoTokenizer</span><span class="p">,</span> <span class="n">TrainingArguments</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">engram_peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">EngramConfig</span><span class="p">,</span> <span class="n">EngramTrainer</span><span class="p">,</span> <span class="n">get_engram_model</span>
+
+<span class="n">model_id</span> <span class="o">=</span> <span class="s2">&quot;TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T&quot;</span>
+<span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model_id</span><span class="p">)</span>
+<span class="n">base_model</span> <span class="o">=</span> <span class="n">AutoModelForCausalLM</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model_id</span><span class="p">)</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">EngramConfig</span><span class="p">(</span>
+    <span class="n">target_layers</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">11</span><span class="p">],</span>
+    <span class="n">tokenizer_name_or_path</span><span class="o">=</span><span class="n">model_id</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">model</span> <span class="o">=</span> <span class="n">get_engram_model</span><span class="p">(</span>
+    <span class="n">base_model</span><span class="p">,</span>
+    <span class="n">config</span><span class="p">,</span>
+    <span class="n">tokenizer</span><span class="p">,</span>
+    <span class="n">train_mode</span><span class="o">=</span><span class="s2">&quot;full_finetune&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">optimizer</span> <span class="o">=</span> <span class="n">get_optimizer</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">,</span>
+    <span class="n">backbone_learning_rate</span><span class="o">=</span><span class="mf">5e-5</span><span class="p">,</span>
+    <span class="n">engram_dense_learning_rate</span><span class="o">=</span><span class="mf">4e-4</span><span class="p">,</span>
+    <span class="n">engram_sparse_learning_rate</span><span class="o">=</span><span class="mf">2e-3</span><span class="p">,</span>
+    <span class="n">backbone_optimizer</span><span class="o">=</span><span class="n">AdamW</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Or let EngramTrainer build the layered optimizer for you</span>
+<span class="n">trainer</span> <span class="o">=</span> <span class="n">EngramTrainer</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">args</span><span class="o">=</span><span class="n">TrainingArguments</span><span class="p">(</span>
+        <span class="n">output_dir</span><span class="o">=</span><span class="s2">&quot;engram_full_ft_out&quot;</span><span class="p">,</span>
+        <span class="n">per_device_train_batch_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+        <span class="n">learning_rate</span><span class="o">=</span><span class="mf">4e-4</span><span class="p">,</span>
+    <span class="p">),</span>
+    <span class="n">train_dataset</span><span class="o">=</span><span class="n">my_dataset</span><span class="p">,</span>
+    <span class="n">optimizer_kwargs</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;backbone_learning_rate&quot;</span><span class="p">:</span> <span class="mf">5e-5</span><span class="p">,</span>
+        <span class="s2">&quot;engram_dense_learning_rate&quot;</span><span class="p">:</span> <span class="mf">4e-4</span><span class="p">,</span>
+        <span class="s2">&quot;engram_sparse_learning_rate&quot;</span><span class="p">:</span> <span class="mf">2e-3</span><span class="p">,</span>
+        <span class="s2">&quot;backbone_optimizer&quot;</span><span class="p">:</span> <span class="n">AdamW</span><span class="p">,</span>
+    <span class="p">},</span>
+<span class="p">)</span>
+
+<span class="c1"># Save both parts after training</span>
+<span class="n">model</span><span class="o">.</span><span class="n">save_pretrained</span><span class="p">(</span><span class="s2">&quot;engram_adapter_only&quot;</span><span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">base_model</span><span class="o">.</span><span class="n">save_pretrained</span><span class="p">(</span><span class="s2">&quot;engram_full_model&quot;</span><span class="p">)</span>
+</code></pre></div>
+<blockquote>
+<p>[!IMPORTANT]
+In <code>train_mode="full_finetune"</code>, <code>model.save_pretrained(...)</code> still saves only Engram weights and config. Save <code>model.base_model</code> to a separate directory as well if you want a restorable full-finetuned checkpoint.</p>
+</blockquote>
+<hr />
+<h2 id="tutorial-5-managing-multiple-knowledge-packs">Tutorial 5: Managing Multiple Knowledge Packs</h2>
 <p>Engram-PEFT supports a "Named Adapter" system similar to <code>peft</code>. You can load multiple specialized knowledge packs into the same base model and switch between them at runtime.</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Assuming you have an engram model with &#39;default&#39; knowledge</span>
 <span class="n">engram_model</span><span class="o">.</span><span class="n">print_trainable_parameters</span><span class="p">()</span>
@@ -992,7 +1079,7 @@ When stacking adapters, ensure you pass <code>wrap_peft=True</code> to <code>get
 <span class="n">engram_model</span><span class="o">.</span><span class="n">set_adapter</span><span class="p">(</span><span class="s2">&quot;default&quot;</span><span class="p">)</span>
 </code></pre></div>
 <hr />
-<h2 id="tutorial-5-flexible-weight-migration">Tutorial 5: Flexible Weight Migration</h2>
+<h2 id="tutorial-6-flexible-weight-migration">Tutorial 6: Flexible Weight Migration</h2>
 <p>Engram-PEFT allows you to reuse pre-trained knowledge even if your target model has different layers, bucket capacities, or even a different tokenizer seed.</p>
 <h3 id="case-a-structural-alignment-different-layersbuckets">Case A: Structural Alignment (Different Layers/Buckets)</h3>
 <p>If you have weights trained on layers <code>[0, 1]</code> but your new model uses layers <code>[5, 6]</code>:</p>

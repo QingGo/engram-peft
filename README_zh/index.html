@@ -579,10 +579,38 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="📖 文档">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        训练模式速查
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        分层优化器示例
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
-  <a href="#_6" class="md-nav__link">
+  <a href="#_8" class="md-nav__link">
     <span class="md-ellipsis">
       
         🎯 引用
@@ -593,7 +621,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#_7" class="md-nav__link">
+  <a href="#_9" class="md-nav__link">
     <span class="md-ellipsis">
       
         开源协议
@@ -859,10 +887,38 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="📖 文档">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        训练模式速查
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        分层优化器示例
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
-  <a href="#_6" class="md-nav__link">
+  <a href="#_8" class="md-nav__link">
     <span class="md-ellipsis">
       
         🎯 引用
@@ -873,7 +929,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#_7" class="md-nav__link">
+  <a href="#_9" class="md-nav__link">
     <span class="md-ellipsis">
       
         开源协议
@@ -911,7 +967,7 @@
 </blockquote>
 <p><a href="../LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" /></a>
 <a href="https://qinggo.github.io/engram-peft/"><img alt="Documentation" src="https://img.shields.io/badge/Docs-MkDocs-blue.svg" /></a></p>
-<p><strong>Engram-PEFT</strong> 是一个高性能、100% 对齐论文的 DeepSeek Engram 架构实现。它提供了一个参数高效微调 (PEFT) 接口，可将条件记忆 (Conditional Memory) 注入任何基于 Transformer 的大语言模型。</p>
+<p><strong>Engram-PEFT</strong> 是一个高性能、100% 对齐论文的 DeepSeek Engram 架构实现。它提供了一个类 PEFT 接口，可将条件记忆 (Conditional Memory) 注入任何基于 Transformer 的大语言模型，同时通过显式 <code>train_mode</code> 支持纯 Engram、Adapter 叠加和全参数微调三类工作流。</p>
 <p>Engram 使用稀疏检索机制将 <strong>静态知识存储</strong> 与 <strong>动态推理</strong> 解耦，允许模型在不增加推理 FLOPs 或干扰核心逻辑的情况下，扩展其实际记忆。</p>
 <hr />
 <h2 id="_1">🚀 快速开始</h2>
@@ -935,11 +991,16 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 
 <span class="c1"># 2. 注入 Engram 层 (对齐 arXiv:2601.07372)</span>
 <span class="n">config</span> <span class="o">=</span> <span class="n">EngramConfig</span><span class="p">(</span><span class="n">target_layers</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">11</span><span class="p">,</span> <span class="mi">20</span><span class="p">])</span>
-<span class="n">model</span> <span class="o">=</span> <span class="n">get_engram_model</span><span class="p">(</span><span class="n">base_model</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">tokenizer</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">get_engram_model</span><span class="p">(</span>
+    <span class="n">base_model</span><span class="p">,</span>
+    <span class="n">config</span><span class="p">,</span>
+    <span class="n">tokenizer</span><span class="p">,</span>
+    <span class="n">train_mode</span><span class="o">=</span><span class="s2">&quot;engram_only&quot;</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="c1"># 3. 快速检查可训练参数</span>
 <span class="n">model</span><span class="o">.</span><span class="n">print_trainable_parameters</span><span class="p">()</span>
-<span class="c1"># trainable params: 86,938,368 || all params: 1,186,986,752 || trainable%: 7.3243</span>
+<span class="c1"># trainable params: ... (backbone: 0, engram: ...) || all params: ... || trainable%: ...</span>
 </code></pre></div>
 <hr />
 <h2 id="_3">📊 性能对比</h2>
@@ -979,14 +1040,22 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 <td style="text-align: left;"><strong>0.9656</strong></td>
 <td style="text-align: left;">10.33 GB</td>
 </tr>
+<tr>
+<td style="text-align: left;"><strong>Full Finetune+Engram</strong></td>
+<td style="text-align: left;">~545.4 M</td>
+<td style="text-align: left;">0.3818 s</td>
+<td style="text-align: left;">1.111</td>
+<td style="text-align: left;">1.0944</td>
+<td style="text-align: left;">15.32 GB</td>
+</tr>
 </tbody>
 </table>
 <blockquote>
 <p>[!TIP]
-<strong>性能洞察</strong>：在最新的基准测试（Test 8 &amp; 9, TinyLlama-1.1B, 3000 步）中，<strong>LoRA+Engram</strong> 实现了最佳的收敛效果（最低验证集 Loss），相比独立 LoRA 提升了约 2.3%。Engram-PEFT 提供了 <strong>240 倍的参数容量</strong> (545M) 用于知识存储，且延迟增加极低。推荐使用 LoRA+Engram 以同时获得结构微调与高容量稀疏记忆。</p>
+<strong>性能洞察</strong>：在最新的基准测试（Test 8 &amp; 9, TinyLlama-1.1B, 3000 步）中，<strong>LoRA+Engram</strong> 实现了最佳的收敛效果（最低验证集 Loss），相比独立 LoRA 提升了约 2.3%，相比 Engram 提升了约 5.0%，相比 Full Finetune+Engram 提升了约 12.2%。Engram-PEFT 提供了 <strong>240 倍的参数容量</strong> (545M) 用于知识存储，且延迟增加极低。推荐使用 LoRA+Engram 以同时获得结构微调与高容量稀疏记忆。Full Finetune+Engram 虽然内存消耗更大，但仍表现出竞争性能，不过需要显著更多的 GPU 资源，且存在潜在的过拟合倾向。</p>
 </blockquote>
 <h3 id="loss">Loss 曲线对比</h3>
-<p><img alt="Loss 曲线对比" src="../figures/loss_curve.png" /></p>
+<p><img alt="Loss 曲线对比" src="../figures/loss_curve_with_full.png" /></p>
 <p><em>* Engram 采用稀疏检索机制；每步仅有极小比例（约 1%）的参数被激活并接收梯度更新。关于性能、计算开销和显存占用的详细对比分析，请参阅 <a href="../docs/compare_engram_lora_analysis/">性能对比分析报告 (英文)</a>。</em></p>
 <hr />
 <h2 id="_4">🛠 特性</h2>
@@ -997,7 +1066,9 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 <li><strong>跨模型权重迁移</strong>：独有特性（详见 <code>weight_transfer.py</code>），支持通过语料库的字符级对齐，在不同模型（如 Llama 到 Qwen）之间迁移 Engram 权重——实现知识的“回收再利用”。</li>
 <li><strong>零侵入性</strong>：通过 forward hook 注入；无需修改基础模型架构源码。</li>
 <li><strong>类 PEFT API</strong>：提供 <code>print_trainable_parameters()</code> 和 <code>save_pretrained()</code> 等熟悉的方法。</li>
+<li><strong>显式训练模式</strong>：支持 <code>train_mode="engram_only"</code>、<code>"preserve_trainable"</code> 和 <code>"full_finetune"</code>，更易理解和调试。</li>
 <li><strong>联合训练 (LoRA+Engram)</strong>: 支持 Adapter 叠加。可在单个模型中同时注入 LoRA 进行结构微调和 Engram 进行稀疏知识检索。</li>
+<li><strong>分层优化器控制</strong>：可分别为 backbone、Engram dense 层和 Engram sparse embedding 配置不同优化器。</li>
 <li><strong>命名适配器 (Named Adapters)</strong>：完全兼容 PEFT 风格的 Adapter 管理（add/set/unload），支持多领域知识包并行管理。</li>
 <li><strong>自动化训练流程</strong>：内置 <code>EngramTrainer</code>，自动处理稀疏 Adam 优化、梯度管理与学习率倍率同步。</li>
 <li><strong>灵活的层发现 (Flexible Layer Discovery)</strong>：采用递归逻辑定位 Transformer 层，无视 PEFT 包装嵌套深度。</li>
@@ -1008,8 +1079,30 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 - <a href="../docs/tutorial/">教程</a>: 快速上手指南和领域知识注入。
 - <a href="../docs/api/">API 参考</a>: 详细的类和函数文档。
 - <a href="../docs/paper_alignment/">论文对齐</a>: 我们如何对齐 DeepSeek 的研究。</p>
+<h3 id="_6">训练模式速查</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># 仅训练 Engram</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">get_engram_model</span><span class="p">(</span><span class="n">base_model</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">tokenizer</span><span class="p">,</span> <span class="n">train_mode</span><span class="o">=</span><span class="s2">&quot;engram_only&quot;</span><span class="p">)</span>
+
+<span class="c1"># 保留现有可训练参数（如 LoRA）</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">get_engram_model</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">tokenizer</span><span class="p">,</span> <span class="n">train_mode</span><span class="o">=</span><span class="s2">&quot;preserve_trainable&quot;</span><span class="p">)</span>
+
+<span class="c1"># Engram + 全参数微调</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">get_engram_model</span><span class="p">(</span><span class="n">base_model</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">tokenizer</span><span class="p">,</span> <span class="n">train_mode</span><span class="o">=</span><span class="s2">&quot;full_finetune&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="_7">分层优化器示例</h3>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">torch.optim</span><span class="w"> </span><span class="kn">import</span> <span class="n">AdamW</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">engram_peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_optimizer</span>
+
+<span class="n">optimizer</span> <span class="o">=</span> <span class="n">get_optimizer</span><span class="p">(</span>
+    <span class="n">model</span><span class="p">,</span>
+    <span class="n">backbone_learning_rate</span><span class="o">=</span><span class="mf">5e-5</span><span class="p">,</span>
+    <span class="n">engram_dense_learning_rate</span><span class="o">=</span><span class="mf">4e-4</span><span class="p">,</span>
+    <span class="n">engram_sparse_learning_rate</span><span class="o">=</span><span class="mf">2e-3</span><span class="p">,</span>
+    <span class="n">backbone_optimizer</span><span class="o">=</span><span class="n">AdamW</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
 <hr />
-<h2 id="_6">🎯 引用</h2>
+<h2 id="_8">🎯 引用</h2>
 <p>如果您在研究中使用此实现，请引用 DeepSeek 的原始论文：</p>
 <div class="highlight"><pre><span></span><code><span class="nc">@article</span><span class="p">{</span><span class="nl">deepseek2026engram</span><span class="p">,</span>
 <span class="w">  </span><span class="na">title</span><span class="p">=</span><span class="s">{Conditional Memory via Scalable Lookup: A New Axis of Sparsity for Large Language Models}</span><span class="p">,</span>
@@ -1019,7 +1112,7 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 <span class="p">}</span>
 </code></pre></div>
 <hr />
-<h2 id="_7">开源协议</h2>
+<h2 id="_9">开源协议</h2>
 <p>Apache License 2.0。详情请参阅 <a href="../LICENSE">LICENSE</a>。</p>
 
 
