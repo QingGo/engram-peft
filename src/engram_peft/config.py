@@ -32,6 +32,7 @@ class EngramConfig(PretrainedConfig):
     n_head_per_ngram: int = 8
     embedding_dim: int = 1280
     enable_tokenizer_compression: bool = True
+    layer_container_path: Optional[str] = None
     target_layers: List[int] = field(default_factory=lambda: [2, 15])
     target_modules: Optional[Union[List[str], str]] = None
     hc_mult: int = 4

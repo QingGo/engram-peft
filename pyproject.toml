@@ -71,6 +71,9 @@ ignore = ["E501"]
 include = ["src"]
 exclude = ["tests"]
 reportMissingTypeStubs = false
+executionEnvironments = [
+  { root = "tests", reportArgumentType = "none" }
+]
 
 [dependency-groups]
 dev = [

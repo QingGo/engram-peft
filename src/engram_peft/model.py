@@ -22,6 +22,28 @@ logger = logging.getLogger(__name__)
 
 TrainMode = Literal["engram_only", "preserve_trainable", "full_finetune"]
 
+# Map HF model_type to standard layer container paths
+# We include both full paths (for ForCausalLM) and relative paths (for base Models)
+ARCH_LAYER_MAPPING = {
+    "llama": ["model.layers", "layers"],
+    "qwen2": ["model.layers", "layers"],
+    "mistral": ["model.layers", "layers"],
+    "mixtral": ["model.layers", "layers"],
+    "deepseek_v2": ["model.layers", "layers"],
+    "deepseek_v3": ["model.layers", "layers"],
+    "gemma": ["model.layers", "layers"],
+    "gemma2": ["model.layers", "layers"],
+    "chatglm": ["transformer.encoder.layers", "encoder.layers"],
+    "glm": ["transformer.encoder.layers", "encoder.layers"],
+    "bert": ["bert.encoder.layer", "encoder.layer"],
+    "longformer": ["longformer.encoder.layer", "encoder.layer"],
+    "roberta": ["roberta.encoder.layer", "encoder.layer"],
+    "gpt2": ["transformer.h", "h"],
+    "gpt_neox": ["gpt_neox.layers", "layers"],
+    "phi": ["model.layers", "layers"],
+    "phi3": ["model.layers", "layers"],
+}
+
 
 class EngramModel(nn.Module):
     """
@@ -30,7 +52,7 @@ class EngramModel(nn.Module):
 
     def __init__(
         self,
-        base_model: PreTrainedModel,
+        base_model: Union[PreTrainedModel, nn.Module],
         config: EngramConfig,
         tokenizer: Optional[PreTrainedTokenizerBase] = None,
     ) -> None:
@@ -38,7 +60,7 @@ class EngramModel(nn.Module):
         Initialize the Engram model.
 
         Args:
-            base_model: The Hugging Face PreTrainedModel to wrap.
+            base_model: The base model (nn.Module or PreTrainedModel) to wrap.
             config: EngramConfig containing hyperparameters.
             tokenizer: Optional tokenizer for extracting vocabulary size or mapping.
         """
@@ -164,34 +186,61 @@ class EngramModel(nn.Module):
 
     def _find_transformer_layers(self) -> nn.ModuleList:
         """
-        Find the main transformer layers module list by recursively searching
-        through nested modules (e.g., PeftModel, LlamaForCausalLM).
+        Find the main transformer layers module list using a prioritized
+        discovery strategy (Explicit Path -> Registry -> Heuristic).
         """
+        from engram_peft.utils import find_largest_module_list, get_submodule_by_path
 
-        def _search(m: nn.Module, depth: int = 0) -> Optional[nn.ModuleList]:
-            if depth > 5:
-                return None
+        # Rank 1: Explicit user-provided path
+        if self.config.layer_container_path is not None:
+            container = get_submodule_by_path(
+                self.base_model, self.config.layer_container_path
+            )
+            if isinstance(container, nn.ModuleList):
+                logger.info(
+                    f"[Engram-PEFT] Using explicit layer container: '{self.config.layer_container_path}'"
+                )
+                return container
+            raise ValueError(
+                f"Configured layer_container_path '{self.config.layer_container_path}' "
+                f"is not a nn.ModuleList (got {type(container).__name__})."
+            )
 
-            # 1. Direct check for common ModuleList names
-            for attr in ["layers", "h", "blocks"]:
-                if hasattr(m, attr):
-                    layers = getattr(m, attr)
-                    if isinstance(layers, nn.ModuleList):
-                        return layers
+        # Rank 2: Architecture Registry
+        model_config = getattr(self.base_model, "config", None)
+        if model_config is not None:
+            model_type = getattr(model_config, "model_type", None)
+            if model_type in ARCH_LAYER_MAPPING:
+                reg_paths = ARCH_LAYER_MAPPING[model_type]
+                if isinstance(reg_paths, str):
+                    reg_paths = [reg_paths]
 
-            # 2. Recursive unwrapping of common wrapper attributes
-            for attr in ["model", "transformer", "base_model"]:
-                if hasattr(m, attr):
-                    res = _search(getattr(m, attr), depth + 1)
-                    if res is not None:
-                        return res
-            return None
+                for reg_path in reg_paths:
+                    try:
+                        container = get_submodule_by_path(self.base_model, reg_path)
+                        if isinstance(container, nn.ModuleList):
+                            logger.info(
+                                f"[Engram-PEFT] Identified {model_type} architecture. "
+                                f"Using registered path: '{reg_path}'"
+                            )
+                            return container
+                    except (AttributeError, ValueError):
+                        continue
 
-        layers = _search(self.base_model)
-        if layers is not None:
-            return layers
+        # Rank 3: Heuristic (Recursive Scanner)
+        heuristic_path = find_largest_module_list(self.base_model)
+        if heuristic_path:
+            container = get_submodule_by_path(self.base_model, heuristic_path)
+            # find_largest_module_list ensures it's a ModuleList
+            logger.info(
+                f"[Engram-PEFT] Autodetected layer container via heuristic: '{heuristic_path}'"
+            )
+            return cast(nn.ModuleList, container)
 
-        raise ValueError("Could not find transformer layers in the base model.")
+        raise ValueError(
+            "Could not find transformer layers in the base model. "
+            "Please specify 'layer_container_path' in your EngramConfig."
+        )
 
     def _create_pre_hook(self, layer_id: int) -> Callable[[nn.Module, tuple], tuple]:
         """Creates a pre-forward hook for a specific layer."""
@@ -308,34 +357,18 @@ class EngramModel(nn.Module):
         self._hook_handles.append(model_hook)
 
         # 2. Attach hooks to target transformer layers or specific modules
-        if self.config.target_modules is not None:
-            # Module-based targeting
-            target_names = (
-                [self.config.target_modules]
-                if isinstance(self.config.target_modules, str)
-                else self.config.target_modules
-            )
-            import re
-
-            for name, module in self.base_model.named_modules():
-                for target_name in target_names:
-                    if re.fullmatch(target_name, name) or target_name == name:
-                        # We need a way to track these modules and assign an internal ID
-                        # For simplicity, we use the name as ID if it's not a layer index
-                        # But EngramLayer currently expects layer_id: int.
-                        # This is a limitation we should address if we want true generic targeting.
-                        # For now, we only support target_modules that match transformer blocks
-                        # to avoid breaking the hashing/primes logic which is layer-indexed.
-                        pass
+        logger.info(f"[Engram-PEFT] Attaching Engram layers to {len(layers)} blocks...")
 
         # Current layer-based targeting
         for layer_id in self.config.target_layers:
             if layer_id < len(layers):
                 target_module = layers[layer_id]
+                module_class = type(target_module).__name__
 
                 # Determine target device (from transformer block)
+                target_device = "unknown"
                 try:
-                    target_device = next(target_module.parameters()).device
+                    target_device = str(next(target_module.parameters()).device)
 
                     # Align the entire adapter module to target device (including embeddings)
                     engram_layer = cast(EngramLayer, self.engram_layers[str(layer_id)])
@@ -347,6 +380,10 @@ class EngramModel(nn.Module):
                     self._create_pre_hook(layer_id)
                 )
                 self._hook_handles.append(hook_handle)
+                logger.info(
+                    f"  - [Injected] Layer {layer_id} -> {module_class} "
+                    f"(device: {target_device})"
+                )
 
         self._engram_enabled = True
 
@@ -577,7 +614,7 @@ class EngramModel(nn.Module):
 
 
 def get_engram_model(
-    model: PreTrainedModel,
+    model: Union[PreTrainedModel, nn.Module],
     config: EngramConfig,
     tokenizer: Optional[PreTrainedTokenizerBase] = None,
     wrap_peft: bool = False,
@@ -587,7 +624,7 @@ def get_engram_model(
     Wraps a base model with Engram layers.
 
     Args:
-        model: The PreTrainedModel to wrap.
+        model: The base model (nn.Module or PreTrainedModel) to wrap.
         config: EngramConfig for the Engram layers.
         tokenizer: Optional tokenizer.
         wrap_peft: Backward-compatible alias for train_mode="preserve_trainable".
