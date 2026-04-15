@@ -115,7 +115,42 @@ model.print_trainable_parameters()
 
 ---
 
-## Tutorial 4: Full Finetuning with Engram
+## Tutorial 4: Transparent Injection & Custom Models
+
+Engram-PEFT uses a multi-tiered strategy to find transformer layers. You can monitor this process via logs or override it for custom models.
+
+### 1. Enabling Detailed Logs
+By default, the library is quiet. To see exactly where and how Engram layers are being injected, enable `INFO` logging:
+
+```python
+import logging
+# Only show INFO for engram_peft to avoid noise from other libraries
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger("engram_peft").setLevel(logging.INFO)
+```
+
+**Expected Log Output:**
+```text
+[Engram-PEFT] Identified llama architecture. Using registered path: 'model.layers'
+[Engram-PEFT] Attaching Engram layers to 22 blocks...
+  - [Injected] Layer 2 -> LlamaDecoderLayer (device: cuda:0)
+  - [Injected] Layer 11 -> LlamaDecoderLayer (device: cuda:0)
+```
+
+### 2. Targeting Custom Architectures
+If you are using a non-standard model that isn't in our built-in registry, Engram will fall back to a heuristic (finding the largest `nn.ModuleList`). If this fails, you can specify the path manually:
+
+```python
+config = EngramConfig(
+    layer_container_path="my_model.transformer.h", # Explicit path
+    target_layers=[0, 5, 10]
+)
+model = get_engram_model(base_model, config)
+```
+
+---
+
+## Tutorial 5: Full Finetuning with Engram
 
 If you want to train the backbone together with Engram, use `train_mode="full_finetune"` and configure separate optimizer groups for backbone, Engram dense layers, and Engram sparse embeddings.
 
@@ -175,7 +210,7 @@ model.base_model.save_pretrained("engram_full_model")
 
 ---
 
-## Tutorial 5: Managing Multiple Knowledge Packs
+## Tutorial 6: Managing Multiple Knowledge Packs
 
 Engram-PEFT supports a "Named Adapter" system similar to `peft`. You can load multiple specialized knowledge packs into the same base model and switch between them at runtime.
 
@@ -198,7 +233,7 @@ engram_model.set_adapter("default")
 
 ---
 
-## Tutorial 6: Flexible Weight Migration
+## Tutorial 7: Flexible Weight Migration
 
 Engram-PEFT allows you to reuse pre-trained knowledge even if your target model has different layers, bucket capacities, or even a different tokenizer seed.
 

@@ -26,6 +26,7 @@ Configuration class for Engram PEFT module. Inherits from `transformers.Pretrain
 - `conv_zero_init` (`bool`, default: `True`): Initialize convolution weights to zero to ensure identity mapping at start.
 - `learning_rate_multiplier` (`float`, default: `5.0`): LR multiplier for sparse embedding parameters.
 - `tokenizer_name_or_path` (`str`, default: `"deepseek-ai/DeepSeek-V3"`): Tokenizer used for precomputing hashes.
+- `layer_container_path` (`Optional[str]`, default: `None`): Explicit dot-separated path to the `nn.ModuleList` containing transformer layers (e.g., `"model.layers"`). If provided, it bypasses the automatic architecture discovery.
 
 **Example Usage:**
 ```python
@@ -49,7 +50,7 @@ Injects Engram layers into a base Transformer model and configures which backbon
 parameters remain trainable.
 
 **Args:**
-- `model` (`PreTrainedModel`): The Hugging Face model to wrap (e.g., Llama, Qwen).
+- `model` (`Union[PreTrainedModel, nn.Module]`): The base model to wrap. Supports standard Hugging Face models and custom `torch.nn.Module` architectures.
 - `config` (`EngramConfig`): Engram configuration.
 - `tokenizer` (`Optional[PreTrainedTokenizer]`): Tokenizer for vocabulary/compression.
 - `wrap_peft` (`bool`, default: `False`): Backward-compatible alias for `train_mode="preserve_trainable"`.
