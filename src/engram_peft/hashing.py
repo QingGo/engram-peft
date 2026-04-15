@@ -22,6 +22,8 @@ class NgramHashMapping:
     layer_ids: List[int] = field(default_factory=lambda: [2, 15])
     tokenizer_name_or_path: str = "deepseek-ai/DeepSeek-V3"
     pad_id: int = 2
+    hashing_mode: str = "left"
+    stop_token_ids: List[int] = field(default_factory=list)
     seed: int = 0
 
     def __post_init__(self) -> None:
@@ -96,20 +98,63 @@ class NgramHashMapping:
         """
         batch_size, seq_len = input_ids.shape
         max_n = self.max_ngram_size
+        pad_left, pad_right = 0, 0
 
-        # 1. Pad with pad_id for left context
-        padding = np.full((batch_size, max_n - 1), self.pad_id, dtype=np.int64)
-        padded_tokens = np.concatenate([padding, input_ids], axis=1).astype(np.int64)
+        # 1. Padding tokens according to hashing_mode
+        if self.hashing_mode == "centered":
+            # For centered hashing of max_n tokens:
+            # Shift tokens so that index t is in the middle of the window.
+            # Example n=3: window is [t-1, t, t+1].
+            # This requires floor(max_n/2) left padding and ceil(max_n/2)-1 right padding.
+            pad_left = max_n // 2
+            pad_right = (max_n - 1) - pad_left
+            left_padding = np.full((batch_size, pad_left), self.pad_id, dtype=np.int64)
+            right_padding = np.full(
+                (batch_size, pad_right), self.pad_id, dtype=np.int64
+            )
+            padded_tokens = np.concatenate(
+                [left_padding, input_ids, right_padding], axis=1
+            ).astype(np.int64)
+        else:
+            # Default: left-context (suffix) padding
+            padding = np.full((batch_size, max_n - 1), self.pad_id, dtype=np.int64)
+            padded_tokens = np.concatenate([padding, input_ids], axis=1).astype(
+                np.int64
+            )
 
         # 2. Extract sliding windows for all unique n-gram sizes
-        # ngrams_cache: Dict[n_size, np.ndarray] of shape [batch_size, seq_len, n_size]
         ngrams_cache = {}
+        stop_mask_cache = {}
         for n in set(self.ngram_sizes):
-            view_shape = (batch_size, seq_len, n)
-            strides = padded_tokens.strides + (padded_tokens.strides[-1],)
-            ngrams_cache[n] = np.lib.stride_tricks.as_strided(
-                padded_tokens, shape=view_shape, strides=strides
-            )
+            if self.hashing_mode == "centered":
+                # For a specific n, we might need a different offset than max_n.
+                # Window for t should be [t - floor(n/2), ..., t + ceil(n/2) - 1].
+                # Calculate start offset in the padded_tokens.
+                # padded_tokens[t+pad_left] was originally input_ids[t].
+                # We want a window of size n starting at t+pad_left - n//2.
+                start_offset = pad_left - (n // 2)
+                end_offset = start_offset + seq_len
+                # Use as_strided on the relevant slice
+                view_shape = (batch_size, seq_len, n)
+                strides = padded_tokens.strides + (padded_tokens.strides[-1],)
+                tokens_slice = padded_tokens[:, start_offset : end_offset + n - 1]
+                ngrams_cache[n] = np.lib.stride_tricks.as_strided(
+                    tokens_slice, shape=view_shape, strides=strides
+                )
+            else:
+                # Default suffix extraction
+                view_shape = (batch_size, seq_len, n)
+                strides = padded_tokens.strides + (padded_tokens.strides[-1],)
+                tokens_slice = padded_tokens[:, max_n - n : seq_len + max_n - 1]
+                ngrams_cache[n] = np.lib.stride_tricks.as_strided(
+                    tokens_slice, shape=view_shape, strides=strides
+                )
+
+            # 3. Handle stop_token_ids boundary check
+            if self.stop_token_ids:
+                # Create a mask where any token in the n-gram is a stop token
+                is_stop = np.isin(ngrams_cache[n], self.stop_token_ids)
+                stop_mask_cache[n] = np.any(is_stop, axis=-1)
 
         # 3. Pre-process multipliers and primes for efficient broadcasting
         # We process layer by layer but vectorize across heads.
@@ -141,6 +186,16 @@ class NgramHashMapping:
                 # Broadcasting mix [B, L] against primes [H] -> [B, L, H]
                 # h = (mix % p + p) % p
                 h = np.mod(np.mod(mix[..., np.newaxis], primes) + primes, primes)
+
+                # Apply stop_mask if present
+                if n in stop_mask_cache:
+                    # Set hash to a "virtual" invalid bucket if boundary crossed.
+                    # We can use a deterministic but unlikely value, or just 0 (as masking).
+                    # Using 0 is fine because the hashing logic handles it as a valid bucket,
+                    # but if it matches many "invalid" n-grams, it effectively acts as a
+                    # shared "null memory".
+                    h[stop_mask_cache[n]] = 0
+
                 all_head_hashes.append(h)
 
             # Stack all n-gram heads along the last dimension

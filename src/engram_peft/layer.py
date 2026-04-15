@@ -27,6 +27,7 @@ class ShortConv(nn.Module):
         hc_mult: int = 4,
         activation: bool = True,
         zero_init: bool = True,
+        bidirectional: bool = False,
     ):
         super().__init__()
         self.hidden_size = hidden_size
@@ -34,6 +35,7 @@ class ShortConv(nn.Module):
         self.dilation = dilation
         self.hc_mult = hc_mult
         self.activation = activation
+        self.bidirectional = bidirectional
 
         # Step 1: Independent RMSNorm for each branch
         self.norms = nn.ModuleList(
@@ -89,12 +91,20 @@ class ShortConv(nn.Module):
             batch_size, hc_mult * hidden_size, seq_len
         )
 
-        # Step 4: Causal padding (shift sequence right so conv output corresponds to current pos)
-        pad_len = (self.kernel_size - 1) * self.dilation
-        if pad_len > 0:
-            x_padded = F.pad(x_conv_in, (pad_len, 0))
+        # Step 4: Padding
+        if self.bidirectional:
+            # Symmetric padding for non-causal context (BERT)
+            pad_total = (self.kernel_size - 1) * self.dilation
+            pad_left = pad_total // 2
+            pad_right = pad_total - pad_left
+            x_padded = F.pad(x_conv_in, (pad_left, pad_right))
         else:
-            x_padded = x_conv_in
+            # Causal padding (shift sequence right)
+            pad_len = (self.kernel_size - 1) * self.dilation
+            if pad_len > 0:
+                x_padded = F.pad(x_conv_in, (pad_len, 0))
+            else:
+                x_padded = x_conv_in
 
         # Step 3: Depthwise convolution
         conv_out = self.conv(x_padded)
@@ -313,6 +323,7 @@ class EngramLayer(nn.Module):
             hc_mult=self.num_branches,
             activation=True,
             zero_init=config.conv_zero_init,
+            bidirectional=config.bidirectional_conv,
         )
 
     @property

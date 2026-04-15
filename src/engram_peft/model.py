@@ -173,14 +173,14 @@ class EngramModel(nn.Module):
                 return None
 
             # 1. Direct check for common ModuleList names
-            for attr in ["layers", "h", "blocks"]:
+            for attr in ["layers", "layer", "h", "blocks"]:
                 if hasattr(m, attr):
                     layers = getattr(m, attr)
                     if isinstance(layers, nn.ModuleList):
                         return layers
 
             # 2. Recursive unwrapping of common wrapper attributes
-            for attr in ["model", "transformer", "base_model"]:
+            for attr in ["model", "transformer", "base_model", "bert", "encoder"]:
                 if hasattr(m, attr):
                     res = _search(getattr(m, attr), depth + 1)
                     if res is not None:
@@ -317,16 +317,33 @@ class EngramModel(nn.Module):
             )
             import re
 
+            # We need to map module paths to virtual layer indices for EngramLayer identification
+            # For simplicity, we assign a unique virtual ID to each matched module if it wasn't already assigned.
+            matched_count = 0
             for name, module in self.base_model.named_modules():
                 for target_name in target_names:
                     if re.fullmatch(target_name, name) or target_name == name:
-                        # We need a way to track these modules and assign an internal ID
-                        # For simplicity, we use the name as ID if it's not a layer index
-                        # But EngramLayer currently expects layer_id: int.
-                        # This is a limitation we should address if we want true generic targeting.
-                        # For now, we only support target_modules that match transformer blocks
-                        # to avoid breaking the hashing/primes logic which is layer-indexed.
-                        pass
+                        # Determine which layer ID to use.
+                        # If the user provides a list of layers, we try to match them.
+                        # For target_modules, we usually expect them to correspond to
+                        # the indices in self.engram_layers if they provided a fixed set of target_layers.
+                        # Here, we use a heuristic: if name contains a number, use it. Otherwise use matched_count.
+                        nums = re.findall(r"\d+", name)
+                        v_id = int(nums[-1]) if nums else matched_count
+
+                        if str(v_id) in self.engram_layers:
+                            target_device = next(module.parameters()).device
+                            engram_layer = cast(
+                                EngramLayer, self.engram_layers[str(v_id)]
+                            )
+                            engram_layer.to(target_device)
+
+                            hook_handle = module.register_forward_pre_hook(
+                                self._create_pre_hook(v_id)
+                            )
+                            self._hook_handles.append(hook_handle)
+                            matched_count += 1
+                        break
 
         # Current layer-based targeting
         for layer_id in self.config.target_layers:
@@ -376,7 +393,8 @@ class EngramModel(nn.Module):
             # Crucial: Reset stale indices before setting new ones
             self._current_hash_indices = None
 
-            input_ids_to_hash = input_ids
+            # Prioritize unmasked_input_ids for stable hashing in MLM tasks
+            input_ids_to_hash = kwargs.get("unmasked_input_ids", input_ids)
             if engram_hash_indices is not None:
                 self._current_hash_indices = engram_hash_indices
             elif input_ids_to_hash is not None:

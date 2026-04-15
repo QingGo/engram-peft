@@ -40,11 +40,14 @@ class EngramConfig(PretrainedConfig):
     conv_kernel_size: int = 4
     conv_dilation: Optional[int] = None
     conv_zero_init: bool = True
+    bidirectional_conv: bool = False
     gating_zero_init: bool = False
     learning_rate_multiplier: float = 5.0
     weight_decay: float = 0.0
     tokenizer_name_or_path: str = "deepseek-ai/DeepSeek-V3"
     pad_id: int = 2
+    hashing_mode: str = "left"
+    stop_token_ids: List[int] = field(default_factory=list)
     seed: int = 0
 
     def __init__(
@@ -60,6 +63,7 @@ class EngramConfig(PretrainedConfig):
         conv_kernel_size: int = 4,
         conv_dilation: Optional[int] = None,
         conv_zero_init: bool = True,
+        bidirectional_conv: bool = False,
         gating_zero_init: bool = False,
         learning_rate_multiplier: float = 5.0,
         weight_decay: float = 0.0,
@@ -67,6 +71,8 @@ class EngramConfig(PretrainedConfig):
         pad_id: int = 2,
         seed: int = 0,
         hidden_size: int = 2048,
+        hashing_mode: str = "left",
+        stop_token_ids: Optional[List[int]] = None,
         **kwargs: Any,
     ):
         """Constructs EngramConfig."""
@@ -91,6 +97,7 @@ class EngramConfig(PretrainedConfig):
         )
 
         self.conv_zero_init = conv_zero_init
+        self.bidirectional_conv = bidirectional_conv
         self.gating_zero_init = gating_zero_init
         self.learning_rate_multiplier = learning_rate_multiplier
         self.hidden_size = hidden_size
@@ -98,6 +105,8 @@ class EngramConfig(PretrainedConfig):
         self.tokenizer_name_or_path = tokenizer_name_or_path
         self.pad_id = pad_id
         self.seed = seed
+        self.hashing_mode = hashing_mode
+        self.stop_token_ids = stop_token_ids if stop_token_ids is not None else []
 
         super().__init__(**kwargs)
         # Ensure extra kwargs are set, as PretrainedConfig might miss them in some environments

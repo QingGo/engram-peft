@@ -55,36 +55,57 @@ class EngramDataCollator(DataCollatorForLanguageModeling):
         self, examples: Any, return_tensors: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Processes a batch of examples and adds precomputed engram hash indices.
-
-        Args:
-            examples: List of tokenized examples from the dataset.
-            return_tensors: The type of tensors to return.
-
-        Returns:
-            Dict[str, Any]: A dictionary containing input_ids, labels,
-                and engram_hash_indices.
+        and engram_hash_indices.
         """
+        # Capture raw input_ids before masking if we are doing MLM and want stable hashes
+        raw_input_ids = None
+        if self.mlm and isinstance(examples, list) and "input_ids" in examples[0]:
+            # This is a heuristic to get unmasked IDs if they are available
+            import torch
+
+            # Use the same logic as transformers to pad the raw IDs
+            raw_ids_list = [torch.tensor(e["input_ids"]) for e in examples]
+            raw_input_ids = torch.nn.utils.rnn.pad_sequence(
+                raw_ids_list,
+                batch_first=True,
+                padding_value=float(self.tokenizer.pad_token_id or 0),
+            )
+
         # Step 1: Call parent to get basic LM batch (handles padding, labels, etc.)
         batch = cast(
             Dict[str, Any], super().__call__(examples, return_tensors=return_tensors)
         )
-        input_ids = batch["input_ids"]
 
-        # Step 2: Handle tokenizer compression if enabled and compressor is provided
-        # If config says compression is enabled but no compressor is provided,
-        # we fallback to raw IDs but warning might be useful. The prompt suggests:
+        # Step 2: Determine which IDs to use for hashing
+        # If we captured raw IDs and this is MLM, use them to avoid hashing [MASK]
+        input_ids = batch["input_ids"]
+        if raw_input_ids is not None:
+            batch["unmasked_input_ids"] = raw_input_ids.to(input_ids.device)
+            hash_input_ids = raw_input_ids
+        else:
+            hash_input_ids = input_ids
+
+        # Step 3: Compute and attach hash indices
+        batch = self.compute_and_attach_hashes(batch, hash_input_ids)
+        return batch
+
+    def compute_and_attach_hashes(
+        self, batch: Dict[str, Any], input_ids: torch.Tensor
+    ) -> Dict[str, Any]:
+        """
+        Helper method to compute hash indices and attach them to the batch.
+        Can be used by other collators or directly.
+        """
+        # 1. Handle tokenizer compression if enabled and compressor is provided
         if self.compressor is not None:
             hash_input_ids = self.compressor.compress(input_ids)
         else:
-            # If no compressor, we use the original input_ids for hashing
             hash_input_ids = input_ids
 
-        # Step 3: Precompute engram_hash_indices for all target layers on CPU
-        # hash_mapping.hash returns a Dict[int, np.ndarray] mapping layer_id -> indices
+        # 2. Precompute engram_hash_indices for all target layers on CPU
         hashes_dict = self.hash_mapping.hash(hash_input_ids)
 
-        # Step 4: Consolidate indices into a single tensor [B, L, num_layers, total_heads]
+        # 3. Consolidate indices into a single tensor [B, L, num_layers, total_heads]
         layer_hashes = []
         for layer_id in self.config.target_layers:
             h = hashes_dict[layer_id]
@@ -94,5 +115,4 @@ class EngramDataCollator(DataCollatorForLanguageModeling):
         # Stack along a new dimension for target layers
         # Result shape: [batch_size, seq_len, num_target_layers, total_heads]
         batch["engram_hash_indices"] = torch.stack(layer_hashes, dim=2)
-
         return batch
