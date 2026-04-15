@@ -1,9 +1,8 @@
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any, List, Optional, Union
+from typing import Any, Optional
 
-import numpy as np
 import torch
 import torch.nn as nn
 
@@ -251,7 +250,6 @@ class TestWeightTransfer(unittest.TestCase):
         }
 
         # 4. Patch AutoTokenizer to return our mocks
-        from engram_peft import weight_transfer
 
         with patch(
             "transformers.AutoTokenizer.from_pretrained"

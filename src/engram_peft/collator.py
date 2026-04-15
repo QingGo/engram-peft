@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, Optional, cast
 
 import torch
 from transformers import DataCollatorForLanguageModeling, PreTrainedTokenizerBase

@@ -20,10 +20,10 @@ import torch.nn as nn
 from datasets import Dataset, load_dataset  # type: ignore[import-untyped]
 from transformers import (
     AutoTokenizer,
+    GenerationMixin,
     PretrainedConfig,
     PreTrainedModel,
     PreTrainedTokenizer,
-    Trainer,
     TrainingArguments,
     set_seed,
 )
@@ -148,9 +148,6 @@ class SimpleBlock(nn.Module):
         return x
 
 
-from transformers import GenerationMixin
-
-
 class SimpleTransformer(PreTrainedModel, GenerationMixin):
     config_class = SimpleConfig
 
@@ -249,7 +246,7 @@ def train_engram() -> Tuple[EngramModel, PreTrainedTokenizer, EngramConfig]:
     base_model = SimpleTransformer(base_config)
     base_model.to(DEVICE)  # type: ignore[arg-type]
     print(
-        f"Base model created with {sum(p.numel() for p in base_model.parameters())/1e6:.2f}M parameters."
+        f"Base model created with {sum(p.numel() for p in base_model.parameters()) / 1e6:.2f}M parameters."
     )
 
     # Engram Configuration (CPU Friendly)

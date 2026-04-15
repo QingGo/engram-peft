@@ -1,8 +1,9 @@
+from typing import Any, Dict, Optional, Union, cast
+
 import torch
 import torch.nn as nn
 from torch.optim import Optimizer  # type: ignore
 from transformers import Trainer
-from typing import Any, Dict, List, Optional, Union, cast
 
 
 class EngramTrainer(Trainer):

@@ -1,11 +1,13 @@
-import torch
-import torch.nn as nn
-from engram_peft.config import EngramConfig
-from engram_peft.model import get_engram_model
 import os
 import shutil
 from typing import Any, Optional
 from unittest.mock import MagicMock, patch
+
+import torch
+import torch.nn as nn
+
+from engram_peft.config import EngramConfig
+from engram_peft.model import get_engram_model
 
 
 # --- Setup Dummy Base Model ---
@@ -66,10 +68,6 @@ def main() -> None:
         target_model.engram_layers["0"].multi_head_embedding.embedding.weight.zero_()
 
     print("Target model (Tokenizer B) initialized with zero weights.")
-
-    # 3. Simulate Parallel Tokenization via Mocks
-    # In a real scenario, these would be Llama-2 vs Qwen tokenizers.
-    text = "Machine Learning"
 
     # Tokenizer A: "Machine", " Learning" -> [100, 101]
     # Tokenizer B: "Mach", "ine", " Learning" -> [200, 201, 202]

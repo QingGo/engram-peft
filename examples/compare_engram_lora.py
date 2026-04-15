@@ -23,7 +23,6 @@ import seaborn as sns
 import torch
 from datasets import load_dataset  # type: ignore
 from peft import LoraConfig, PeftModel, TaskType, get_peft_model
-
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -78,9 +77,9 @@ def prepare_dataset(
     max_length: int,
     num_proc: int = 4,
 ) -> Tuple[Any, Any]:
-    print(f"Loading TinyStories dataset (train split)...")
+    print("Loading TinyStories dataset (train split)...")
     train_ds = load_dataset("roneneldan/TinyStories", split="train", streaming=False)
-    print(f"Loading TinyStories dataset (validation split)...")
+    print("Loading TinyStories dataset (validation split)...")
     val_ds = load_dataset("roneneldan/TinyStories", split="validation", streaming=False)
 
     # Subsample immediately for speed
@@ -637,7 +636,7 @@ def inference_demo(
     tokenizer: PreTrainedTokenizerBase,
     results: Dict[str, Any],
 ) -> None:
-    print(f"\n>>> Phase 4: Inference & Gating Visualization")
+    print("\n>>> Phase 4: Inference & Gating Visualization")
 
     prompt = "Once upon a time, there was a little robot named"
     inputs = tokenizer(prompt, return_tensors="pt").to(base_model.device)

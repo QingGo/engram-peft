@@ -2,24 +2,23 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    cast,
     Dict,
     List,
     Mapping,
     Optional,
     Type,
     Union,
+    cast,
     overload,
 )
 
 import torch
-import torch.nn as nn
 from torch.optim.adam import Adam
 from torch.optim.adamw import AdamW
+from torch.optim.lr_scheduler import LambdaLR
 from torch.optim.optimizer import Optimizer
 from torch.optim.sgd import SGD
 from torch.optim.sparse_adam import SparseAdam
-from torch.optim.lr_scheduler import LambdaLR
 
 if TYPE_CHECKING:
     from engram_peft import EngramModel

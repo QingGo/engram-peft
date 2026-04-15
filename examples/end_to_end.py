@@ -16,18 +16,17 @@ uv run python examples/end_to_end.py --max_steps 50 --batch_size 4 --num_workers
 import argparse
 import copy
 import os
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, cast
 
 import torch
 from datasets import load_dataset  # type: ignore
-
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     PreTrainedModel,
     PreTrainedTokenizerBase,
-    set_seed,
     TrainingArguments,
+    set_seed,
 )
 
 from engram_peft import (
@@ -153,7 +152,7 @@ def train_engram(
 def inference_demo(
     base_model: PreTrainedModel, tokenizer: PreTrainedTokenizerBase
 ) -> None:
-    print(f"\n>>> Phase 2: Inference & Dynamic Usage")
+    print("\n>>> Phase 2: Inference & Dynamic Usage")
 
     # Load trained Engram onto the base model
     print(f"Loading trained Engram from {ENGRAM_WEIGHTS_DIR}")
@@ -219,7 +218,7 @@ if __name__ == "__main__":
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    print(f"Loading Base Model...")
+    print("Loading Base Model...")
     base_model = AutoModelForCausalLM.from_pretrained(
         MODEL_NAME, dtype=torch.float16, device_map="auto"
     )

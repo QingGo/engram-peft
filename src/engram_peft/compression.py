@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Union
 import numpy as np
 import torch
 from tokenizers import Regex, normalizers  # type: ignore
-from transformers import AutoTokenizer, PreTrainedTokenizer
+from transformers import AutoTokenizer
 
 
 class CompressedTokenizer:

@@ -1,7 +1,8 @@
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from engram_peft import EngramConfig, get_engram_model
 from torchinfo import summary
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from engram_peft import EngramConfig, get_engram_model
 
 # 1. 加载模型
 MODEL_NAME = "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T"

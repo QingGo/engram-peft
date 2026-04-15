@@ -1,9 +1,8 @@
-from typing import Any, Dict, List
+from typing import Any
 
-import numpy as np
 import pytest
 import torch
-from transformers import AutoTokenizer, PreTrainedTokenizer
+from transformers import AutoTokenizer
 
 from engram_peft.collator import EngramDataCollator
 from engram_peft.config import EngramConfig

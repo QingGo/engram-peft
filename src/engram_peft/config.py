@@ -1,7 +1,6 @@
 import dataclasses
-import json
 import os
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
 from transformers import PretrainedConfig

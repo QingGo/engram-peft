@@ -1,4 +1,3 @@
-import os
 import shutil
 import tempfile
 import unittest
@@ -6,7 +5,6 @@ import unittest
 import numpy as np
 import pytest
 import torch
-from transformers import AutoTokenizer
 
 from engram_peft.compression import CompressedTokenizer
 

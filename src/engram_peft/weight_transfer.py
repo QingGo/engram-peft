@@ -1,11 +1,9 @@
 import logging
-import os
 import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
-import torch.nn as nn
 from tqdm import tqdm  # type: ignore
 
 from engram_peft.config import EngramConfig
@@ -144,6 +142,7 @@ def remap_weights_from_corpus(
     the source tokenizer and the target tokenizer.
     """
     from transformers import AutoTokenizer
+
     from engram_peft.model import EngramModel
 
     if not isinstance(target_model, EngramModel):
@@ -153,9 +152,6 @@ def remap_weights_from_corpus(
     mapping = get_layer_mapping(
         src_config.target_layers, target_config.target_layers, layer_mapping
     )
-
-    # Initialize new state dict with zeros/identity for non-embedding parts
-    new_state_dict: Dict[str, torch.Tensor] = {}
 
     # Setup Mappers
     src_mapper = NgramHashMapping(
@@ -358,12 +354,6 @@ def _get_aligned_hashes(
     for i, (start, end) in enumerate(target_offsets):
         for c in range(start, end):
             char_to_target[c] = i
-
-    # Find common character range
-    max_char = max(
-        src_offsets[-1][1] if src_offsets else 0,
-        target_offsets[-1][1] if target_offsets else 0,
-    )
 
     # We want to find a sequence of (src_token_idx, target_token_idx)
     # Since multiple characters map to one token, we sample at the END of each target token.

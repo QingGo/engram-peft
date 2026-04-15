@@ -1,6 +1,4 @@
 import numpy as np
-import pytest
-import torch
 from scipy.stats import chisquare  # type: ignore[import-untyped]
 from sympy import isprime  # type: ignore[import-untyped]
 
