@@ -1070,7 +1070,8 @@
 - <code>conv_dilation</code> (<code>Optional[int]</code>, default: <code>None</code>): Convolution dilation (defaults to <code>max(ngram_sizes)</code>).
 - <code>conv_zero_init</code> (<code>bool</code>, default: <code>True</code>): Initialize convolution weights to zero to ensure identity mapping at start.
 - <code>learning_rate_multiplier</code> (<code>float</code>, default: <code>5.0</code>): LR multiplier for sparse embedding parameters.
-- <code>tokenizer_name_or_path</code> (<code>str</code>, default: <code>"deepseek-ai/DeepSeek-V3"</code>): Tokenizer used for precomputing hashes.</p>
+- <code>tokenizer_name_or_path</code> (<code>str</code>, default: <code>"deepseek-ai/DeepSeek-V3"</code>): Tokenizer used for precomputing hashes.
+- <code>layer_container_path</code> (<code>Optional[str]</code>, default: <code>None</code>): Explicit dot-separated path to the <code>nn.ModuleList</code> containing transformer layers (e.g., <code>"model.layers"</code>). If provided, it bypasses the automatic architecture discovery.</p>
 <p><strong>Example Usage:</strong>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">engram_peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">EngramConfig</span>
 
@@ -1087,7 +1088,7 @@
 <p>Injects Engram layers into a base Transformer model and configures which backbone
 parameters remain trainable.</p>
 <p><strong>Args:</strong>
-- <code>model</code> (<code>PreTrainedModel</code>): The Hugging Face model to wrap (e.g., Llama, Qwen).
+- <code>model</code> (<code>Union[PreTrainedModel, nn.Module]</code>): The base model to wrap. Supports standard Hugging Face models and custom <code>torch.nn.Module</code> architectures.
 - <code>config</code> (<code>EngramConfig</code>): Engram configuration.
 - <code>tokenizer</code> (<code>Optional[PreTrainedTokenizer]</code>): Tokenizer for vocabulary/compression.
 - <code>wrap_peft</code> (<code>bool</code>, default: <code>False</code>): Backward-compatible alias for <code>train_mode="preserve_trainable"</code>.

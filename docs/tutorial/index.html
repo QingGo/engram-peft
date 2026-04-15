@@ -570,10 +570,49 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tutorial-4-full-finetuning-with-engram" class="md-nav__link">
+  <a href="#tutorial-4-transparent-injection-custom-models" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tutorial 4: Full Finetuning with Engram
+        Tutorial 4: Transparent Injection &amp; Custom Models
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tutorial 4: Transparent Injection &amp; Custom Models">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-enabling-detailed-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Enabling Detailed Logs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-targeting-custom-architectures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Targeting Custom Architectures
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tutorial-5-full-finetuning-with-engram" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tutorial 5: Full Finetuning with Engram
       
     </span>
   </a>
@@ -581,10 +620,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tutorial-5-managing-multiple-knowledge-packs" class="md-nav__link">
+  <a href="#tutorial-6-managing-multiple-knowledge-packs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tutorial 5: Managing Multiple Knowledge Packs
+        Tutorial 6: Managing Multiple Knowledge Packs
       
     </span>
   </a>
@@ -592,15 +631,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tutorial-6-flexible-weight-migration" class="md-nav__link">
+  <a href="#tutorial-7-flexible-weight-migration" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tutorial 6: Flexible Weight Migration
+        Tutorial 7: Flexible Weight Migration
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Tutorial 6: Flexible Weight Migration">
+    <nav class="md-nav" aria-label="Tutorial 7: Flexible Weight Migration">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -823,10 +862,49 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tutorial-4-full-finetuning-with-engram" class="md-nav__link">
+  <a href="#tutorial-4-transparent-injection-custom-models" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tutorial 4: Full Finetuning with Engram
+        Tutorial 4: Transparent Injection &amp; Custom Models
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tutorial 4: Transparent Injection &amp; Custom Models">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-enabling-detailed-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Enabling Detailed Logs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-targeting-custom-architectures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Targeting Custom Architectures
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tutorial-5-full-finetuning-with-engram" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tutorial 5: Full Finetuning with Engram
       
     </span>
   </a>
@@ -834,10 +912,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tutorial-5-managing-multiple-knowledge-packs" class="md-nav__link">
+  <a href="#tutorial-6-managing-multiple-knowledge-packs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tutorial 5: Managing Multiple Knowledge Packs
+        Tutorial 6: Managing Multiple Knowledge Packs
       
     </span>
   </a>
@@ -845,15 +923,15 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tutorial-6-flexible-weight-migration" class="md-nav__link">
+  <a href="#tutorial-7-flexible-weight-migration" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tutorial 6: Flexible Weight Migration
+        Tutorial 7: Flexible Weight Migration
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Tutorial 6: Flexible Weight Migration">
+    <nav class="md-nav" aria-label="Tutorial 7: Flexible Weight Migration">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1005,7 +1083,31 @@
 When stacking adapters, use <code>train_mode="preserve_trainable"</code> so Engram keeps the <code>requires_grad=True</code> status of existing parameters (like LoRA weights). <code>wrap_peft=True</code> is still supported as a backward-compatible alias, but <code>train_mode</code> is the recommended API.</p>
 </blockquote>
 <hr />
-<h2 id="tutorial-4-full-finetuning-with-engram">Tutorial 4: Full Finetuning with Engram</h2>
+<h2 id="tutorial-4-transparent-injection-custom-models">Tutorial 4: Transparent Injection &amp; Custom Models</h2>
+<p>Engram-PEFT uses a multi-tiered strategy to find transformer layers. You can monitor this process via logs or override it for custom models.</p>
+<h3 id="1-enabling-detailed-logs">1. Enabling Detailed Logs</h3>
+<p>By default, the library is quiet. To see exactly where and how Engram layers are being injected, enable <code>INFO</code> logging:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="c1"># Only show INFO for engram_peft to avoid noise from other libraries</span>
+<span class="n">logging</span><span class="o">.</span><span class="n">basicConfig</span><span class="p">(</span><span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">WARNING</span><span class="p">)</span>
+<span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;engram_peft&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+</code></pre></div>
+<p><strong>Expected Log Output:</strong>
+<div class="highlight"><pre><span></span><code>[Engram-PEFT] Identified llama architecture. Using registered path: &#39;model.layers&#39;
+[Engram-PEFT] Attaching Engram layers to 22 blocks...
+  - [Injected] Layer 2 -&gt; LlamaDecoderLayer (device: cuda:0)
+  - [Injected] Layer 11 -&gt; LlamaDecoderLayer (device: cuda:0)
+</code></pre></div></p>
+<h3 id="2-targeting-custom-architectures">2. Targeting Custom Architectures</h3>
+<p>If you are using a non-standard model that isn't in our built-in registry, Engram will fall back to a heuristic (finding the largest <code>nn.ModuleList</code>). If this fails, you can specify the path manually:</p>
+<div class="highlight"><pre><span></span><code><span class="n">config</span> <span class="o">=</span> <span class="n">EngramConfig</span><span class="p">(</span>
+    <span class="n">layer_container_path</span><span class="o">=</span><span class="s2">&quot;my_model.transformer.h&quot;</span><span class="p">,</span> <span class="c1"># Explicit path</span>
+    <span class="n">target_layers</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">]</span>
+<span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">get_engram_model</span><span class="p">(</span><span class="n">base_model</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span>
+</code></pre></div>
+<hr />
+<h2 id="tutorial-5-full-finetuning-with-engram">Tutorial 5: Full Finetuning with Engram</h2>
 <p>If you want to train the backbone together with Engram, use <code>train_mode="full_finetune"</code> and configure separate optimizer groups for backbone, Engram dense layers, and Engram sparse embeddings.</p>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">torch.optim</span><span class="w"> </span><span class="kn">import</span> <span class="n">AdamW</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoModelForCausalLM</span><span class="p">,</span> <span class="n">AutoTokenizer</span><span class="p">,</span> <span class="n">TrainingArguments</span>
@@ -1061,7 +1163,7 @@ When stacking adapters, use <code>train_mode="preserve_trainable"</code> so Engr
 In <code>train_mode="full_finetune"</code>, <code>model.save_pretrained(...)</code> still saves only Engram weights and config. Save <code>model.base_model</code> to a separate directory as well if you want a restorable full-finetuned checkpoint.</p>
 </blockquote>
 <hr />
-<h2 id="tutorial-5-managing-multiple-knowledge-packs">Tutorial 5: Managing Multiple Knowledge Packs</h2>
+<h2 id="tutorial-6-managing-multiple-knowledge-packs">Tutorial 6: Managing Multiple Knowledge Packs</h2>
 <p>Engram-PEFT supports a "Named Adapter" system similar to <code>peft</code>. You can load multiple specialized knowledge packs into the same base model and switch between them at runtime.</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># Assuming you have an engram model with &#39;default&#39; knowledge</span>
 <span class="n">engram_model</span><span class="o">.</span><span class="n">print_trainable_parameters</span><span class="p">()</span>
@@ -1079,7 +1181,7 @@ In <code>train_mode="full_finetune"</code>, <code>model.save_pretrained(...)</co
 <span class="n">engram_model</span><span class="o">.</span><span class="n">set_adapter</span><span class="p">(</span><span class="s2">&quot;default&quot;</span><span class="p">)</span>
 </code></pre></div>
 <hr />
-<h2 id="tutorial-6-flexible-weight-migration">Tutorial 6: Flexible Weight Migration</h2>
+<h2 id="tutorial-7-flexible-weight-migration">Tutorial 7: Flexible Weight Migration</h2>
 <p>Engram-PEFT allows you to reuse pre-trained knowledge even if your target model has different layers, bucket capacities, or even a different tokenizer seed.</p>
 <h3 id="case-a-structural-alignment-different-layersbuckets">Case A: Structural Alignment (Different Layers/Buckets)</h3>
 <p>If you have weights trained on layers <code>[0, 1]</code> but your new model uses layers <code>[5, 6]</code>:</p>
