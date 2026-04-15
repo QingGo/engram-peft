@@ -65,12 +65,13 @@ model.print_trainable_parameters()
 | **LoRA** (r=16) | ~2.25 M | **0.2738 s** | 1.231 | 0.9890 | 8.07 GB |
 | **Engram-PEFT** | **545.4 M** | 0.2961 s | 1.263 | 1.0165 | 9.38 GB |
 | **LoRA+Engram** | ~547.7 M | 0.3360 s | **1.214** | **0.9656** | 10.33 GB |
+| **Full Finetune+Engram** | ~545.4 M | 0.3818 s | 1.111 | 1.0944 | 15.32 GB |
 
 > [!TIP]
-> **性能洞察**：在最新的基准测试（Test 8 & 9, TinyLlama-1.1B, 3000 步）中，**LoRA+Engram** 实现了最佳的收敛效果（最低验证集 Loss），相比独立 LoRA 提升了约 2.3%。Engram-PEFT 提供了 **240 倍的参数容量** (545M) 用于知识存储，且延迟增加极低。推荐使用 LoRA+Engram 以同时获得结构微调与高容量稀疏记忆。
+> **性能洞察**：在最新的基准测试（Test 8 & 9, TinyLlama-1.1B, 3000 步）中，**LoRA+Engram** 实现了最佳的收敛效果（最低验证集 Loss），相比独立 LoRA 提升了约 2.3%，相比 Engram 提升了约 5.0%，相比 Full Finetune+Engram 提升了约 12.2%。Engram-PEFT 提供了 **240 倍的参数容量** (545M) 用于知识存储，且延迟增加极低。推荐使用 LoRA+Engram 以同时获得结构微调与高容量稀疏记忆。Full Finetune+Engram 虽然内存消耗更大，但仍表现出竞争性能，不过需要显著更多的 GPU 资源，且存在潜在的过拟合倾向。
 
 ### Loss 曲线对比
-![Loss 曲线对比](figures/loss_curve.png)
+![Loss 曲线对比](figures/loss_curve_with_full.png)
 
 *\* Engram 采用稀疏检索机制；每步仅有极小比例（约 1%）的参数被激活并接收梯度更新。关于性能、计算开销和显存占用的详细对比分析，请参阅 [性能对比分析报告 (英文)](docs/compare_engram_lora_analysis.md)。*
 

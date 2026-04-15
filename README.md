@@ -65,12 +65,13 @@ model.print_trainable_parameters()
 | **LoRA** (r=16) | ~2.25 M | **0.2738 s** | 1.231 | 0.9890 | 8.07 GB |
 | **Engram-PEFT** | **545.4 M** | 0.2961 s | 1.263 | 1.0165 | 9.38 GB |
 | **LoRA+Engram** | ~547.7 M | 0.3360 s | **1.214** | **0.9656** | 10.33 GB |
+| **Full Finetune+Engram** | ~545.4 M | 0.3818 s | 1.111 | 1.0944 | 15.32 GB |
 
 > [!TIP]
-> **Performance Insight**: In our latest benchmark (Test 8 & 9, TinyLlama-1.1B, 3000 steps), **LoRA+Engram** achieved the best convergence (lowest eval loss), outperforming standalone LoRA by ~2.3%. Engram-PEFT provides **240x more parameter capacity** (545M) for knowledge storage with minimal latency penalty. Use LoRA+Engram to leverage both structural adaptation and high-capacity sparse memory.
+> **Performance Insight**: In our latest benchmark (Test 8 & 9, TinyLlama-1.1B, 3000 steps), **LoRA+Engram** achieved the best convergence (lowest eval loss), outperforming standalone LoRA by ~2.3%, Engram by ~5.0%, and Full Finetune+Engram by ~12.2%. Engram-PEFT provides **240x more parameter capacity** (545M) for knowledge storage with minimal latency penalty. Use LoRA+Engram to leverage both structural adaptation and high-capacity sparse memory. Full Finetune+Engram, while more memory-intensive, shows competitive performance but requires significantly more GPU resources and exhibits potential overfitting tendencies.
 
 ### Loss Curve Comparison
-![Loss Curve Comparison](figures/loss_curve.png)
+![Loss Curve Comparison](figures/loss_curve_with_full.png)
 
 *\* Engram employs sparse lookup; only a tiny fraction of parameters (approx. 1%) are active and receive gradient updates per step. For a detailed breakdown of performance, computation, and memory, see our [Performance Analysis](docs/compare_engram_lora_analysis.md).*
 

@@ -6,17 +6,17 @@ This document presents a detailed analysis comparing **Engram-PEFT**, **LoRA** (
 
 The table below summarizes the key performance indicators from the 3000-step benchmarks using TinyLlama-1.1B on the TinyStories dataset (`--batch_size 16`, `--grad_accum 2`, `--subset 30000`).
 
-| Metric | Base Model (Zero-shot) | LoRA (Baseline) | Engram (2 Layers) | LoRA+Engram | Best Method |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Eval Loss** | 1.7401 | 0.9890 | 1.0165 | **0.9656** | **LoRA+Engram** |
-| **Training Steps** | - | 3000 | 3000 | 3000 | - |
-| **Peak Allocated (GB)**| 2.05 | 8.07 | 9.38 | 10.33 | LoRA |
-| **Peak VRAM (nvtop)** | 2.91 GiB | 9.35 GiB | 10.82 GiB | 11.69 GiB | LoRA |
-| **Avg Time/Step (s)** | - | **0.2738** | 0.2961 | 0.3360 | LoRA |
-| **GPU Utilization** | - | ~100% | ~100% | ~100% | - |
+| Metric | Base Model (Zero-shot) | LoRA (Baseline) | Engram (2 Layers) | LoRA+Engram | Full Finetune+Engram | Best Method |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Eval Loss** | 1.7401 | 0.9890 | 1.0165 | **0.9656** | 1.0944 | **LoRA+Engram** |
+| **Training Steps** | - | 3000 | 3000 | 3000 | 3000 | - |
+| **Peak Allocated (GB)**| 2.05 | 8.07 | 9.38 | 10.33 | 15.32 | LoRA |
+| **Peak VRAM (nvtop)** | 2.91 GiB | 9.35 GiB | 10.82 GiB | 11.69 GiB | 16.80 GiB | LoRA |
+| **Avg Time/Step (s)** | - | **0.2738** | 0.2961 | 0.3360 | 0.3818 | LoRA |
+| **GPU Utilization** | - | ~100% | ~100% | ~100% | ~100% | - |
 
 > [!IMPORTANT]
-> The **LoRA+Engram** method achieved the best convergence (lowest evaluation loss), outperforming standalone LoRA by **2.3%** and Engram by **5.0%**. This demonstrates the clear synergy between structural adaptation and sparse knowledge injection.
+> The **LoRA+Engram** method achieved the best convergence (lowest evaluation loss), outperforming standalone LoRA by **2.3%**, Engram by **5.0%**, and Full Finetune+Engram by **12.2%**. This demonstrates the clear synergy between structural adaptation and sparse knowledge injection. Full Finetune+Engram, while more memory-intensive, shows competitive performance but requires significantly more GPU resources.
 
 ## 2. Memory Discrepancy Analysis
 
@@ -47,14 +47,26 @@ Beyond raw loss optimization, Engram offers several unique advantages:
 
 ## 5. Loss Curve Comparison
 
-The following plot compares the three methods. Note how **LoRA+Engram** (purple) consistently stays below the other curves after the initial warmup.
+The following plot compares all four methods. Note how **LoRA+Engram** (purple) consistently stays below the other curves after the initial warmup, while **Full Finetune+Engram** (red) shows a steady but slower convergence pattern.
 
-![Loss Curve Comparison](../figures/loss_curve.png)
+![Loss Curve Comparison](../figures/loss_curve_with_full.png)
 
-## 6. Conclusion
+## 6. Overfitting Analysis
+
+An important observation from the loss curves is the **unusual pattern in Full Finetune+Engram**:
+
+- **Train-Validation Loss Gap**: Full Finetune+Engram shows a significantly smaller gap between training loss and validation loss compared to other methods.
+- **Theoretical Expectation**: Normally, training loss should be higher than validation loss because training includes dropout regularization, while validation does not.
+- **Potential Overfitting**: This compressed gap suggests that Full Finetune+Engram may be overfitting to the training data, despite the dropout regularization.
+- **Possible Causes**: The combination of full parameter updates and Engram's knowledge injection might be allowing the model to memorize training patterns rather than generalize effectively.
+
+## 7. Conclusion
 
 For TinyLlama-1.1B training:
-1. **LoRA** is the most GPU-efficient choice for simple adaptation tasks.
+1. **LoRA** is the most GPU-efficient choice for simple adaptation tasks, offering the fastest training speed and lowest memory usage.
 2. **Engram** is superior for knowledge-heavy tasks where parameter count expansion is required without scaling dense compute.
 3. **LoRA+Engram** is the **optimal configuration** for maximizing model performance, providing significantly better convergence at the cost of moderate additional VRAM (~2.3 GB more than LoRA).
+4. **Full Finetune+Engram** offers competitive performance but requires substantially more GPU memory (~7.2 GB more than LoRA) and longer training time, with potential overfitting issues.
+
+The results clearly show that the LoRA+Engram combination provides the best balance of performance, efficiency, and generalization, outperforming both standalone methods and the full finetune approach.
 
