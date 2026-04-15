@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union, cast
 
 import numpy as np
 import torch
@@ -19,6 +19,8 @@ from engram_peft.weight_transfer import (
 )
 
 logger = logging.getLogger(__name__)
+
+TrainMode = Literal["engram_only", "preserve_trainable", "full_finetune"]
 
 
 class EngramModel(nn.Module):
@@ -42,6 +44,7 @@ class EngramModel(nn.Module):
         """
         super().__init__()
         self.base_model = base_model
+        self.train_mode: TrainMode = "engram_only"
         # hidden_size is now an explicit field in EngramConfig.
         # It should be set correctly when the config is created.
         self.config = config
@@ -96,17 +99,27 @@ class EngramModel(nn.Module):
         """
         Prints the number of trainable parameters in the model.
         """
-        trainable_params = 0
-        all_param = 0
-        for _, param in self.base_model.named_parameters():
-            all_param += param.numel()
-        for _, param in self.adapters.named_parameters():
-            all_param += param.numel()
-            if param.requires_grad:
-                trainable_params += param.numel()
+        backbone_all = sum(
+            param.numel() for _, param in self.base_model.named_parameters()
+        )
+        backbone_trainable = sum(
+            param.numel()
+            for _, param in self.base_model.named_parameters()
+            if param.requires_grad
+        )
+        engram_all = sum(param.numel() for _, param in self.adapters.named_parameters())
+        engram_trainable = sum(
+            param.numel()
+            for _, param in self.adapters.named_parameters()
+            if param.requires_grad
+        )
+        trainable_params = backbone_trainable + engram_trainable
+        all_param = backbone_all + engram_all
 
         print(
-            f"trainable params: {trainable_params:,} || all params: {all_param:,} || "
+            f"trainable params: {trainable_params:,} "
+            f"(backbone: {backbone_trainable:,}, engram: {engram_trainable:,}) || "
+            f"all params: {all_param:,} || "
             f"trainable%: {100 * trainable_params / all_param:.4f}"
         )
 
@@ -392,13 +405,17 @@ class EngramModel(nn.Module):
         generate_func = getattr(self.base_model, "generate")
         return generate_func(*args, **kwargs)
 
-    def create_optimizer(self, base_learning_rate: float = 4e-4) -> Any:
+    def create_optimizer(
+        self, base_learning_rate: float = 4e-4, **optimizer_kwargs: Any
+    ) -> Any:
         """
         Helper to create the MixedOptimizer for this model.
         """
         from engram_peft.utils import get_optimizer
 
-        return get_optimizer(self, base_learning_rate=base_learning_rate)
+        return get_optimizer(
+            self, base_learning_rate=base_learning_rate, **optimizer_kwargs
+        )
 
     def create_scheduler(
         self, optimizer: Any, num_training_steps: int, warmup_steps: int = 0
@@ -564,6 +581,7 @@ def get_engram_model(
     config: EngramConfig,
     tokenizer: Optional[PreTrainedTokenizerBase] = None,
     wrap_peft: bool = False,
+    train_mode: Optional[TrainMode] = None,
 ) -> EngramModel:
     """
     Wraps a base model with Engram layers.
@@ -572,11 +590,25 @@ def get_engram_model(
         model: The PreTrainedModel to wrap.
         config: EngramConfig for the Engram layers.
         tokenizer: Optional tokenizer.
-        wrap_peft: If True, preserves existing trainable parameters (e.g., LoRA) 
-                  while freezing the base weights. If False (default), performs
-                   a standard blanket freeze of the entire model.
+        wrap_peft: Backward-compatible alias for train_mode="preserve_trainable".
+        train_mode: Controls which backbone parameters remain trainable:
+                   "engram_only" freezes the backbone,
+                   "preserve_trainable" preserves already-trainable params,
+                   "full_finetune" enables the full backbone.
     """
-    if wrap_peft:
+    if train_mode is None:
+        resolved_train_mode: TrainMode = (
+            "preserve_trainable" if wrap_peft else "engram_only"
+        )
+    else:
+        resolved_train_mode = train_mode
+        if wrap_peft and resolved_train_mode != "preserve_trainable":
+            raise ValueError(
+                "wrap_peft=True is only compatible with "
+                'train_mode="preserve_trainable".'
+            )
+
+    if resolved_train_mode == "preserve_trainable":
         # Record parameters that were already trainable (e.g., from LoRA)
         trainable_before = [p for p in model.parameters() if p.requires_grad]
         # Freeze the entire model
@@ -584,9 +616,13 @@ def get_engram_model(
         # Restore requires_grad=True for those parameters
         for p in trainable_before:
             p.requires_grad_(True)
-    else:
+    elif resolved_train_mode == "full_finetune":
+        model.requires_grad_(True)
+    elif resolved_train_mode == "engram_only":
         # Standard vanilla model, freeze everything
         model.requires_grad_(False)
+    else:
+        raise ValueError(f"Unsupported train_mode: {resolved_train_mode}")
 
     # Ensure config has the correct hidden_size if it was using default
     base_config = getattr(model, "config", None)
@@ -605,6 +641,7 @@ def get_engram_model(
         config.hidden_size = getattr(model, "hidden_size")
 
     engram_model = EngramModel(model, config, tokenizer)
+    engram_model.train_mode = resolved_train_mode
 
     # Note: Engram layers were instantiated and they inherently have requires_grad=True
     # by PyTorch default. Verify just in case:

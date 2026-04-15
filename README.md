@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Documentation](https://img.shields.io/badge/Docs-MkDocs-blue.svg)](https://qinggo.github.io/engram-peft/)
 
-**Engram-PEFT** is a high-performance, 100% paper-aligned implementation of the DeepSeek Engram architecture. It provides a Parameter-Efficient Fine-Tuning (PEFT) interface to inject conditional memory into any Transformer-based LLM.
+**Engram-PEFT** is a high-performance, 100% paper-aligned implementation of the DeepSeek Engram architecture. It provides a PEFT-style interface to inject conditional memory into any Transformer-based LLM, while also supporting stacked-adapter and full-finetuning workflows through explicit `train_mode` controls.
 
 Engram decouples **static knowledge storage** from **dynamic reasoning** using a sparse retrieval mechanism, allowing models to scale their factual memory without increasing inference FLOPs or interfering with core logic.
 
@@ -44,11 +44,16 @@ tokenizer = AutoTokenizer.from_pretrained("TinyLlama/TinyLlama-1.1B-intermediate
 
 # 2. Inject Engram layers (aligned with arXiv:2601.07372)
 config = EngramConfig(target_layers=[2, 11, 20])
-model = get_engram_model(base_model, config, tokenizer)
+model = get_engram_model(
+    base_model,
+    config,
+    tokenizer,
+    train_mode="engram_only",
+)
 
 # 3. Quick check on trainable parameters
 model.print_trainable_parameters()
-# trainable params: 86,938,368 || all params: 1,186,986,752 || trainable%: 7.3243
+# trainable params: ... (backbone: 0, engram: ...) || all params: ... || trainable%: ...
 ```
 
 ---
@@ -79,7 +84,9 @@ model.print_trainable_parameters()
 - **Cross-Model Weight Migration**: A unique feature (see `weight_transfer.py`) that allows migrating Engram weights between different models (e.g., Llama to Qwen) using character-level alignment on a corpus—effectively "recycling" learned knowledge.
 - **Zero-Invasive**: Injects via forward hooks; no modification to your base model architecture required.
 - **Peft-like API**: Familiar methods like `print_trainable_parameters()` and `save_pretrained()`.
+- **Explicit Training Modes**: `train_mode="engram_only"`, `"preserve_trainable"`, and `"full_finetune"` make backbone behavior predictable.
 - **Combined Training (LoRA+Engram)**: Support for stacking adapters. Injects LoRA for structural fine-tuning and Engram for sparse knowledge retrieval in a single model.
+- **Layered Optimizer Control**: Configure separate optimizers for backbone, Engram dense layers, and Engram sparse embeddings.
 - **Named Adapters**: Industry-standard named adapter management (add/set/unload) for modular knowledge packs.
 - **Automated Training**: Native `EngramTrainer` with built-in sparse Adam support and automatic sync of optimizer hyperparameters.
 - **Flexible Layer Discovery**: Recursive logic to find transformer layers regardless of PEFT wrapper nesting.
@@ -92,6 +99,34 @@ For full details, see our documentation:
 - [Tutorials](docs/tutorial.md): Quickstart and domain knowledge injection.
 - [API Reference](docs/api.md): Detailed class and function documentation.
 - [Paper Alignment](docs/paper_alignment.md): How we match the DeepSeek research.
+
+### Training Mode Cheat Sheet
+
+```python
+# Engram-only PEFT
+model = get_engram_model(base_model, config, tokenizer, train_mode="engram_only")
+
+# Keep LoRA / existing trainable params
+model = get_engram_model(model, config, tokenizer, train_mode="preserve_trainable")
+
+# Full finetuning + Engram
+model = get_engram_model(base_model, config, tokenizer, train_mode="full_finetune")
+```
+
+### Layered Optimizer Example
+
+```python
+from torch.optim import AdamW
+from engram_peft import get_optimizer
+
+optimizer = get_optimizer(
+    model,
+    backbone_learning_rate=5e-5,
+    engram_dense_learning_rate=4e-4,
+    engram_sparse_learning_rate=2e-3,
+    backbone_optimizer=AdamW,
+)
+```
 
 ---
 

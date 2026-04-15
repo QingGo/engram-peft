@@ -4,13 +4,19 @@ import pytest
 import torch
 import torch.nn as nn
 from torch.optim import Adam  # type: ignore
-from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel
+from torch.optim.optimizer import Optimizer
+from transformers import PreTrainedModel
 
 
 from engram_peft.config import EngramConfig
 from engram_peft.layer import EngramLayer
 from engram_peft.model import get_engram_model
-from engram_peft.utils import MixedOptimizer, get_optimizer, get_scheduler
+from engram_peft.utils import (
+    MixedOptimizer,
+    get_optimizer,
+    get_scheduler,
+    get_trainable_param_groups,
+)
 
 
 class DummyModel(nn.Module):
@@ -40,6 +46,20 @@ class DummyModel(nn.Module):
         return self
 
 
+class RecordingOptimizer(Optimizer):
+    def __init__(self, params: Any, tag: str = "recording") -> None:
+        defaults = {"lr": 0.0, "weight_decay": 0.0, "tag": tag}
+        super().__init__(params, defaults)
+        self.tag = tag
+        self.step_calls = 0
+
+    def step(self, closure: Any = None) -> Any:
+        self.step_calls += 1
+        if closure is not None:
+            return closure()
+        return None
+
+
 def test_optimizer_grouping() -> None:
     """验证优化器参数分组正确，学习率倍率应用正确。"""
     base_model = DummyModel()
@@ -61,12 +81,92 @@ def test_optimizer_grouping() -> None:
     # Check LR and groups
     sparse_opt = optimizer.optimizers[0]
     dense_opt = optimizer.optimizers[1]
+    groups = get_trainable_param_groups(model)
 
     assert sparse_opt.param_groups[0]["lr"] == pytest.approx(base_lr * 5.0)
     assert sparse_opt.param_groups[0]["weight_decay"] == 0.0
+    assert sum(p.numel() for p in sparse_opt.param_groups[0]["params"]) == sum(
+        p.numel() for p in groups["engram_sparse"]
+    )
 
     assert dense_opt.param_groups[0]["lr"] == pytest.approx(base_lr)
     assert dense_opt.param_groups[0]["weight_decay"] == 0.1
+    assert sum(p.numel() for p in dense_opt.param_groups[0]["params"]) == sum(
+        p.numel() for p in groups["engram_dense"]
+    )
+    assert not groups["backbone"]
+
+
+def test_optimizer_grouping_full_finetune() -> None:
+    """验证 full_finetune 会创建 backbone 单独参数组。"""
+    base_model = DummyModel()
+    config = EngramConfig(
+        target_layers=[0],
+        learning_rate_multiplier=3.0,
+        weight_decay=0.2,
+        enable_tokenizer_compression=False,
+        engram_vocab_size_per_ngram=[100, 100],
+        hidden_size=128,
+    )
+    model = get_engram_model(
+        cast(PreTrainedModel, base_model),
+        config,
+        train_mode="full_finetune",
+    )
+
+    optimizer = get_optimizer(
+        model,
+        base_learning_rate=1e-3,
+        backbone_learning_rate=2e-4,
+        engram_dense_learning_rate=5e-4,
+    )
+    groups = get_trainable_param_groups(model)
+
+    assert len(optimizer.optimizers) == 3
+    assert sum(
+        p.numel() for p in optimizer.optimizers[0].param_groups[0]["params"]
+    ) == sum(p.numel() for p in groups["engram_sparse"])
+    assert optimizer.optimizers[0].param_groups[0]["lr"] == pytest.approx(3e-3)
+    assert sum(
+        p.numel() for p in optimizer.optimizers[1].param_groups[0]["params"]
+    ) == sum(p.numel() for p in groups["engram_dense"])
+    assert optimizer.optimizers[1].param_groups[0]["lr"] == pytest.approx(5e-4)
+    assert sum(
+        p.numel() for p in optimizer.optimizers[2].param_groups[0]["params"]
+    ) == sum(p.numel() for p in groups["backbone"])
+    assert optimizer.optimizers[2].param_groups[0]["lr"] == pytest.approx(2e-4)
+    assert optimizer.optimizers[2].param_groups[0]["weight_decay"] == pytest.approx(0.2)
+
+
+def test_optimizer_supports_custom_backbone_builder() -> None:
+    """验证 backbone optimizer 支持自定义 builder。"""
+    base_model = DummyModel()
+    config = EngramConfig(
+        target_layers=[0],
+        enable_tokenizer_compression=False,
+        engram_vocab_size_per_ngram=[100, 100],
+        hidden_size=128,
+    )
+    model = get_engram_model(
+        cast(PreTrainedModel, base_model),
+        config,
+        train_mode="full_finetune",
+    )
+
+    optimizer = get_optimizer(
+        model,
+        backbone_optimizer=lambda param_groups: RecordingOptimizer(
+            param_groups, tag="backbone"
+        ),
+        engram_dense_optimizer=lambda param_groups: RecordingOptimizer(
+            param_groups, tag="engram_dense"
+        ),
+    )
+
+    assert isinstance(optimizer.optimizers[1], RecordingOptimizer)
+    assert isinstance(optimizer.optimizers[2], RecordingOptimizer)
+    assert optimizer.optimizers[1].defaults["tag"] == "engram_dense"
+    assert optimizer.optimizers[2].defaults["tag"] == "backbone"
 
 
 def test_gradient_sparsity() -> None:

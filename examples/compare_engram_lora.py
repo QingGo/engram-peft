@@ -158,8 +158,8 @@ def train_lora(
         lora_dropout=0.05,
         target_modules=["q_proj", "v_proj"],
     )
-    model = get_peft_model(base_model, peft_config)
-    model.print_trainable_parameters()
+    lora_model = get_peft_model(base_model, peft_config)
+    lora_model.print_trainable_parameters()
 
     warmup_steps = int(args.max_steps * 0.03)
     # Configure Warmup-Stable-Decay (WSD) parameters
@@ -193,7 +193,7 @@ def train_lora(
     )
 
     trainer = EngramTrainer(
-        model=model,
+        model=lora_model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
@@ -230,7 +230,7 @@ def train_lora(
                 log_history.append(entry)
 
     # Restore base model to normal by unloading LoRA (clean slate for Engram)
-    model = model.unload()
+    _restored_lora_base_model = lora_model.unload()
 
     return {
         "log_history": log_history,
@@ -263,7 +263,12 @@ def train_engram_model(
     )
 
     print("Injecting Engram layers and freezing base model...")
-    model = get_engram_model(base_model, config, tokenizer)
+    model = get_engram_model(
+        base_model,
+        config,
+        tokenizer,
+        train_mode="engram_only",
+    )
     model.print_trainable_parameters()
 
     warmup_steps = int(args.max_steps * 0.03)
@@ -366,7 +371,7 @@ def train_lora_engram(
         lora_dropout=0.05,
         target_modules=["q_proj", "v_proj"],
     )
-    model = get_peft_model(base_model, peft_config)
+    lora_model = get_peft_model(base_model, peft_config)
 
     # 2. Apply Engram
     engram_config = EngramConfig(
@@ -379,8 +384,13 @@ def train_lora_engram(
         pad_id=tokenizer.pad_token_id if isinstance(tokenizer.pad_token_id, int) else 0,
         learning_rate_multiplier=3.0,
     )
-    model = get_engram_model(cast(PreTrainedModel, model), engram_config, tokenizer, wrap_peft=True)
-    model.print_trainable_parameters()
+    combined_model = get_engram_model(
+        cast(PreTrainedModel, lora_model),
+        engram_config,
+        tokenizer,
+        train_mode="preserve_trainable",
+    )
+    combined_model.print_trainable_parameters()
 
     warmup_steps = int(args.max_steps * 0.03)
     num_decay_steps = int(args.max_steps * 0.77)
@@ -413,7 +423,7 @@ def train_lora_engram(
     )
 
     trainer = EngramTrainer(
-        model=model,
+        model=combined_model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
@@ -449,13 +459,13 @@ def train_lora_engram(
                 log_history.append(entry)
 
     print(f"Saving Combined weights to {LORA_ENGRAM_DIR}")
-    model.save_pretrained(LORA_ENGRAM_DIR)
+    combined_model.save_pretrained(LORA_ENGRAM_DIR)
     # Also save LoRA part
-    model.base_model.save_pretrained(LORA_ENGRAM_DIR)
+    combined_model.base_model.save_pretrained(LORA_ENGRAM_DIR)
 
     # Unload both
-    model.unload_engram()
-    model = model.base_model.unload()
+    combined_model.unload_engram()
+    _restored_base_model = combined_model.base_model.unload()
 
     return {
         "log_history": log_history,
@@ -687,10 +697,10 @@ def inference_demo(
     if "lora+engram" in results:
         print(f"\nLoading trained Combined Model from {LORA_ENGRAM_DIR}")
         # Load LoRA first
-        combined_model = PeftModel.from_pretrained(base_model, LORA_ENGRAM_DIR)
+        combined_lora_model = PeftModel.from_pretrained(base_model, LORA_ENGRAM_DIR)
         # Load Engram wrapper
         combined_model = EngramModel.from_pretrained(
-            cast(PreTrainedModel, combined_model), LORA_ENGRAM_DIR
+            cast(PreTrainedModel, combined_lora_model), LORA_ENGRAM_DIR
         )
 
         print("Generating with LoRA + Engram ENABLED...")
@@ -701,7 +711,7 @@ def inference_demo(
             f"Output (Combined): {tokenizer.decode(output_combined[0], skip_special_tokens=True)}"
         )
         combined_model.unload_engram()
-        combined_model = combined_model.base_model.unload()
+        _restored_combined_base_model = combined_model.base_model.unload()
 
     print("\nEnd-to-end example completed successfully!")
 

@@ -43,18 +43,35 @@ config = EngramConfig(
 ## Model Wrapping
 
 ### `get_engram_model`
-`engram_peft.model.get_engram_model(model, config, tokenizer=None, wrap_peft=False)`
+`engram_peft.model.get_engram_model(model, config, tokenizer=None, wrap_peft=False, train_mode=None)`
 
-Injects Engram layers into a base Transformer model and freezes all base parameters.
+Injects Engram layers into a base Transformer model and configures which backbone
+parameters remain trainable.
 
 **Args:**
 - `model` (`PreTrainedModel`): The Hugging Face model to wrap (e.g., Llama, Qwen).
 - `config` (`EngramConfig`): Engram configuration.
 - `tokenizer` (`Optional[PreTrainedTokenizer]`): Tokenizer for vocabulary/compression.
-- `wrap_peft` (`bool`, default: `False`): If `True`, preserves existing trainable parameters (e.g., from a previously applied LoRA adapter) while freezing the rest of the base model. Essential for stacking multiple adapters.
+- `wrap_peft` (`bool`, default: `False`): Backward-compatible alias for `train_mode="preserve_trainable"`.
+- `train_mode` (`Literal["engram_only", "preserve_trainable", "full_finetune"]`, optional): Controls backbone trainability.
+  - `engram_only`: Freeze the backbone and train only Engram.
+  - `preserve_trainable`: Preserve parameters that were already trainable before wrapping (e.g., LoRA), then add trainable Engram layers.
+  - `full_finetune`: Train the full backbone together with Engram.
 
 **Returns:**
 - `EngramModel`: The wrapped model with injected forward hooks.
+
+**Examples:**
+```python
+# Pure Engram PEFT
+model = get_engram_model(base_model, config, tokenizer, train_mode="engram_only")
+
+# LoRA + Engram
+model = get_engram_model(model, config, tokenizer, train_mode="preserve_trainable")
+
+# Full finetuning + Engram
+model = get_engram_model(base_model, config, tokenizer, train_mode="full_finetune")
+```
 
 ### `EngramModel`
 `engram_peft.model.EngramModel`
@@ -62,10 +79,10 @@ Injects Engram layers into a base Transformer model and freezes all base paramet
 The wrapper class for the base model. Handles dynamic hook management and weight serialization.
 
 **Methods:**
-- `print_trainable_parameters()`: Prints the count and percentage of trainable parameters.
+- `print_trainable_parameters()`: Prints trainable counts for backbone, Engram, and total parameters.
 - `add_adapter(adapter_name: str, config: EngramConfig)`: Adds a new set of Engram weights with its own configuration.
 - `set_adapter(adapter_name: str)`: Switches the active knowledge pack to the specified adapter.
-- `create_optimizer(base_learning_rate: float)`: Returns a `MixedOptimizer` pre-configured for this model's sparse/dense layers.
+- `create_optimizer(base_learning_rate: float, **optimizer_kwargs)`: Returns a `MixedOptimizer` with configurable backbone/Engram optimizer groups.
 - `create_scheduler(optimizer, num_steps, warmup_steps)`: Returns the paper-aligned Step Decay scheduler.
 - `save_pretrained(save_directory: str)`: Saves ONLY the active Engram weights and configuration.
 - `from_pretrained(base_model, engram_path)`: Loads Engram weights onto a base model.
@@ -97,14 +114,66 @@ collator = EngramDataCollator(tokenizer=tokenizer, config=config)
 trainer = Trainer(..., data_collator=collator)
 ```
 
+### `EngramTrainer`
+`engram_peft.trainer.EngramTrainer`
+
+Trainer subclass that handles sparse gradient clipping and can build Engram's
+mixed optimizer automatically.
+
+**Notable Args:**
+- `optimizer_kwargs` (`Optional[Dict[str, Any]]`): Extra keyword arguments forwarded to `model.create_optimizer(...)` / `get_optimizer(...)`. Use this to configure layered optimizer behavior when relying on the trainer's default optimizer creation path.
+
+**Example Usage:**
+```python
+trainer = EngramTrainer(
+    model=model,
+    args=training_args,
+    train_dataset=train_dataset,
+    optimizer_kwargs={
+        "backbone_learning_rate": 5e-5,
+        "engram_dense_learning_rate": 4e-4,
+        "engram_sparse_learning_rate": 2e-3,
+    },
+)
+```
+
 ---
 
 ## Optimization
 
 ### `get_optimizer`
-`engram_peft.utils.get_optimizer(model, base_learning_rate=4e-4)`
+`engram_peft.utils.get_optimizer(model, base_learning_rate=4e-4, ...)`
 
-Creates a `MixedOptimizer` that combines `SparseAdam` (for embeddings) and `Adam` (for dense layers).
+Creates a `MixedOptimizer` with separate optimizer groups for:
+- Engram sparse embeddings
+- Engram dense parameters
+- Backbone parameters
+
+Supported optimizer specs:
+- Built-in strings: `"adam"`, `"adamw"`, `"sgd"`, `"sparse_adam"`
+- Optimizer classes
+- Custom builder callables
+
+**Example Usage:**
+```python
+optimizer = get_optimizer(
+    model,
+    backbone_learning_rate=5e-5,
+    engram_dense_learning_rate=4e-4,
+    engram_sparse_learning_rate=2e-3,
+    backbone_optimizer="adamw",
+    engram_dense_optimizer="adam",
+    engram_sparse_optimizer="sparse_adam",
+)
+```
+
+### `get_trainable_param_groups`
+`engram_peft.utils.get_trainable_param_groups(model)`
+
+Returns a dictionary with three trainable parameter lists:
+- `backbone`
+- `engram_dense`
+- `engram_sparse`
 
 ### `get_scheduler`
 `engram_peft.utils.get_scheduler(optimizer, num_training_steps, warmup_steps=0)`

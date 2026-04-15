@@ -1,14 +1,31 @@
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    cast,
+    Dict,
+    List,
+    Mapping,
+    Optional,
+    Type,
+    Union,
+    overload,
+)
 
 import torch
 import torch.nn as nn
 from torch.optim.adam import Adam
+from torch.optim.adamw import AdamW
 from torch.optim.optimizer import Optimizer
+from torch.optim.sgd import SGD
 from torch.optim.sparse_adam import SparseAdam
 from torch.optim.lr_scheduler import LambdaLR
 
 if TYPE_CHECKING:
     from engram_peft import EngramModel
+
+OptimizerFactory = Callable[[List[Dict[str, Any]]], Optimizer]
+OptimizerSpec = Union[str, Type[Optimizer], OptimizerFactory]
 
 
 class MixedOptimizer(Optimizer):
@@ -88,57 +105,152 @@ class MixedOptimizer(Optimizer):
             opt.load_state_dict(sd)
 
 
+_OPTIMIZER_REGISTRY: Mapping[str, OptimizerFactory] = {
+    "adam": lambda param_groups: Adam(param_groups),
+    "adamw": lambda param_groups: AdamW(param_groups),
+    "sgd": lambda param_groups: SGD(param_groups),
+    "sparse_adam": lambda param_groups: SparseAdam(param_groups),
+}
+
+
+def _build_optimizer(
+    spec: OptimizerSpec,
+    param_groups: List[Dict[str, Any]],
+) -> Optimizer:
+    if isinstance(spec, str):
+        if spec not in _OPTIMIZER_REGISTRY:
+            raise ValueError(
+                f"Unknown optimizer '{spec}'. Available built-ins: "
+                f"{', '.join(sorted(_OPTIMIZER_REGISTRY))}"
+            )
+        return _OPTIMIZER_REGISTRY[spec](param_groups)
+
+    if isinstance(spec, type) and issubclass(spec, Optimizer):
+        optimizer_cls = cast(OptimizerFactory, spec)
+        return optimizer_cls(param_groups)
+
+    optimizer_factory = cast(OptimizerFactory, spec)
+    return optimizer_factory(param_groups)
+
+
+def get_trainable_param_groups(
+    model: "EngramModel",
+) -> Dict[str, List[torch.nn.Parameter]]:
+    """
+    Splits trainable parameters into backbone, Engram dense, and Engram sparse groups.
+    """
+    backbone_params = [
+        param for _, param in model.base_model.named_parameters() if param.requires_grad
+    ]
+    engram_sparse_params = []
+    engram_dense_params = []
+    for name, param in model.engram_layers.named_parameters():
+        if not param.requires_grad:
+            continue
+        if "multi_head_embedding.embedding.weight" in name:
+            engram_sparse_params.append(param)
+        else:
+            engram_dense_params.append(param)
+
+    return {
+        "backbone": backbone_params,
+        "engram_dense": engram_dense_params,
+        "engram_sparse": engram_sparse_params,
+    }
+
+
 def get_optimizer(
-    model: "EngramModel", base_learning_rate: float = 4e-4
+    model: "EngramModel",
+    base_learning_rate: float = 4e-4,
+    backbone_learning_rate: Optional[float] = None,
+    engram_dense_learning_rate: Optional[float] = None,
+    engram_sparse_learning_rate: Optional[float] = None,
+    backbone_weight_decay: Optional[float] = None,
+    engram_dense_weight_decay: Optional[float] = None,
+    engram_sparse_weight_decay: float = 0.0,
+    backbone_optimizer: Optional[OptimizerSpec] = None,
+    engram_dense_optimizer: OptimizerSpec = "adam",
+    engram_sparse_optimizer: OptimizerSpec = "sparse_adam",
 ) -> MixedOptimizer:
     """
     Creates the optimizer for Engram PEFT according to paper specifications.
-    Uses SparseAdam for Engram embeddings and Adam for other optimized parameters.
+    Uses separate optimizer groups for backbone, Engram dense params, and
+    Engram sparse embeddings.
 
     Args:
         model: The EngramModel to optimize.
         base_learning_rate: The base learning rate (default: 4e-4).
+        backbone_learning_rate: Learning rate for backbone parameters.
+        engram_dense_learning_rate: Learning rate for Engram dense params.
+        engram_sparse_learning_rate: Learning rate for Engram sparse embeddings.
+        backbone_weight_decay: Weight decay for backbone params.
+        engram_dense_weight_decay: Weight decay for Engram dense params.
+        engram_sparse_weight_decay: Weight decay for Engram sparse embeddings.
+        backbone_optimizer: Optimizer spec for backbone params.
+        engram_dense_optimizer: Optimizer spec for Engram dense params.
+        engram_sparse_optimizer: Optimizer spec for Engram sparse params.
 
     Returns:
         MixedOptimizer: A wrapper containing SparseAdam and Adam optimizers.
     """
-    embedding_params = []
-    other_params = []
-
-    # Filter parameters from engram_layers (base model is frozen)
-    for name, param in model.named_parameters():
-        if not param.requires_grad:
-            continue
-
-        # Identify the multi-head embedding table which uses sparse gradients
-        if "multi_head_embedding.embedding.weight" in name:
-            embedding_params.append(param)
-        else:
-            other_params.append(param)
-
     # Safe retrieval of Engram-specific config attributes
     lr_multiplier = getattr(model.config, "learning_rate_multiplier", 1.0)
     config_weight_decay = getattr(model.config, "weight_decay", 0.0)
+    groups = get_trainable_param_groups(model)
 
-    # Engram embedding parameters: scaled LR, no weight decay
-    embedding_group = {
-        "params": embedding_params,
-        "lr": base_learning_rate * lr_multiplier,
-        "weight_decay": 0.0,
-    }
-
-    # Other Engram parameters (convolution, gating): base LR, config-defined weight decay
-    other_group = {
-        "params": other_params,
-        "lr": base_learning_rate,
-        "weight_decay": config_weight_decay,
-    }
+    if backbone_optimizer is None:
+        backbone_optimizer = "adam"
+    if backbone_learning_rate is None:
+        backbone_learning_rate = base_learning_rate
+    if engram_dense_learning_rate is None:
+        engram_dense_learning_rate = base_learning_rate
+    if engram_sparse_learning_rate is None:
+        engram_sparse_learning_rate = base_learning_rate * lr_multiplier
+    if backbone_weight_decay is None:
+        backbone_weight_decay = config_weight_decay
+    if engram_dense_weight_decay is None:
+        engram_dense_weight_decay = config_weight_decay
 
     optimizers: List[Optimizer] = []
-    if embedding_params:
-        optimizers.append(SparseAdam([embedding_group]))
-    if other_params:
-        optimizers.append(Adam([other_group]))
+    if groups["engram_sparse"]:
+        optimizers.append(
+            _build_optimizer(
+                engram_sparse_optimizer,
+                [
+                    {
+                        "params": groups["engram_sparse"],
+                        "lr": engram_sparse_learning_rate,
+                        "weight_decay": engram_sparse_weight_decay,
+                    }
+                ],
+            )
+        )
+    if groups["engram_dense"]:
+        optimizers.append(
+            _build_optimizer(
+                engram_dense_optimizer,
+                [
+                    {
+                        "params": groups["engram_dense"],
+                        "lr": engram_dense_learning_rate,
+                        "weight_decay": engram_dense_weight_decay,
+                    }
+                ],
+            )
+        )
+    if groups["backbone"]:
+        optimizers.append(
+            _build_optimizer(
+                backbone_optimizer,
+                [
+                    {
+                        "params": groups["backbone"],
+                        "lr": backbone_learning_rate,
+                        "weight_decay": backbone_weight_decay,
+                    }
+                ],
+            )
+        )
 
     return MixedOptimizer(optimizers)
 

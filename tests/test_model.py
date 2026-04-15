@@ -90,6 +90,66 @@ def test_get_engram_model_freeze() -> None:
     assert engram_param_count > 0, "Should have engram parameters"
 
 
+def test_get_engram_model_preserve_trainable_mode() -> None:
+    """验证 preserve_trainable 只保留原本可训练的骨干参数。"""
+    config, base_model = create_mock_setup()
+    for idx, (_, param) in enumerate(base_model.named_parameters()):
+        param.requires_grad_(idx % 2 == 0)
+
+    original_states = {
+        name: param.requires_grad for name, param in base_model.named_parameters()
+    }
+
+    engram_model = get_engram_model(
+        base_model,
+        config,
+        tokenizer=None,
+        train_mode="preserve_trainable",
+    )
+
+    assert engram_model.train_mode == "preserve_trainable"
+    for name, param in base_model.named_parameters():
+        assert param.requires_grad is original_states[name]
+
+    for _, param in engram_model.engram_layers.named_parameters():
+        assert param.requires_grad
+
+
+def test_get_engram_model_full_finetune_mode() -> None:
+    """验证 full_finetune 会打开全部骨干参数。"""
+    config, base_model = create_mock_setup()
+    base_model.requires_grad_(False)
+
+    engram_model = get_engram_model(
+        base_model,
+        config,
+        tokenizer=None,
+        train_mode="full_finetune",
+    )
+
+    assert engram_model.train_mode == "full_finetune"
+    for _, param in base_model.named_parameters():
+        assert param.requires_grad
+
+
+def test_get_engram_model_wrap_peft_conflict() -> None:
+    """验证旧参数 wrap_peft 与 train_mode 冲突时会报错。"""
+    config, base_model = create_mock_setup()
+
+    try:
+        get_engram_model(
+            base_model,
+            config,
+            tokenizer=None,
+            wrap_peft=True,
+            train_mode="full_finetune",
+        )
+    except ValueError as exc:
+        assert 'train_mode="preserve_trainable"' in str(exc)
+    else:
+        raise AssertionError("Expected ValueError for conflicting wrap_peft/train_mode")
+
+
 def test_layer_injection_instances() -> None:
     """
     测试用例 2：验证每个目标层都有独立的 EngramLayer 实例

@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Documentation](https://img.shields.io/badge/Docs-MkDocs-blue.svg)](https://qinggo.github.io/engram-peft/)
 
-**Engram-PEFT** 是一个高性能、100% 对齐论文的 DeepSeek Engram 架构实现。它提供了一个参数高效微调 (PEFT) 接口，可将条件记忆 (Conditional Memory) 注入任何基于 Transformer 的大语言模型。
+**Engram-PEFT** 是一个高性能、100% 对齐论文的 DeepSeek Engram 架构实现。它提供了一个类 PEFT 接口，可将条件记忆 (Conditional Memory) 注入任何基于 Transformer 的大语言模型，同时通过显式 `train_mode` 支持纯 Engram、Adapter 叠加和全参数微调三类工作流。
 
 Engram 使用稀疏检索机制将 **静态知识存储** 与 **动态推理** 解耦，允许模型在不增加推理 FLOPs 或干扰核心逻辑的情况下，扩展其实际记忆。
 
@@ -44,11 +44,16 @@ tokenizer = AutoTokenizer.from_pretrained("TinyLlama/TinyLlama-1.1B-intermediate
 
 # 2. 注入 Engram 层 (对齐 arXiv:2601.07372)
 config = EngramConfig(target_layers=[2, 11, 20])
-model = get_engram_model(base_model, config, tokenizer)
+model = get_engram_model(
+    base_model,
+    config,
+    tokenizer,
+    train_mode="engram_only",
+)
 
 # 3. 快速检查可训练参数
 model.print_trainable_parameters()
-# trainable params: 86,938,368 || all params: 1,186,986,752 || trainable%: 7.3243
+# trainable params: ... (backbone: 0, engram: ...) || all params: ... || trainable%: ...
 ```
 
 ---
@@ -79,7 +84,9 @@ model.print_trainable_parameters()
 - **跨模型权重迁移**：独有特性（详见 `weight_transfer.py`），支持通过语料库的字符级对齐，在不同模型（如 Llama 到 Qwen）之间迁移 Engram 权重——实现知识的“回收再利用”。
 - **零侵入性**：通过 forward hook 注入；无需修改基础模型架构源码。
 - **类 PEFT API**：提供 `print_trainable_parameters()` 和 `save_pretrained()` 等熟悉的方法。
+- **显式训练模式**：支持 `train_mode="engram_only"`、`"preserve_trainable"` 和 `"full_finetune"`，更易理解和调试。
 - **联合训练 (LoRA+Engram)**: 支持 Adapter 叠加。可在单个模型中同时注入 LoRA 进行结构微调和 Engram 进行稀疏知识检索。
+- **分层优化器控制**：可分别为 backbone、Engram dense 层和 Engram sparse embedding 配置不同优化器。
 - **命名适配器 (Named Adapters)**：完全兼容 PEFT 风格的 Adapter 管理（add/set/unload），支持多领域知识包并行管理。
 - **自动化训练流程**：内置 `EngramTrainer`，自动处理稀疏 Adam 优化、梯度管理与学习率倍率同步。
 - **灵活的层发现 (Flexible Layer Discovery)**：采用递归逻辑定位 Transformer 层，无视 PEFT 包装嵌套深度。
@@ -92,6 +99,34 @@ model.print_trainable_parameters()
 - [教程](docs/tutorial.md): 快速上手指南和领域知识注入。
 - [API 参考](docs/api.md): 详细的类和函数文档。
 - [论文对齐](docs/paper_alignment.md): 我们如何对齐 DeepSeek 的研究。
+
+### 训练模式速查
+
+```python
+# 仅训练 Engram
+model = get_engram_model(base_model, config, tokenizer, train_mode="engram_only")
+
+# 保留现有可训练参数（如 LoRA）
+model = get_engram_model(model, config, tokenizer, train_mode="preserve_trainable")
+
+# Engram + 全参数微调
+model = get_engram_model(base_model, config, tokenizer, train_mode="full_finetune")
+```
+
+### 分层优化器示例
+
+```python
+from torch.optim import AdamW
+from engram_peft import get_optimizer
+
+optimizer = get_optimizer(
+    model,
+    backbone_learning_rate=5e-5,
+    engram_dense_learning_rate=4e-4,
+    engram_sparse_learning_rate=2e-3,
+    backbone_optimizer=AdamW,
+)
+```
 
 ---
 

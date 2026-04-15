@@ -100,7 +100,12 @@ def train_engram(
     )
 
     print("Injecting Engram layers and freezing base model...")
-    model = get_engram_model(base_model, config, tokenizer)
+    model = get_engram_model(
+        base_model,
+        config,
+        tokenizer,
+        train_mode="engram_only",
+    )
 
     collator = EngramDataCollator(tokenizer=tokenizer, config=config)
     optimizer = get_optimizer(model, base_learning_rate=4e-4)

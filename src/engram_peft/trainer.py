@@ -14,6 +14,15 @@ class EngramTrainer(Trainer):
     calculation to correctly handle SparseCPU/SparseCUDA tensors.
     """
 
+    def __init__(
+        self,
+        *args: Any,
+        optimizer_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.optimizer_kwargs = optimizer_kwargs or {}
+
     def create_optimizer(self, model: Any = None) -> Optimizer:
         """
         Creates the MixedOptimizer if not provided.
@@ -26,7 +35,8 @@ class EngramTrainer(Trainer):
                 self.model, "create_optimizer"
             ):
                 self.optimizer = self.model.create_optimizer(
-                    base_learning_rate=self.args.learning_rate
+                    base_learning_rate=self.args.learning_rate,
+                    **self.optimizer_kwargs,
                 )
             else:
                 from engram_peft.utils import get_optimizer
@@ -36,6 +46,7 @@ class EngramTrainer(Trainer):
                 self.optimizer = get_optimizer(
                     cast(EngramModel, self.model),
                     base_learning_rate=self.args.learning_rate,
+                    **self.optimizer_kwargs,
                 )
         return self.optimizer
 

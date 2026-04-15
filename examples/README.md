@@ -47,7 +47,22 @@ uv run python examples/end_to_end_cpu.py
 
 ---
 
-## 4. Flexible Weight Migration: `flexible_loading.py`
+## 4. Full Finetuning + Engram: `full_finetune_engram.py`
+
+Shows how to train the backbone together with Engram using `train_mode="full_finetune"` and a layered optimizer setup. The example uses AdamW for both backbone and Engram dense parameters, plus SparseAdam for Engram sparse embeddings.
+
+### Notes
+- This example is intentionally minimal: it performs a single forward/backward sanity check and prints the optimizer layout.
+- The same API also supports custom optimizer builders, so you can plug in Muon later if your runtime upgrades to a PyTorch version that provides it.
+
+### Running the Example
+```bash
+uv run python examples/full_finetune_engram.py
+```
+
+---
+
+## 5. Flexible Weight Migration: `flexible_loading.py`
 
 Demonstrates how to migrate Engram weights between different model configurations (e.g., different layer counts or bucket sizes).
 
@@ -62,7 +77,7 @@ uv run python examples/flexible_loading.py
 
 ---
 
-## 5. Cross-Tokenizer Knowledge Transfer: `cross_tokenizer_migration.py`
+## 6. Cross-Tokenizer Knowledge Transfer: `cross_tokenizer_migration.py`
 
 Showcase the unique ability of Engram to transfer specialized knowledge between models using completely **different tokenizers** (e.g., Llama vs. Qwen).
 

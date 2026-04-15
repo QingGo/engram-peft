@@ -267,7 +267,12 @@ def train_engram() -> Tuple[EngramModel, PreTrainedTokenizer, EngramConfig]:
 
     # Inject Engram
     print("Injecting Engram layers...")
-    model = get_engram_model(base_model, engram_config, tokenizer)
+    model = get_engram_model(
+        base_model,
+        engram_config,
+        tokenizer,
+        train_mode="engram_only",
+    )
 
     # Load Tiny Dataset
     print("Loading TinyStories subset (1000 samples)...")

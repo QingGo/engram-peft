@@ -27,7 +27,12 @@ config = EngramConfig(
 
 # 3. Inject & Freeze
 base_model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16)
-model = get_engram_model(base_model, config, tokenizer)
+model = get_engram_model(
+    base_model,
+    config,
+    tokenizer,
+    train_mode="engram_only",
+)
 
 # Quick check on overhead
 model.print_trainable_parameters()
@@ -81,7 +86,7 @@ Engram and LoRA can be used together! LoRA is excellent for **task adaptation** 
 
 ### The "Double Adapter" Strategy
 1.  **Apply LoRA** to the base model's Attention or MLP layers.
-2.  **Apply Engram** to the Transformer Blocks using the `wrap_peft=True` flag to keep LoRA weights trainable.
+2.  **Apply Engram** to the Transformer Blocks using `train_mode="preserve_trainable"` to keep LoRA weights trainable.
 3.  **Result**: A model that has the reasoning style of LoRA and the factual memory of Engram.
 
 ```python
@@ -94,19 +99,83 @@ model = get_peft_model(base_model, lora_config)
 
 # 2. Inject Engram on top
 engram_config = EngramConfig(target_layers=[2, 15])
-# IMPORTANT: Use wrap_peft=True so Engram doesn't freeze your LoRA parameters!
-model = get_engram_model(model, engram_config, wrap_peft=True) 
+# IMPORTANT: preserve_trainable keeps existing LoRA parameters trainable.
+model = get_engram_model(
+    model,
+    engram_config,
+    train_mode="preserve_trainable",
+)
 
 # Now both LoRA and Engram parameters are trainable!
 model.print_trainable_parameters()
 ```
 
 > [!IMPORTANT]
-> When stacking adapters, ensure you pass `wrap_peft=True` to `get_engram_model`. This instructs Engram to identify and preserve the `requires_grad=True` status of existing parameters (like LoRA weights) instead of performing a blanket freeze on the entire input model.
+> When stacking adapters, use `train_mode="preserve_trainable"` so Engram keeps the `requires_grad=True` status of existing parameters (like LoRA weights). `wrap_peft=True` is still supported as a backward-compatible alias, but `train_mode` is the recommended API.
 
 ---
 
-## Tutorial 4: Managing Multiple Knowledge Packs
+## Tutorial 4: Full Finetuning with Engram
+
+If you want to train the backbone together with Engram, use `train_mode="full_finetune"` and configure separate optimizer groups for backbone, Engram dense layers, and Engram sparse embeddings.
+
+```python
+from torch.optim import AdamW
+from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
+from engram_peft import EngramConfig, EngramTrainer, get_engram_model
+
+model_id = "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+base_model = AutoModelForCausalLM.from_pretrained(model_id)
+
+config = EngramConfig(
+    target_layers=[2, 11],
+    tokenizer_name_or_path=model_id,
+)
+
+model = get_engram_model(
+    base_model,
+    config,
+    tokenizer,
+    train_mode="full_finetune",
+)
+
+optimizer = get_optimizer(
+    model,
+    backbone_learning_rate=5e-5,
+    engram_dense_learning_rate=4e-4,
+    engram_sparse_learning_rate=2e-3,
+    backbone_optimizer=AdamW,
+)
+
+# Or let EngramTrainer build the layered optimizer for you
+trainer = EngramTrainer(
+    model=model,
+    args=TrainingArguments(
+        output_dir="engram_full_ft_out",
+        per_device_train_batch_size=2,
+        learning_rate=4e-4,
+    ),
+    train_dataset=my_dataset,
+    optimizer_kwargs={
+        "backbone_learning_rate": 5e-5,
+        "engram_dense_learning_rate": 4e-4,
+        "engram_sparse_learning_rate": 2e-3,
+        "backbone_optimizer": AdamW,
+    },
+)
+
+# Save both parts after training
+model.save_pretrained("engram_adapter_only")
+model.base_model.save_pretrained("engram_full_model")
+```
+
+> [!IMPORTANT]
+> In `train_mode="full_finetune"`, `model.save_pretrained(...)` still saves only Engram weights and config. Save `model.base_model` to a separate directory as well if you want a restorable full-finetuned checkpoint.
+
+---
+
+## Tutorial 5: Managing Multiple Knowledge Packs
 
 Engram-PEFT supports a "Named Adapter" system similar to `peft`. You can load multiple specialized knowledge packs into the same base model and switch between them at runtime.
 
@@ -129,7 +198,7 @@ engram_model.set_adapter("default")
 
 ---
 
-## Tutorial 5: Flexible Weight Migration
+## Tutorial 6: Flexible Weight Migration
 
 Engram-PEFT allows you to reuse pre-trained knowledge even if your target model has different layers, bucket capacities, or even a different tokenizer seed.
 
