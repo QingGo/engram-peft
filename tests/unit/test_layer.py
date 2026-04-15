@@ -17,9 +17,9 @@ def test_shortconv_initialization() -> None:
     x = torch.randn(2, 10, hc_mult, hidden_size)
     out = module(x)
     l1_dist = torch.abs(out - x).max().item()
-    assert (
-        l1_dist < 1e-6
-    ), f"Initial output should be equal to input (due to internal residual), but max diff is {l1_dist}"
+    assert l1_dist < 1e-6, (
+        f"Initial output should be equal to input (due to internal residual), but max diff is {l1_dist}"
+    )
 
 
 def test_shortconv_output_shape() -> None:
@@ -184,9 +184,9 @@ def test_engram_layer_forward() -> None:
     output = layer(hidden_states=hidden_states, engram_hash_indices=engram_hash_indices)
 
     assert output.shape == hidden_states.shape
-    assert not torch.allclose(
-        output, hidden_states
-    ), "Output should be modified by EngramLayer"
+    assert not torch.allclose(output, hidden_states), (
+        "Output should be modified by EngramLayer"
+    )
 
 
 def test_engram_layer_indices_priority() -> None:

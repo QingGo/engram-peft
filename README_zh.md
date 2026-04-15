@@ -146,6 +146,10 @@ optimizer = get_optimizer(
 
 ---
 
-## 开源协议
+## 🤝 贡献
+
+我们欢迎各种形式的贡献！请参阅我们的 [贡献指南](CONTRIBUTING.md) 了解关于分层开发工作流 (L1-L4) 和测试标准的详细信息。
+
+## 📄 开源协议
 
 Apache License 2.0。详情请参阅 [LICENSE](LICENSE)。

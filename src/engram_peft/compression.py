@@ -19,6 +19,7 @@ class CompressedTokenizer:
         self,
         tokenizer_name_or_path: str,
         trust_remote_code: bool = True,
+        tokenizer: Any = None,
     ) -> None:
         """
         Initialize the CompressedTokenizer.
@@ -26,36 +27,47 @@ class CompressedTokenizer:
         Args:
             tokenizer_name_or_path: The Hugging Face tokenizer path or name.
             trust_remote_code: Whether to trust remote code when loading tokenizer.
+            tokenizer: Optional pre-loaded tokenizer instance to use instead of fetching from Hub.
         """
         self.tokenizer_name_or_path = tokenizer_name_or_path
         # Allow passing an existing path (e.g. locally) or load from HF
-        if not os.path.isdir(tokenizer_name_or_path) or not os.path.exists(
+        if tokenizer is not None:
+            self.tokenizer = tokenizer
+            self.vocab_size = len(self.tokenizer)
+            # We still need the normalizer
+            self.normalizer = self._get_default_normalizer()
+            self.mapping: dict[int, int] = {}
+            self.compressed_vocab_size = 0
+            self.lookup = torch.empty(0)
+            self._build_lookup_table()
+        elif not os.path.isdir(tokenizer_name_or_path) or not os.path.exists(
             os.path.join(tokenizer_name_or_path, "compression_config.json")
         ):
-            self.tokenizer: Any = AutoTokenizer.from_pretrained(
+            self.tokenizer = AutoTokenizer.from_pretrained(
                 tokenizer_name_or_path, trust_remote_code=trust_remote_code
             )
             self.vocab_size = len(self.tokenizer)
-
-            # Sentinel for space normalization as in official demo
-            SENTINEL = "\ue000"
-            self.normalizer = normalizers.Sequence(
-                [
-                    normalizers.NFKC(),
-                    normalizers.NFD(),
-                    normalizers.StripAccents(),
-                    normalizers.Lowercase(),
-                    normalizers.Replace(Regex(r"[ \t\r\n]+"), " "),
-                    normalizers.Replace(Regex(r"^ $"), SENTINEL),
-                    normalizers.Strip(),
-                    normalizers.Replace(SENTINEL, " "),
-                ]
-            )
-
-            self.mapping: Dict[int, int] = {}
-            self.compressed_vocab_size: int = 0
-            self.lookup: torch.Tensor = torch.empty(0)
+            self.normalizer = self._get_default_normalizer()
+            self.mapping = {}
+            self.compressed_vocab_size = 0
+            self.lookup = torch.empty(0)
             self._build_lookup_table()
+
+    def _get_default_normalizer(self) -> Any:
+        # Sentinel for space normalization as in official demo
+        SENTINEL = "\ue000"
+        return normalizers.Sequence(
+            [
+                normalizers.NFKC(),
+                normalizers.NFD(),
+                normalizers.StripAccents(),
+                normalizers.Lowercase(),
+                normalizers.Replace(Regex(r"[ \t\r\n]+"), " "),
+                normalizers.Replace(Regex(r"^ $"), SENTINEL),
+                normalizers.Strip(),
+                normalizers.Replace(SENTINEL, " "),
+            ]
+        )
 
     def _build_lookup_table(self) -> None:
         """

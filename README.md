@@ -146,6 +146,10 @@ If you use this implementation in your research, please cite the original DeepSe
 
 ---
 
-## License
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on our tiered development workflow (L1-L4) and testing standards.
+
+## 📄 License
 
 Apache License 2.0. See [LICENSE](LICENSE) for details.

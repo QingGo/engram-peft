@@ -64,9 +64,9 @@ def test_uniform_distribution() -> None:
     _, p_val = chisquare(counts, f_exp=f_exp)
 
     # Multiplicative-XOR hash should be relatively uniform, p>0.01 is acceptable generally due to PRNG
-    assert (
-        p_val > 0.01
-    ), f"Hash distribution failed chi-square test with p-value={p_val}"
+    assert p_val > 0.01, (
+        f"Hash distribution failed chi-square test with p-value={p_val}"
+    )
 
 
 def test_batch_processing() -> None:
