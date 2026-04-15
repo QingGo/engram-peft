@@ -40,15 +40,9 @@ class EngramTrainer(Trainer):
                     **self.optimizer_kwargs,
                 )
             else:
-                from engram_peft.utils import get_optimizer
-
-                if self.model is None:
-                    raise ValueError("Trainer.model is None")
-                self.optimizer = get_optimizer(
-                    cast(EngramModel, self.model),
-                    base_learning_rate=self.args.learning_rate,
-                    **self.optimizer_kwargs,
-                )
+                # Non-Engram models (e.g. plain HF models or LoRA baselines) should
+                # use the standard Transformers optimizer creation path.
+                self.optimizer = super().create_optimizer(model)
         return self.optimizer
 
     def create_scheduler(
