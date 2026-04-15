@@ -14,6 +14,7 @@ Usage:
 import argparse
 import copy
 import json
+import logging
 import os
 import sys
 from typing import Any, Dict, Tuple, cast
@@ -716,6 +717,9 @@ def inference_demo(
 
 
 if __name__ == "__main__":
+    # Set logging level to INFO to see Engram-PEFT injection logs
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
     parser = argparse.ArgumentParser(description="Run Engram End-to-End Test")
     parser.add_argument(
         "--max_steps", type=int, default=50, help="Number of training steps"

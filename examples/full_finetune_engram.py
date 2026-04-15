@@ -15,6 +15,7 @@ Usage:
 import argparse
 import copy
 import json
+import logging
 import os
 from typing import Any, Dict, Tuple, cast
 
@@ -281,6 +282,9 @@ def inference_demo(
 
 
 def main() -> None:
+    # Set logging level to INFO to see Engram-PEFT injection logs
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--max_steps", type=int, default=300)
     parser.add_argument("--batch_size", type=int, default=4)
