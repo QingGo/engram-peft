@@ -16,6 +16,7 @@ class DummyModel(nn.Module):
         super().__init__()
         self.config = SimpleNamespace()
         self.config.hidden_size = hidden_size
+        self.config.vocab_size = 32000
         self.model = nn.Module()
         self.model.layers = nn.ModuleList(
             [nn.Linear(hidden_size, hidden_size) for _ in range(12)]
@@ -64,6 +65,7 @@ def main() -> None:
         n_head_per_ngram=2,
         hc_mult=8,
         enable_tokenizer_compression=False,
+        gating_zero_init=True,
     )
     target_model = get_engram_model(base_model, target_config)
     print(

@@ -87,7 +87,7 @@ Showcase the unique ability of Engram to transfer specialized knowledge between 
 
 ### Running the Example
 ```bash
-uv run python examples/cross_tokenizer_migration.py
+xi
 ```
 
 ---
