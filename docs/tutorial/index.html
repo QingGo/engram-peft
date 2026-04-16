@@ -1093,12 +1093,20 @@ When stacking adapters, use <code>train_mode="preserve_trainable"</code> so Engr
 <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">&quot;engram_peft&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">setLevel</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
 </code></pre></div>
 <p><strong>Expected Log Output:</strong>
-<div class="highlight"><pre><span></span><code>[Engram-PEFT] Identified llama architecture. Using registered path: &#39;model.layers&#39;
-[Engram-PEFT] Attaching Engram layers to 22 blocks...
+<div class="highlight"><pre><span></span><code>[Engram-PEFT] Starting best-effort architecture discovery...
+[Engram-PEFT] Determined layer_container_path=&#39;model.layers&#39; (source: Architecture Registry (llama))
+[Engram-PEFT] Attaching Engram layers to 32 blocks...
   - [Injected] Layer 2 -&gt; LlamaDecoderLayer (device: cuda:0)
-  - [Injected] Layer 11 -&gt; LlamaDecoderLayer (device: cuda:0)
+  - [Injected] Layer 15 -&gt; LlamaDecoderLayer (device: cuda:0)
 </code></pre></div></p>
 <h3 id="2-targeting-custom-architectures">2. Targeting Custom Architectures</h3>
+<p>Engram-PEFT includes a built-in registry for common architectures including:
+- <strong>Llama-2/3, Mistral, Mixtral, Qwen2</strong>
+- <strong>DeepSeek V2/V3</strong>
+- <strong>Gemma/Gemma 2, Phi/Phi-3</strong>
+- <strong>BERT, RoBERTa, Longformer</strong>
+- <strong>GPT-2, GPT-NeoX</strong>
+- <strong>GLM/ChatGLM</strong></p>
 <p>If you are using a non-standard model that isn't in our built-in registry, Engram will fall back to a heuristic (finding the largest <code>nn.ModuleList</code>). If this fails, you can specify the path manually:</p>
 <div class="highlight"><pre><span></span><code><span class="n">config</span> <span class="o">=</span> <span class="n">EngramConfig</span><span class="p">(</span>
     <span class="n">layer_container_path</span><span class="o">=</span><span class="s2">&quot;my_model.transformer.h&quot;</span><span class="p">,</span> <span class="c1"># Explicit path</span>
@@ -1177,7 +1185,6 @@ In <code>train_mode="full_finetune"</code>, <code>model.save_pretrained(...)</co
 <span class="c1"># ... run training for legal knowledge ...</span>
 
 <span class="c1"># 3. Switch back to medical knowledge</span>
-<span class="c1"># 3. Switch back to medical knowledge</span>
 <span class="n">engram_model</span><span class="o">.</span><span class="n">set_adapter</span><span class="p">(</span><span class="s2">&quot;default&quot;</span><span class="p">)</span>
 </code></pre></div>
 <hr />
@@ -1194,8 +1201,8 @@ In <code>train_mode="full_finetune"</code>, <code>model.save_pretrained(...)</co
 </code></pre></div>
 <h3 id="case-b-logic-alignment-different-seedstokenizer">Case B: Logic Alignment (Different Seeds/Tokenizer)</h3>
 <p>If the hashing logic differs (e.g., a different <code>seed</code> was used in <code>EngramConfig</code>), use a reference corpus to "re-discover" the correct indices via best-effort remapping:</p>
-<div class="highlight"><pre><span></span><code><span class="c1"># corpus_tokens should be a representative sample of your training data</span>
-<span class="n">model</span><span class="o">.</span><span class="n">remap_from_corpus</span><span class="p">(</span><span class="n">corpus_tokens</span><span class="p">,</span> <span class="s2">&quot;path/to/engram_weights.pt&quot;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><span class="c1"># corpus should be a representative sample of your training data (tokens or strings)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">remap_from_corpus</span><span class="p">(</span><span class="n">corpus</span><span class="p">,</span> <span class="s2">&quot;path/to/engram_weights.pt&quot;</span><span class="p">)</span>
 </code></pre></div>
 
 

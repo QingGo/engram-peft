@@ -743,7 +743,7 @@
 <h3 id="l3-deep-verification-deep-logic">L3: Deep Verification (Deep Logic)</h3>
 <ul>
 <li><strong>Tools</strong>: Mypy &amp; Pytest (Unit)</li>
-<li><strong>Command</strong>: <code>uv run mypy src/ tests/ examples/ &amp;&amp; uv run pytest tests/unit</code></li>
+<li><strong>Command</strong>: <code>uv run pytest tests/unit &amp;&amp; uv run mypy src/ tests/ examples/</code></li>
 <li><strong>Goal</strong>: Ensure 100% type safety in <code>src/</code> and verify core logic in &lt;2 seconds.</li>
 <li><strong>Philosophy</strong>: Use the <code>tiny_tokenizer</code> and <code>tiny_compressor</code> fixtures for fast unit testing.</li>
 </ul>

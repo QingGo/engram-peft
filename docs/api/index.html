@@ -1070,7 +1070,13 @@
 - <code>conv_dilation</code> (<code>Optional[int]</code>, default: <code>None</code>): Convolution dilation (defaults to <code>max(ngram_sizes)</code>).
 - <code>conv_zero_init</code> (<code>bool</code>, default: <code>True</code>): Initialize convolution weights to zero to ensure identity mapping at start.
 - <code>learning_rate_multiplier</code> (<code>float</code>, default: <code>5.0</code>): LR multiplier for sparse embedding parameters.
-- <code>tokenizer_name_or_path</code> (<code>str</code>, default: <code>"deepseek-ai/DeepSeek-V3"</code>): Tokenizer used for precomputing hashes.
+- <code>tokenizer_name_or_path</code> (<code>Optional[str]</code>, default: <code>None</code>): Tokenizer used for precomputing hashes. Recommended to set explicitly (e.g., <code>"deepseek-ai/DeepSeek-V3"</code>).
+- <code>seed</code> (<code>int</code>, default: <code>0</code>): Random seed for deterministic hashing primes.
+- <code>weight_decay</code> (<code>float</code>, default: <code>0.0</code>): Weight decay for Engram parameters.
+- <code>gating_zero_init</code> (<code>bool</code>, default: <code>False</code>): Whether to initialize gating parameters with zeros.
+- <code>hidden_size</code> (<code>Optional[int]</code>, default: <code>None</code>): The hidden dimension of the base model. Auto-detected if not provided.
+- <code>pad_id</code> (<code>Optional[int]</code>, default: <code>None</code>): The padding token ID. Auto-detected if not provided.
+- <code>compressed_vocab_size</code> (<code>Optional[int]</code>, default: <code>None</code>): Resolved size of the hashing vocabulary. Automatically set and saved after first initialization.
 - <code>layer_container_path</code> (<code>Optional[str]</code>, default: <code>None</code>): Explicit dot-separated path to the <code>nn.ModuleList</code> containing transformer layers (e.g., <code>"model.layers"</code>). If provided, it bypasses the automatic architecture discovery.</p>
 <p><strong>Example Usage:</strong>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">engram_peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">EngramConfig</span>
@@ -1121,8 +1127,8 @@ parameters remain trainable.</p>
 - <code>from_pretrained(base_model, engram_path)</code>: Loads Engram weights onto a base model.
 - <code>unload_engram()</code>: Dynamically removes all PEFT hooks (reverts to base model).
 - <code>load_engram(engram_path=None)</code>: Re-installs hooks and optionally loads weights.
-- <code>load_weights_flexible(checkpoint_path, layer_mapping=None, reuse_structural=False)</code>: Loads weights from a checkpoint even if configurations (layers, buckets, n-grams) differ.
-- <code>remap_from_corpus(corpus_tokens, checkpoint_path, layer_mapping=None, batch_size=32)</code>: "Best-effort" remapping for cases where seeds or tokenizers differ, using a reference corpus to align indices.</p>
+- <code>load_weights_flexible(checkpoint_path, source_config_path=None, layer_mapping=None, reuse_structural=False)</code>: Loads weights from a checkpoint even if configurations (layers, buckets, n-grams) differ.
+- <code>remap_from_corpus(corpus, checkpoint_path, source_config_path=None, layer_mapping=None, tokenizer=None, batch_size=1024)</code>: "Best-effort" remapping for cases where seeds or tokenizers differ, using a reference corpus to align indices.</p>
 <hr />
 <h2 id="data-utilities">Data Utilities</h2>
 <h3 id="engramdatacollator"><code>EngramDataCollator</code></h3>
