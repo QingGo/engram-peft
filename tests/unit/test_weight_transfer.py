@@ -1,7 +1,9 @@
 import shutil
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Generator, Optional
+from types import SimpleNamespace
+from typing import Any, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -15,14 +17,10 @@ from engram_peft.model import get_engram_model
 class DummyModel(nn.Module):
     def __init__(self, hidden_size: int = 16) -> None:
         super().__init__()
-
-        class Config:
-            pass
-
-        self.config = Config()
-        setattr(self.config, "hidden_size", hidden_size)
-        setattr(self.config, "vocab_size", 1000)
-        setattr(self.config, "pad_token_id", 0)
+        self.config = SimpleNamespace()
+        self.config.hidden_size = hidden_size
+        self.config.vocab_size = 1000
+        self.config.pad_token_id = 0
         self.model = nn.Module()
         self.model.layers = nn.ModuleList(
             [
@@ -31,8 +29,8 @@ class DummyModel(nn.Module):
         )
 
     def forward(
-        self, input_ids: Optional[torch.Tensor] = None, **kwargs: Any
-    ) -> Optional[torch.Tensor]:
+        self, input_ids: torch.Tensor | None = None, **kwargs: Any
+    ) -> torch.Tensor | None:
         return None
 
 
@@ -60,7 +58,7 @@ def test_layer_and_capacity_mapping(tmp_dir: Path, base_model: DummyModel) -> No
         n_head_per_ngram=2,
         enable_tokenizer_compression=False,
     )
-    src_model = get_engram_model(base_model, src_config)  # type: ignore[arg-type]
+    src_model = get_engram_model(base_model, src_config)
     with torch.no_grad():
         for param in src_model.engram_layers.parameters():
             param.normal_()
@@ -78,7 +76,7 @@ def test_layer_and_capacity_mapping(tmp_dir: Path, base_model: DummyModel) -> No
         n_head_per_ngram=2,
         enable_tokenizer_compression=False,
     )
-    target_model = get_engram_model(base_model, target_config)  # type: ignore[arg-type]
+    target_model = get_engram_model(base_model, target_config)
     target_model.load_weights_flexible(
         str(src_path / "engram_weights.pt"), layer_mapping={0: 1}
     )
@@ -105,7 +103,7 @@ def test_ngram_subset_mapping(tmp_dir: Path, base_model: DummyModel) -> None:
         n_head_per_ngram=2,
         enable_tokenizer_compression=False,
     )
-    src_model = get_engram_model(base_model, src_config)  # type: ignore[arg-type]
+    src_model = get_engram_model(base_model, src_config)
     src_path = tmp_dir / "src_subset"
     src_model.save_pretrained(str(src_path))
 
@@ -118,7 +116,7 @@ def test_ngram_subset_mapping(tmp_dir: Path, base_model: DummyModel) -> None:
         n_head_per_ngram=2,
         enable_tokenizer_compression=False,
     )
-    target_model = get_engram_model(base_model, target_config)  # type: ignore[arg-type]
+    target_model = get_engram_model(base_model, target_config)
     target_model.load_weights_flexible(str(src_path / "engram_weights.pt"))
 
     src_emb = src_model.engram_layers["0"].multi_head_embedding.embedding.weight.data
@@ -140,7 +138,7 @@ def test_corpus_remapping(tmp_dir: Path, base_model: DummyModel) -> None:
         n_head_per_ngram=2,
         enable_tokenizer_compression=False,
     )
-    src_model = get_engram_model(base_model, src_config)  # type: ignore[arg-type]
+    src_model = get_engram_model(base_model, src_config)
     src_path = tmp_dir / "src_seed0"
     src_model.save_pretrained(str(src_path))
 
@@ -153,7 +151,7 @@ def test_corpus_remapping(tmp_dir: Path, base_model: DummyModel) -> None:
         n_head_per_ngram=2,
         enable_tokenizer_compression=False,
     )
-    target_model = get_engram_model(base_model, target_config)  # type: ignore[arg-type]
+    target_model = get_engram_model(base_model, target_config)
 
     tokens = torch.randint(0, 100, (10,))
     target_model.remap_from_corpus(tokens, str(src_path / "engram_weights.pt"))
@@ -175,7 +173,7 @@ def test_cross_tokenizer_remapping(tmp_dir: Path, base_model: DummyModel) -> Non
         enable_tokenizer_compression=False,
         tokenizer_name_or_path="source/tokenizer",
     )
-    src_model = get_engram_model(base_model, src_config)  # type: ignore[arg-type]
+    src_model = get_engram_model(base_model, src_config)
     with torch.no_grad():
         src_model.engram_layers["0"].multi_head_embedding.embedding.weight.fill_(1.0)
 
@@ -191,7 +189,7 @@ def test_cross_tokenizer_remapping(tmp_dir: Path, base_model: DummyModel) -> Non
         enable_tokenizer_compression=False,
         tokenizer_name_or_path="target/tokenizer",
     )
-    target_model = get_engram_model(base_model, target_config)  # type: ignore[arg-type]
+    target_model = get_engram_model(base_model, target_config)
     with torch.no_grad():
         target_model.engram_layers["0"].multi_head_embedding.embedding.weight.zero_()
 

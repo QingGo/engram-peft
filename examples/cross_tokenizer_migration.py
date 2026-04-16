@@ -1,6 +1,7 @@
 import os
 import shutil
-from typing import Any, Optional
+from types import SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import torch
@@ -14,22 +15,18 @@ from engram_peft.model import get_engram_model
 class DummyModel(nn.Module):
     def __init__(self, hidden_size: int = 768) -> None:
         super().__init__()
-
-        class Config:
-            pass
-
-        self.config = Config()
-        setattr(self.config, "hidden_size", hidden_size)
-        setattr(self.config, "vocab_size", 32000)
-        setattr(self.config, "pad_token_id", 0)
+        self.config = SimpleNamespace()
+        self.config.hidden_size = hidden_size
+        self.config.vocab_size = 32000
+        self.config.pad_token_id = 0
         self.model = nn.Module()
         self.model.layers = nn.ModuleList(
             [nn.Linear(hidden_size, hidden_size) for _ in range(12)]
         )
 
     def forward(
-        self, input_ids: Optional[torch.Tensor] = None, **kwargs: Any
-    ) -> Optional[torch.Tensor]:
+        self, input_ids: torch.Tensor | None = None, **kwargs: Any
+    ) -> torch.Tensor | None:
         return None
 
 
@@ -47,7 +44,7 @@ def main() -> None:
         tokenizer_name_or_path="tokenizer_a",
         enable_tokenizer_compression=False,
     )
-    src_model = get_engram_model(base_model, src_config)  # type: ignore[arg-type]
+    src_model = get_engram_model(base_model, src_config)
 
     # Fill with identifiable weights
     with torch.no_grad():
@@ -65,7 +62,7 @@ def main() -> None:
         tokenizer_name_or_path="tokenizer_b",
         enable_tokenizer_compression=False,
     )
-    target_model = get_engram_model(base_model, target_config)  # type: ignore[arg-type]
+    target_model = get_engram_model(base_model, target_config)
     with torch.no_grad():
         target_model.engram_layers["0"].multi_head_embedding.embedding.weight.zero_()
 

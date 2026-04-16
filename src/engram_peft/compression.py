@@ -1,10 +1,10 @@
 import json
 import os
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
-from tokenizers import Regex, normalizers  # type: ignore
+from tokenizers import Regex, normalizers
 from transformers import AutoTokenizer
 
 
@@ -17,7 +17,7 @@ class CompressedTokenizer:
 
     def __init__(
         self,
-        tokenizer_name_or_path: Optional[str] = None,
+        tokenizer_name_or_path: str | None = None,
         trust_remote_code: bool = True,
         tokenizer: Any = None,
     ) -> None:
@@ -79,9 +79,9 @@ class CompressedTokenizer:
         Pre-compute the surjective mapping from original token IDs to canonical IDs.
         Matches the official demo's logic.
         """
-        old2new: Dict[int, int] = {}
-        key2new: Dict[str, int] = {}
-        new_tokens: List[str] = []
+        old2new: dict[int, int] = {}
+        key2new: dict[str, int] = {}
+        new_tokens: list[str] = []
 
         for tid in range(self.vocab_size):
             text = str(self.tokenizer.decode([tid], skip_special_tokens=False))
@@ -108,8 +108,8 @@ class CompressedTokenizer:
         self.lookup = torch.tensor(mapping_list, dtype=torch.long)
 
     def map_ids(
-        self, input_ids: Union[torch.Tensor, np.ndarray[Any, Any]]
-    ) -> Union[torch.Tensor, np.ndarray[Any, Any]]:
+        self, input_ids: torch.Tensor | np.ndarray[Any, Any]
+    ) -> torch.Tensor | np.ndarray[Any, Any]:
         """
         Maps a sequence of original token IDs to canonical (compressed) IDs.
         Handles negative IDs (like -100 for ignore_index) by preserving them.
@@ -118,7 +118,11 @@ class CompressedTokenizer:
         if is_numpy:
             tensor_ids = torch.from_numpy(input_ids).to(torch.long)
         else:
-            tensor_ids = input_ids  # type: ignore
+            tensor_ids = (
+                input_ids
+                if isinstance(input_ids, torch.Tensor)
+                else torch.as_tensor(input_ids)
+            )
 
         if self.lookup.device != tensor_ids.device:
             self.lookup = self.lookup.to(tensor_ids.device)
@@ -147,8 +151,8 @@ class CompressedTokenizer:
         return int(self.lookup[original_id])
 
     def compress(
-        self, input_ids: Union[torch.Tensor, np.ndarray[Any, Any]]
-    ) -> Union[torch.Tensor, np.ndarray[Any, Any]]:
+        self, input_ids: torch.Tensor | np.ndarray[Any, Any]
+    ) -> torch.Tensor | np.ndarray[Any, Any]:
         """Surjective mapping: collapses V tokens into V' tokens (V' < V)."""
         return self.map_ids(input_ids)
 
@@ -176,7 +180,7 @@ class CompressedTokenizer:
         Load a CompressedTokenizer from a saved directory.
         """
         config_path = os.path.join(save_directory, "compression_config.json")
-        with open(config_path, "r") as f:
+        with open(config_path) as f:
             config = json.load(f)
 
         # Initialize bypassing huggingface downloads

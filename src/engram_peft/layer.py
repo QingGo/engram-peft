@@ -1,4 +1,4 @@
-from typing import List, Optional, cast
+from typing import cast
 
 import torch
 import torch.nn as nn
@@ -115,7 +115,7 @@ class ShortConv(nn.Module):
         # Without this, if the convolution is zero-initialized, the gradient is blocked
         # (gradient becomes 0 * previous_grad), preventing Embedding and Gating from learning.
         # This matches the formula: Y = SiLU(Conv(Norm(V))) + V
-        return cast(torch.Tensor, (out + x).to(x.dtype))
+        return cast("torch.Tensor", (out + x).to(x.dtype))
 
 
 class ContextAwareGating(nn.Module):
@@ -154,7 +154,7 @@ class ContextAwareGating(nn.Module):
         # 步骤3：独立的 RMSNorm
         self.norm_h = nn.ModuleList([nn.RMSNorm(hidden_size) for _ in range(hc_mult)])
         self.norm_k = nn.ModuleList([nn.RMSNorm(hidden_size) for _ in range(hc_mult)])
-        self.last_gate: Optional[torch.Tensor] = None
+        self.last_gate: torch.Tensor | None = None
 
     def forward(
         self, embeddings: torch.Tensor, hidden_states: torch.Tensor
@@ -198,7 +198,7 @@ class ContextAwareGating(nn.Module):
             2
         )  # [B, L, M, 1] * [B, L, 1, D] -> [B, L, M, D]
 
-        return cast(torch.Tensor, gated_value)
+        return cast("torch.Tensor", gated_value)
 
 
 class MultiHeadEmbedding(nn.Module):
@@ -208,7 +208,7 @@ class MultiHeadEmbedding(nn.Module):
     """
 
     def __init__(
-        self, primes: List[int], embedding_dim_per_head: int, sparse: bool = True
+        self, primes: list[int], embedding_dim_per_head: int, sparse: bool = True
     ):
         super().__init__()
         offsets = [0]
@@ -231,9 +231,9 @@ class MultiHeadEmbedding(nn.Module):
             torch.Tensor: [batch_size, seq_len, total_heads, embedding_dim_per_head]
         """
         shifted_indices = hash_indices.to(
-            cast(torch.device, self.offsets.device)
-        ) + cast(torch.Tensor, self.offsets)
-        return cast(torch.Tensor, self.embedding(shifted_indices))
+            cast("torch.device", self.offsets.device)
+        ) + cast("torch.Tensor", self.offsets)
+        return cast("torch.Tensor", self.embedding(shifted_indices))
 
 
 class EngramLayer(nn.Module):
@@ -251,8 +251,8 @@ class EngramLayer(nn.Module):
         self,
         config: EngramConfig,
         layer_id: int,
-        primes: List[int],
-        compressor: Optional[CompressedTokenizer] = None,
+        primes: list[int],
+        compressor: CompressedTokenizer | None = None,
     ):
         """
         Initialize the EngramLayer.
@@ -347,10 +347,10 @@ class EngramLayer(nn.Module):
 
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        compressed_ids: Optional[torch.Tensor] = None,
-        hidden_states: torch.Tensor = cast(torch.Tensor, None),
-        engram_hash_indices: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        compressed_ids: torch.Tensor | None = None,
+        hidden_states: torch.Tensor | None = None,
+        engram_hash_indices: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Forward pass of the EngramLayer.
@@ -365,7 +365,7 @@ class EngramLayer(nn.Module):
             torch.Tensor: Modified hidden states with Engram contributions.
         """
         if hidden_states is None:
-            raise ValueError("hidden_states must be provided.")
+            raise ValueError("hidden_states must be provided to EngramLayer.forward()")
 
         if engram_hash_indices is None:
             if input_ids is None:
@@ -410,4 +410,4 @@ class EngramLayer(nn.Module):
                 # Sum branches if no out_proj is provided
                 y = y.sum(dim=2)
 
-        return cast(torch.Tensor, (hidden_states + y).to(hidden_states.dtype))
+        return cast("torch.Tensor", (hidden_states + y).to(hidden_states.dtype))

@@ -1,3 +1,4 @@
+from typing import cast
 from unittest.mock import MagicMock
 
 import torch
@@ -177,7 +178,7 @@ def test_engram_layer_forward() -> None:
     batch_size = 2
     seq_len = 8
     input_ids = torch.randint(0, 100, (batch_size, seq_len))
-    hidden_states = torch.randn(batch_size, seq_len, config.hidden_size)
+    hidden_states = torch.randn(batch_size, seq_len, cast("int", config.hidden_size))
 
     # Use mapping to compute
     compressed_ids = compressor.lookup[input_ids]
@@ -216,7 +217,7 @@ def test_engram_layer_indices_priority() -> None:
 
     batch_size = 1
     seq_len = 4
-    hidden_states = torch.randn(batch_size, seq_len, config.hidden_size)
+    hidden_states = torch.randn(batch_size, seq_len, cast("int", config.hidden_size))
 
     # Precompute hash indices
     # We'll use a specific index and verify the output depends on it
@@ -254,7 +255,7 @@ def test_engram_layer_sparse_gradients() -> None:
 
     batch_size = 1
     seq_len = 2
-    hidden_states = torch.randn(batch_size, seq_len, config.hidden_size)
+    hidden_states = torch.randn(batch_size, seq_len, cast("int", config.hidden_size))
 
     # Only use index 0 and 1
     indices = torch.tensor([[[0], [1]]], dtype=torch.long)  # [B, L, total_heads]
@@ -301,7 +302,9 @@ def test_engram_layer_output_shape() -> None:
 
     batch_size = 2
     seq_len = 5
-    hidden_states = torch.randn(batch_size, seq_len, config.hc_mult, config.hidden_size)
+    hidden_states = torch.randn(
+        batch_size, seq_len, config.hc_mult, cast("int", config.hidden_size)
+    )
 
     # Create hash indices tensor with shape [B, L, total_heads]
     total_heads = config.n_head_per_ngram * len(config.ngram_sizes)

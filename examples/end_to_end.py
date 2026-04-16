@@ -16,10 +16,10 @@ uv run python examples/end_to_end.py --max_steps 50 --batch_size 4 --num_workers
 import argparse
 import copy
 import os
-from typing import Any, Dict, cast
+from typing import Any, cast
 
 import torch
-from datasets import load_dataset  # type: ignore
+from datasets import Dataset, load_dataset
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -53,7 +53,7 @@ def prepare_dataset(
 ) -> Any:
     dataset = load_dataset("roneneldan/TinyStories", split="train", streaming=True)
 
-    def tokenize_function(examples: Dict[str, Any]) -> Dict[str, Any]:
+    def tokenize_function(examples: dict[str, Any]) -> dict[str, Any]:
         tokenized = tokenizer(
             examples["text"],
             truncation=True,
@@ -69,8 +69,6 @@ def prepare_dataset(
         if i >= subset_size:
             break
         train_data.append(item)
-
-    from datasets import Dataset
 
     train_dataset = Dataset.from_list(train_data).map(
         tokenize_function, batched=True, remove_columns=["text"]
@@ -175,7 +173,7 @@ def inference_demo(
     # Visualization: Print gates for the target layers
     print("\nCapture Gating Activation (Mean per branch):")
     for layer_id in model.config.target_layers:
-        engram_layer = cast(EngramLayer, model.engram_layers[str(layer_id)])
+        engram_layer = cast("EngramLayer", model.engram_layers[str(layer_id)])
         gate = engram_layer.gating.last_gate  # [B, L, M, 1]
         if gate is not None:
             mean_gates = gate.mean(dim=(0, 1, 3)).cpu().tolist()
@@ -214,7 +212,9 @@ if __name__ == "__main__":
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     print(f"Loading tokenizer & base model: {MODEL_NAME}")
-    tokenizer = cast(PreTrainedTokenizerBase, AutoTokenizer.from_pretrained(MODEL_NAME))
+    tokenizer = cast(
+        "PreTrainedTokenizerBase", AutoTokenizer.from_pretrained(MODEL_NAME)
+    )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 

@@ -1,6 +1,7 @@
 import shutil
 import tempfile
-from typing import Any, Generator
+from collections.abc import Generator
+from typing import Any
 
 import numpy as np
 import pytest

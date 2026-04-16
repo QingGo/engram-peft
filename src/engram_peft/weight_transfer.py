@@ -1,13 +1,18 @@
 import logging
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import torch
-from tqdm import tqdm  # type: ignore
+from tqdm import tqdm
+from transformers import AutoTokenizer
 
+from engram_peft.compression import CompressedTokenizer
 from engram_peft.config import EngramConfig
 from engram_peft.hashing import NgramHashMapping
+
+if TYPE_CHECKING:
+    from engram_peft.model import EngramModel
 
 logger = logging.getLogger(__name__)
 
@@ -18,13 +23,15 @@ def check_compatibility(src_config: EngramConfig, target_config: EngramConfig) -
         warnings.warn(
             f"Hash seeds mismatch (src={src_config.seed}, target={target_config.seed}). "
             "Buckets will not align semantically. Direct transfer is NOT recommended "
-            "unless followed by corpus-based remapping."
+            "unless followed by corpus-based remapping.",
+            stacklevel=2,
         )
 
     if src_config.tokenizer_name_or_path != target_config.tokenizer_name_or_path:
         warnings.warn(
             f"Tokenizers mismatch ({src_config.tokenizer_name_or_path} vs {target_config.tokenizer_name_or_path}). "
-            "Buckets will not align semantically."
+            "Buckets will not align semantically.",
+            stacklevel=2,
         )
 
     if src_config.hidden_size != target_config.hidden_size:
@@ -35,10 +42,10 @@ def check_compatibility(src_config: EngramConfig, target_config: EngramConfig) -
 
 
 def get_layer_mapping(
-    src_layers: List[int],
-    target_layers: List[int],
-    manual_mapping: Optional[Dict[int, int]] = None,
-) -> Dict[int, int]:
+    src_layers: list[int],
+    target_layers: list[int],
+    manual_mapping: dict[int, int] | None = None,
+) -> dict[int, int]:
     """Determines how source layers map to target layers."""
     if manual_mapping:
         return manual_mapping
@@ -127,14 +134,14 @@ def align_embedding_table(
 
 def remap_weights_from_corpus(
     target_model: torch.nn.Module,
-    src_state_dict: Dict[str, torch.Tensor],
+    src_state_dict: dict[str, torch.Tensor],
     src_config: EngramConfig,
-    corpus: Union[List[str], List[int], np.ndarray, torch.Tensor],
-    layer_mapping: Optional[Dict[int, int]] = None,
-    tokenizer: Optional[Any] = None,
+    corpus: list[str] | list[int] | np.ndarray | torch.Tensor,
+    layer_mapping: dict[int, int] | None = None,
+    tokenizer: Any | None = None,
     batch_size: int = 1024,
     show_progress: bool = True,
-) -> Dict[str, torch.Tensor]:
+) -> dict[str, torch.Tensor]:
     """
     Best-effort remapping of weights for different seeds/tokenizers.
     Builds an index-to-index translation table using the provided corpus.
@@ -142,14 +149,12 @@ def remap_weights_from_corpus(
     If corpus is List[str], it performs character-level alignment between
     the source tokenizer and the target tokenizer.
     """
-    from transformers import AutoTokenizer
-
-    from engram_peft.model import EngramModel
-
-    if not isinstance(target_model, EngramModel):
+    if not getattr(target_model, "_is_engram_model", False):
         raise ValueError("target_model must be an EngramModel instance.")
 
-    target_config = target_model.config
+    # Cast to EngramModel for static analysis after structural check
+    target_model_engram = cast("EngramModel", target_model)
+    target_config = target_model_engram.config
     mapping = get_layer_mapping(
         src_config.target_layers, target_config.target_layers, layer_mapping
     )
@@ -159,8 +164,6 @@ def remap_weights_from_corpus(
     src_mapped_pad_id = src_config.pad_id
     if getattr(src_config, "enable_tokenizer_compression", True):
         # We need a temporary compressor for the source to resolve the pad_id mapping
-        from engram_peft.compression import CompressedTokenizer
-
         try:
             src_compressor = CompressedTokenizer(src_config.tokenizer_name_or_path)
             assert src_config.pad_id is not None
@@ -189,8 +192,8 @@ def remap_weights_from_corpus(
     # Prepare index mapping buffers
     # We use a dictionary or sparse tensor for mapping to avoid massive memory usage
     # mapping_table[layer_id][head_idx] -> {target_idx: (sum_src_weight, count)}
-    index_maps: Dict[int, List[Dict[int, Tuple[torch.Tensor, int]]]] = {}
-    for src_id, target_id in mapping.items():
+    index_maps: dict[int, list[dict[int, tuple[torch.Tensor, int]]]] = {}
+    for src_id, _target_id in mapping.items():
         total_heads = len(target_config.ngram_sizes) * target_config.n_head_per_ngram
         index_maps[src_id] = [{} for _ in range(total_heads)]
 
@@ -208,7 +211,11 @@ def remap_weights_from_corpus(
             if not isinstance(item, str):
                 continue
             src_hashes, target_hashes = _get_aligned_hashes(
-                item, src_tokenizer, target_tokenizer, src_mapper, target_model
+                item,
+                src_tokenizer,
+                target_tokenizer,
+                src_mapper,
+                target_model_engram,
             )
             _update_index_maps(
                 index_maps,
@@ -221,8 +228,8 @@ def remap_weights_from_corpus(
             )
     else:
         # Case: Token ID corpus (Same-Tokenizer, different seeds)
-        if torch.is_tensor(corpus):
-            tokens_np = corpus.cpu().numpy()  # type: ignore
+        if isinstance(corpus, torch.Tensor):
+            tokens_np = corpus.cpu().numpy()
         else:
             tokens_np = np.array(corpus)
 
@@ -235,16 +242,16 @@ def remap_weights_from_corpus(
         for i in range(0, tokens_np.shape[1], batch_size):
             batch = tokens_np[:, i : i + batch_size]
             src_hashes = src_mapper.hash(batch)
-            if target_model.compressor:
-                c_ids = target_model.compressor.compress(
-                    torch.from_numpy(batch).to(target_model.base_model.device)
+            if target_model_engram.compressor:
+                c_ids = target_model_engram.compressor.compress(
+                    torch.from_numpy(batch).to(target_model_engram.base_model.device)
                 )
                 c_ids_np = (
                     c_ids.cpu().numpy() if isinstance(c_ids, torch.Tensor) else c_ids
                 )
-                target_hashes = target_model.hash_mapping.hash(c_ids_np)
+                target_hashes = target_model_engram.hash_mapping.hash(c_ids_np)
             else:
-                target_hashes = target_model.hash_mapping.hash(batch)
+                target_hashes = target_model_engram.hash_mapping.hash(batch)
 
             _update_index_maps(
                 index_maps,
@@ -264,13 +271,15 @@ def remap_weights_from_corpus(
         total_target_heads = (
             len(target_config.ngram_sizes) * target_config.n_head_per_ngram
         )
-        target_layer = target_model.engram_layers[str(target_id)]
+        target_layer = target_model_engram.engram_layers[str(target_id)]
         target_emb_weight = (
             target_layer.multi_head_embedding.embedding.weight.data.clone()
         )
 
         # Target offsets
-        target_primes = sum(target_model.hash_mapping.prime_tables[target_id], [])
+        target_primes: list[int] = sum(
+            target_model_engram.hash_mapping.prime_tables[target_id], []
+        )
         target_offsets = [0]
         for p in target_primes[:-1]:
             target_offsets.append(target_offsets[-1] + p)
@@ -294,11 +303,11 @@ def remap_weights_from_corpus(
 
 
 def _update_index_maps(
-    index_maps: Dict[int, List[Dict[int, Tuple[torch.Tensor, int]]]],
-    mapping: Dict[int, int],
-    src_hashes: Dict[int, np.ndarray],
-    target_hashes: Dict[int, np.ndarray],
-    src_state_dict: Dict[str, torch.Tensor],
+    index_maps: dict[int, list[dict[int, tuple[torch.Tensor, int]]]],
+    mapping: dict[int, int],
+    src_hashes: dict[int, np.ndarray],
+    target_hashes: dict[int, np.ndarray],
+    src_state_dict: dict[str, torch.Tensor],
     src_mapper: NgramHashMapping,
     target_config: EngramConfig,
 ) -> None:
@@ -328,7 +337,7 @@ def _update_index_maps(
             # Offset src indices
             s_indices_shifted = s_indices + src_offsets[head_idx]
 
-            for s_idx, t_idx in zip(s_indices_shifted, t_indices):
+            for s_idx, t_idx in zip(s_indices_shifted, t_indices, strict=False):
                 s_idx_val = int(s_idx)
                 t_idx_val = int(t_idx)
 
@@ -348,8 +357,8 @@ def _get_aligned_hashes(
     src_tokenizer: Any,
     target_tokenizer: Any,
     src_mapper: NgramHashMapping,
-    target_model: Any,
-) -> Tuple[Dict[int, np.ndarray], Dict[int, np.ndarray]]:
+    target_model: "EngramModel",
+) -> tuple[dict[int, np.ndarray], dict[int, np.ndarray]]:
     """
     Tokenizes text with two tokenizers and aligns them using character offsets.
     Returns parallel hashes.
@@ -381,7 +390,7 @@ def _get_aligned_hashes(
     aligned_src_ids = []
     aligned_target_ids = []
 
-    for i, (start, end) in enumerate(target_offsets):
+    for i, (_start, end) in enumerate(target_offsets):
         # Sample at the end of the target token
         sample_char = end - 1
         if sample_char in char_to_src:
@@ -405,7 +414,8 @@ def _get_aligned_hashes(
             target_model.base_model.device
         )
         c_ids = target_model.compressor.compress(t_batch_torch)
-        target_hashes = target_model.hash_mapping.hash(c_ids.cpu().numpy())
+        c_ids_np = c_ids.cpu().numpy() if isinstance(c_ids, torch.Tensor) else c_ids
+        target_hashes = target_model.hash_mapping.hash(c_ids_np)
     else:
         target_hashes = target_model.hash_mapping.hash(target_batch)
 

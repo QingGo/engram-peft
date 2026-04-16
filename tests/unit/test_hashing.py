@@ -1,6 +1,6 @@
 import numpy as np
-from scipy.stats import chisquare  # type: ignore[import-untyped]
-from sympy import isprime  # type: ignore[import-untyped]
+from scipy.stats import chisquare
+from sympy import isprime
 
 from engram_peft.hashing import NgramHashMapping
 

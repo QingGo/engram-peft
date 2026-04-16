@@ -1,15 +1,17 @@
 import os
 import shutil
 import tempfile
-from typing import Any, Optional, cast
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 import torch
 import torch.nn as nn
 from transformers import PretrainedConfig, PreTrainedModel
 
 from engram_peft.config import EngramConfig
-from engram_peft.layer import EngramLayer
 from engram_peft.model import EngramModel, get_engram_model
+
+if TYPE_CHECKING:
+    from engram_peft.layer import EngramLayer
 
 
 class MockTransformerBlock(nn.Module):
@@ -40,7 +42,7 @@ class MockPreTrainedModel(PreTrainedModel):
         )
 
     def forward(
-        self, input_ids: Optional[torch.Tensor] = None, **kwargs: Any
+        self, input_ids: torch.Tensor | None = None, **kwargs: Any
     ) -> torch.Tensor:
         if input_ids is None:
             raise ValueError("input_ids required")
@@ -182,7 +184,7 @@ def test_save_load_consistency() -> None:
 
     # Modify weight slightly to test loading
     with torch.no_grad():
-        layer1 = cast(EngramLayer, engram_model.engram_layers["1"])
+        layer1 = cast("EngramLayer", engram_model.engram_layers["1"])
         layer1.multi_head_embedding.embedding.weight.add_(1.0)
 
     org_weight_sum = layer1.multi_head_embedding.embedding.weight.sum().item()
@@ -199,7 +201,7 @@ def test_save_load_consistency() -> None:
         base_model_new = MockPreTrainedModel(MockModelConfig(), hidden_size=32)
         loaded_model = EngramModel.from_pretrained(base_model_new, temp_dir)
 
-        loaded_layer1 = cast(EngramLayer, loaded_model.engram_layers["1"])
+        loaded_layer1 = cast("EngramLayer", loaded_model.engram_layers["1"])
         loaded_weight_sum = (
             loaded_layer1.multi_head_embedding.embedding.weight.sum().item()
         )

@@ -4,6 +4,7 @@ import torch.nn as nn
 from transformers import AutoConfig, AutoModel
 
 from engram_peft.config import EngramConfig
+from engram_peft.discovery import ARCH_LAYER_MAPPING
 from engram_peft.model import EngramModel, get_engram_model
 
 
@@ -14,7 +15,9 @@ from engram_peft.model import EngramModel, get_engram_model
         ("mistralai/Mistral-7B-v0.1", "model.layers", 32),
     ],
 )
-def test_model_discovery_registry(model_id, expected_path, expected_layer_count):
+def test_model_discovery_registry(
+    model_id: str, expected_path: str, expected_layer_count: int
+) -> None:
     """
     Verifies that the layer container is correctly identified via the registry.
     We use publicly accessible models for this test.
@@ -38,7 +41,7 @@ def test_model_discovery_registry(model_id, expected_path, expected_layer_count)
     assert len(model._hook_handles) == len(engram_config.target_layers) + 1
 
 
-def test_explicit_path_override():
+def test_explicit_path_override() -> None:
     """
     Verifies that layer_container_path explicitly overrides discovery.
     """
@@ -65,14 +68,13 @@ def test_explicit_path_override():
     assert len(model._find_transformer_layers()) == 24
 
 
-def test_mock_registry_discovery():
+def test_mock_registry_discovery() -> None:
     """
     Verifies that ARCH_LAYER_MAPPING works even without downloading configs.
     """
-    from engram_peft.discovery import ARCH_LAYER_MAPPING
 
     class MockModel(nn.Module):
-        def __init__(self, model_type):
+        def __init__(self, model_type: str) -> None:
             super().__init__()
             paths = ARCH_LAYER_MAPPING.get(model_type, ["model.layers"])
             # Use the first path in the list for the mock structure
@@ -101,7 +103,7 @@ def test_mock_registry_discovery():
     assert len(model._find_transformer_layers()) == 3
 
 
-def test_heuristic_fallback():
+def test_heuristic_fallback() -> None:
     """
     Verifies that the heuristic scanner finds the largest ModuleList
     when the architecture is unknown.
@@ -109,7 +111,7 @@ def test_heuristic_fallback():
 
     # Create a custom model that is NOT in the registry
     class CustomModel(nn.Module):
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__()
             self.my_custom_blocks = nn.ModuleList([nn.Linear(10, 10) for _ in range(5)])
             self.other_list = nn.ModuleList([nn.Linear(10, 10) for _ in range(2)])

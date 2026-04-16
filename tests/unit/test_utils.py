@@ -1,14 +1,12 @@
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 import torch
 import torch.nn as nn
-from torch.optim import Adam  # type: ignore
+from torch.optim.adam import Adam
 from torch.optim.optimizer import Optimizer
-from transformers import PreTrainedModel
 
 from engram_peft.config import EngramConfig
-from engram_peft.layer import EngramLayer
 from engram_peft.model import get_engram_model
 from engram_peft.utils import (
     MixedOptimizer,
@@ -16,6 +14,11 @@ from engram_peft.utils import (
     get_scheduler,
     get_trainable_param_groups,
 )
+
+if TYPE_CHECKING:
+    from transformers import PreTrainedModel
+
+    from engram_peft.layer import EngramLayer
 
 
 class DummyModel(nn.Module):
@@ -28,7 +31,7 @@ class DummyModel(nn.Module):
         )
         # Mock config for parameter syncing
         self.config = cast(
-            Any,
+            "Any",
             type(
                 "MockConfig",
                 (),
@@ -41,9 +44,9 @@ class DummyModel(nn.Module):
         # Need a tensor that requires grad for backprop to work
         x = torch.randn(batch_size, seq_len, self.hidden_size).requires_grad_(True)
         # mypy needs help since nn.Module doesn't have .layers
-        model_part = cast(Any, self.model)
+        model_part = cast("Any", self.model)
         for layer in model_part.layers:
-            x = cast(torch.Tensor, layer(x))
+            x = cast("torch.Tensor", layer(x))
         return x
 
     def requires_grad_(self, requires_grad: bool = True) -> "DummyModel":
@@ -77,7 +80,7 @@ def test_optimizer_grouping() -> None:
         engram_vocab_size_per_ngram=[100, 100],
         compressed_vocab_size=129280,
     )
-    model = get_engram_model(cast(PreTrainedModel, base_model), config)
+    model = get_engram_model(cast("PreTrainedModel", base_model), config)
 
     base_lr = 4e-4
     optimizer = get_optimizer(model, base_learning_rate=base_lr)
@@ -116,7 +119,7 @@ def test_optimizer_grouping_full_finetune() -> None:
         hidden_size=128,
     )
     model = get_engram_model(
-        cast(PreTrainedModel, base_model),
+        cast("PreTrainedModel", base_model),
         config,
         train_mode="full_finetune",
     )
@@ -155,7 +158,7 @@ def test_optimizer_supports_custom_backbone_builder() -> None:
         hidden_size=128,
     )
     model = get_engram_model(
-        cast(PreTrainedModel, base_model),
+        cast("PreTrainedModel", base_model),
         config,
         train_mode="full_finetune",
     )
@@ -187,10 +190,10 @@ def test_gradient_sparsity() -> None:
         engram_vocab_size_per_ngram=[100],
         hidden_size=128,
     )
-    model = get_engram_model(cast(PreTrainedModel, base_model), config)
+    model = get_engram_model(cast("PreTrainedModel", base_model), config)
 
-    engram_layer = cast(EngramLayer, model.engram_layers["0"])
-    embedding = cast(nn.Embedding, engram_layer.multi_head_embedding.embedding)
+    engram_layer = cast("EngramLayer", model.engram_layers["0"])
+    embedding = cast("nn.Embedding", engram_layer.multi_head_embedding.embedding)
     assert embedding.sparse is True
 
     # Forward pass
@@ -209,7 +212,7 @@ def test_gradient_sparsity() -> None:
     # hash_indices will have batch_size * seq_len * heads entries
     # Here 1 * 3 * total_heads (total_heads = heads * ngrams = 1 * 1 = 1)
     # So 3 rows should have gradients
-    indices = grad._indices()  # type: ignore
+    indices = grad._indices()
     num_nonempty_rows = indices.shape[1]
     assert num_nonempty_rows <= 3  # Some might collide
 
@@ -243,7 +246,7 @@ def test_scheduler_steps() -> None:
     )
 
     lrs = []
-    for step in range(num_steps):
+    for _step in range(num_steps):
         lrs.append(scheduler.get_last_lr()[0])
         optimizer.step()
         scheduler.step()

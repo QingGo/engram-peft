@@ -17,12 +17,13 @@ import json
 import logging
 import os
 import sys
-from typing import Any, Dict, Tuple, cast
+from typing import Any, cast
 
 import matplotlib.pyplot as plt
+import pandas as pd
 import seaborn as sns
 import torch
-from datasets import load_dataset  # type: ignore
+from datasets import load_dataset
 from peft import LoraConfig, PeftModel, TaskType, get_peft_model
 from transformers import (
     AutoModelForCausalLM,
@@ -77,7 +78,7 @@ def prepare_dataset(
     eval_size: int,
     max_length: int,
     num_proc: int = 4,
-) -> Tuple[Any, Any]:
+) -> tuple[Any, Any]:
     print("Loading TinyStories dataset (train split)...")
     train_ds = load_dataset("roneneldan/TinyStories", split="train", streaming=False)
     print("Loading TinyStories dataset (validation split)...")
@@ -87,7 +88,7 @@ def prepare_dataset(
     train_ds = train_ds.select(range(subset_size))
     val_ds = val_ds.select(range(min(len(val_ds), eval_size)))
 
-    def tokenize_function(examples: Dict[str, Any]) -> Dict[str, Any]:
+    def tokenize_function(examples: dict[str, Any]) -> dict[str, Any]:
         tokenized = tokenizer(
             examples["text"],
             truncation=True,
@@ -137,7 +138,7 @@ def get_base_model_eval_loss(
         data_collator=DefaultDataCollator(),
     )
     results = trainer.evaluate()
-    return cast(float, results.get("eval_loss", 0.0))
+    return cast("float", results.get("eval_loss", 0.0))
 
 
 def train_lora(
@@ -146,7 +147,7 @@ def train_lora(
     train_dataset: Any,
     eval_dataset: Any,
     args: argparse.Namespace,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     print(f"\n>>> Phase 2: Training LoRA Baseline on {MODEL_NAME}")
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -205,7 +206,7 @@ def train_lora(
 
     print(f"Evaluating LoRA and saving to {LORA_WEIGHTS_DIR}...")
     eval_results = trainer.evaluate()
-    eval_loss = cast(float, eval_results.get("eval_loss", 0.0))
+    eval_loss = cast("float", eval_results.get("eval_loss", 0.0))
     trainer.save_model(LORA_WEIGHTS_DIR)
 
     avg_time_per_step = train_result.metrics["train_runtime"] / train_result.global_step
@@ -246,7 +247,7 @@ def train_engram_model(
     train_dataset: Any,
     eval_dataset: Any,
     args: argparse.Namespace,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     print(f"\n>>> Phase 3: Training Engram on {MODEL_NAME}")
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -314,7 +315,7 @@ def train_engram_model(
 
     print("Evaluating Engram...")
     eval_results = trainer.evaluate()
-    eval_loss = cast(float, eval_results.get("eval_loss", 0.0))
+    eval_loss = cast("float", eval_results.get("eval_loss", 0.0))
 
     avg_time_per_step = train_result.metrics["train_runtime"] / train_result.global_step
     print(f"Engram Avg Time Per Step: {avg_time_per_step:.4f}s")
@@ -358,7 +359,7 @@ def train_lora_engram(
     train_dataset: Any,
     eval_dataset: Any,
     args: argparse.Namespace,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     print(f"\n>>> Phase 2+3: Training LoRA + Engram on {MODEL_NAME}")
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -385,7 +386,7 @@ def train_lora_engram(
         learning_rate_multiplier=3.0,
     )
     combined_model = get_engram_model(
-        cast(PreTrainedModel, lora_model),
+        cast("PreTrainedModel", lora_model),
         engram_config,
         tokenizer,
         train_mode="preserve_trainable",
@@ -435,7 +436,7 @@ def train_lora_engram(
 
     print("Evaluating Combined Model...")
     eval_results = trainer.evaluate()
-    eval_loss = cast(float, eval_results.get("eval_loss", 0.0))
+    eval_loss = cast("float", eval_results.get("eval_loss", 0.0))
 
     avg_time_per_step = train_result.metrics["train_runtime"] / train_result.global_step
     print(f"Combined Avg Time Per Step: {avg_time_per_step:.4f}s")
@@ -475,7 +476,7 @@ def train_lora_engram(
     }
 
 
-def save_and_plot_results(results: Dict[str, Any]) -> None:
+def save_and_plot_results(results: dict[str, Any]) -> None:
     print(f"\n>>> Saving outputs and generating plot in {OUTPUT_DIR}")
 
     json_path = os.path.join(OUTPUT_DIR, "training_metrics.json")
@@ -507,8 +508,6 @@ def save_and_plot_results(results: Dict[str, Any]) -> None:
     # Set premium Seaborn theme
     sns.set_theme(style="whitegrid", context="talk")
     plt.figure(figsize=(12, 7))
-
-    import pandas as pd
 
     # Prepare data for Seaborn
     plot_data = []
@@ -635,7 +634,7 @@ def save_and_plot_results(results: Dict[str, Any]) -> None:
 def inference_demo(
     base_model: PreTrainedModel,
     tokenizer: PreTrainedTokenizerBase,
-    results: Dict[str, Any],
+    results: dict[str, Any],
 ) -> None:
     print("\n>>> Phase 4: Inference & Gating Visualization")
 
@@ -683,7 +682,7 @@ def inference_demo(
         # Visualization: Print gates for the target layers
         print("\nCapture Gating Activation (Mean per branch):")
         for layer_id in model.config.target_layers:
-            engram_layer = cast(EngramLayer, model.engram_layers[str(layer_id)])
+            engram_layer = cast("EngramLayer", model.engram_layers[str(layer_id)])
             gate = engram_layer.gating.last_gate  # [B, L, M, 1]
             if gate is not None:
                 mean_gates = gate.mean(dim=(0, 1, 3)).cpu().tolist()
@@ -700,7 +699,7 @@ def inference_demo(
         combined_lora_model = PeftModel.from_pretrained(base_model, LORA_ENGRAM_DIR)
         # Load Engram wrapper
         combined_model = EngramModel.from_pretrained(
-            cast(PreTrainedModel, combined_lora_model), LORA_ENGRAM_DIR
+            cast("PreTrainedModel", combined_lora_model), LORA_ENGRAM_DIR
         )
 
         print("Generating with LoRA + Engram ENABLED...")
@@ -761,13 +760,15 @@ if __name__ == "__main__":
 
     # Setup logging to file
     log_path = os.path.join(OUTPUT_DIR, "training.log")
-    sys.stdout = Logger(log_path)  # type: ignore
+    sys.stdout = Logger(log_path)
     sys.stderr = sys.stdout  # Redirect stderr as well
 
     print(f"Logging started. Saving to {log_path}")
 
     print(f"Loading tokenizer & base model: {MODEL_NAME}")
-    tokenizer = cast(PreTrainedTokenizerBase, AutoTokenizer.from_pretrained(MODEL_NAME))
+    tokenizer = cast(
+        "PreTrainedTokenizerBase", AutoTokenizer.from_pretrained(MODEL_NAME)
+    )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -794,7 +795,7 @@ if __name__ == "__main__":
         num_proc=args.num_workers,
     )
 
-    results: Dict[str, Any] = {}
+    results: dict[str, Any] = {}
 
     # 2. Get baseline performance (Zero-shot loss on unseen eval data)
     base_loss = get_base_model_eval_loss(

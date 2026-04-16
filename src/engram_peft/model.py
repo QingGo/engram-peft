@@ -1,6 +1,7 @@
 import logging
 import os
-from typing import Any, Callable, Dict, List, Literal, Optional, Union, cast
+from collections.abc import Callable
+from typing import Any, Literal, cast
 
 import numpy as np
 import torch
@@ -12,6 +13,7 @@ from engram_peft.config import EngramConfig
 from engram_peft.discovery import ArchitectureResolver
 from engram_peft.hashing import NgramHashMapping
 from engram_peft.layer import EngramLayer
+from engram_peft.utils import get_optimizer, get_scheduler
 from engram_peft.weight_transfer import (
     align_embedding_table,
     check_compatibility,
@@ -31,11 +33,13 @@ class EngramModel(nn.Module):
     Wrapper model that injects EngramLayer into a PreTrainedModel via forward hooks.
     """
 
+    _is_engram_model = True
+
     def __init__(
         self,
-        base_model: Union[PreTrainedModel, nn.Module],
+        base_model: PreTrainedModel | nn.Module,
         config: EngramConfig,
-        tokenizer: Optional[PreTrainedTokenizerBase] = None,
+        tokenizer: PreTrainedTokenizerBase | None = None,
     ) -> None:
         """
         Initialize the Engram model.
@@ -102,8 +106,8 @@ class EngramModel(nn.Module):
                 compressor=self.compressor,
             )
 
-        self._hook_handles: List[Any] = []
-        self._current_hash_indices: Optional[Union[Dict[int, Any], torch.Tensor]] = None
+        self._hook_handles: list[Any] = []
+        self._current_hash_indices: dict[int, Any] | torch.Tensor | None = None
         self._engram_enabled = True
 
         # Named adapter management
@@ -156,7 +160,7 @@ class EngramModel(nn.Module):
         if adapter_name not in self.adapters:
             raise ValueError(f"Adapter {adapter_name} not found.")
         self.active_adapter = adapter_name
-        self.engram_layers = cast(nn.ModuleDict, self.adapters[adapter_name])
+        self.engram_layers = cast("nn.ModuleDict", self.adapters[adapter_name])
         self.config = self.peft_config[adapter_name]
         # Reinstate hooks to ensure they point to the correct layers if needed,
         # but since hooks use self.engram_layers[str(layer_id)], and we just
@@ -245,7 +249,7 @@ class EngramModel(nn.Module):
                 except (ValueError, IndexError, AttributeError):
                     return args
 
-            engram_layer = cast(EngramLayer, self.engram_layers[str(layer_id)])
+            engram_layer = cast("EngramLayer", self.engram_layers[str(layer_id)])
             modified_hidden_states = engram_layer(
                 hidden_states=hidden_states, engram_hash_indices=engram_hash_indices
             )
@@ -260,7 +264,7 @@ class EngramModel(nn.Module):
 
         def model_pre_hook(
             module: nn.Module, args: tuple, kwargs: dict
-        ) -> Optional[tuple]:
+        ) -> tuple | None:
             if not self._engram_enabled:
                 return None
 
@@ -298,7 +302,7 @@ class EngramModel(nn.Module):
 
         return model_pre_hook
 
-    def load_engram(self, engram_path: Optional[str] = None) -> None:
+    def load_engram(self, engram_path: str | None = None) -> None:
         """
         Dynamically loads and attaches Engram hooks.
         If engram_path is specified, optionally loads weights.
@@ -337,7 +341,9 @@ class EngramModel(nn.Module):
                     target_device = str(next(target_module.parameters()).device)
 
                     # Align the entire adapter module to target device (including embeddings)
-                    engram_layer = cast(EngramLayer, self.engram_layers[str(layer_id)])
+                    engram_layer = cast(
+                        "EngramLayer", self.engram_layers[str(layer_id)]
+                    )
                     engram_layer.to(target_device)
                 except (StopIteration, AttributeError):
                     pass
@@ -362,10 +368,10 @@ class EngramModel(nn.Module):
 
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        engram_hash_indices: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        engram_hash_indices: torch.Tensor | None = None,
         **kwargs: Any,
     ) -> Any:
         """
@@ -405,7 +411,7 @@ class EngramModel(nn.Module):
 
     def generate(self, *args: Any, **kwargs: Any) -> Any:
         """Delegates generation to the underlying base_model."""
-        generate_func = getattr(self.base_model, "generate")
+        generate_func = self.base_model.generate
         return generate_func(*args, **kwargs)
 
     def create_optimizer(
@@ -414,8 +420,6 @@ class EngramModel(nn.Module):
         """
         Helper to create the MixedOptimizer for this model.
         """
-        from engram_peft.utils import get_optimizer
-
         return get_optimizer(
             self, base_learning_rate=base_learning_rate, **optimizer_kwargs
         )
@@ -426,8 +430,6 @@ class EngramModel(nn.Module):
         """
         Helper to create the Step Decay scheduler for this model.
         """
-        from engram_peft.utils import get_scheduler
-
         return get_scheduler(
             optimizer, num_training_steps=num_training_steps, warmup_steps=warmup_steps
         )
@@ -457,8 +459,8 @@ class EngramModel(nn.Module):
     def load_weights_flexible(
         self,
         checkpoint_path: str,
-        source_config_path: Optional[str] = None,
-        layer_mapping: Optional[Dict[int, int]] = None,
+        source_config_path: str | None = None,
+        layer_mapping: dict[int, int] | None = None,
         reuse_structural: bool = False,
     ) -> None:
         """
@@ -548,11 +550,11 @@ class EngramModel(nn.Module):
 
     def remap_from_corpus(
         self,
-        corpus: Union[List[str], List[int], np.ndarray, torch.Tensor],
+        corpus: list[str] | list[int] | np.ndarray | torch.Tensor,
         checkpoint_path: str,
-        source_config_path: Optional[str] = None,
-        layer_mapping: Optional[Dict[int, int]] = None,
-        tokenizer: Optional[Any] = None,
+        source_config_path: str | None = None,
+        layer_mapping: dict[int, int] | None = None,
+        tokenizer: Any | None = None,
         batch_size: int = 1024,
     ) -> None:
         """
@@ -586,11 +588,11 @@ class EngramModel(nn.Module):
 
 
 def get_engram_model(
-    model: Union[PreTrainedModel, nn.Module],
+    model: PreTrainedModel | nn.Module,
     config: EngramConfig,
-    tokenizer: Optional[PreTrainedTokenizerBase] = None,
+    tokenizer: PreTrainedTokenizerBase | None = None,
     wrap_peft: bool = False,
-    train_mode: Optional[TrainMode] = None,
+    train_mode: TrainMode | None = None,
 ) -> EngramModel:
     """
     Wraps a base model with Engram layers.

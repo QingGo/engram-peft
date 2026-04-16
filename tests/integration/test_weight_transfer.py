@@ -8,8 +8,10 @@
 
 import shutil
 import tempfile
+from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Generator, Optional
+from types import SimpleNamespace
+from typing import Any, Optional
 
 import pytest
 import torch
@@ -22,14 +24,10 @@ from engram_peft.model import get_engram_model
 class HeavyDummyModel(nn.Module):
     def __init__(self, hidden_size: int = 128) -> None:
         super().__init__()
-
-        class Config:
-            pass
-
-        self.config = Config()
-        setattr(self.config, "hidden_size", hidden_size)
-        setattr(self.config, "vocab_size", 2262400)
-        setattr(self.config, "pad_token_id", 0)
+        self.config = SimpleNamespace()
+        self.config.hidden_size = hidden_size
+        self.config.vocab_size = 2262400
+        self.config.pad_token_id = 0
         self.model = nn.Module()
         self.model.layers = nn.ModuleList(
             [nn.Linear(hidden_size, hidden_size) for _ in range(32)]  # 32 layers
@@ -40,8 +38,8 @@ class HeavyDummyModel(nn.Module):
         return next(self.parameters()).device
 
     def forward(
-        self, input_ids: Optional[torch.Tensor] = None, **kwargs: Any
-    ) -> Optional[torch.Tensor]:
+        self, input_ids: torch.Tensor | None = None, **kwargs: Any
+    ) -> torch.Tensor | None:
         return None
 
 
@@ -69,7 +67,7 @@ def test_weight_transfer_full_integration(heavy_tmp_dir: Path) -> None:
         n_head_per_ngram=8,
         enable_tokenizer_compression=False,
     )
-    src_model = get_engram_model(base_model, src_config)  # type: ignore[arg-type]
+    src_model = get_engram_model(base_model, src_config)
 
     src_path = heavy_tmp_dir / "src_heavy"
     src_model.save_pretrained(str(src_path))
@@ -84,7 +82,7 @@ def test_weight_transfer_full_integration(heavy_tmp_dir: Path) -> None:
         n_head_per_ngram=8,
         enable_tokenizer_compression=False,
     )
-    target_model = get_engram_model(base_model, target_config)  # type: ignore[arg-type]
+    target_model = get_engram_model(base_model, target_config)
 
     target_model.load_weights_flexible(
         str(src_path / "engram_weights.pt"), layer_mapping={0: 31}
@@ -111,7 +109,7 @@ def test_corpus_remapping_integration(heavy_tmp_dir: Path, tokenizer_gpt2: Any) 
         n_head_per_ngram=2,
         tokenizer_name_or_path="gpt2",
     )
-    src_model = get_engram_model(base_model, src_config, tokenizer=tokenizer_gpt2)  # type: ignore[arg-type]
+    src_model = get_engram_model(base_model, src_config, tokenizer=tokenizer_gpt2)
     src_path = heavy_tmp_dir / "src_corpus"
     src_model.save_pretrained(str(src_path))
 
@@ -122,7 +120,7 @@ def test_corpus_remapping_integration(heavy_tmp_dir: Path, tokenizer_gpt2: Any) 
         embedding_dim=128,
         n_head_per_ngram=2,
     )
-    target_model = get_engram_model(base_model, target_config, tokenizer=tokenizer_gpt2)  # type: ignore[arg-type]
+    target_model = get_engram_model(base_model, target_config, tokenizer=tokenizer_gpt2)
 
     text = "The quick brown fox jumps over the lazy dog."
     target_model.remap_from_corpus(

@@ -17,11 +17,11 @@ import copy
 import json
 import logging
 import os
-from typing import Any, Dict, Tuple, cast
+from typing import Any, cast
 
 import torch
-from datasets import load_dataset  # type: ignore
-from torch.optim import AdamW  # type: ignore
+from datasets import load_dataset
+from torch.optim.adamw import AdamW
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -57,7 +57,7 @@ def prepare_dataset(
     eval_size: int,
     max_length: int,
     num_proc: int = 4,
-) -> Tuple[Any, Any]:
+) -> tuple[Any, Any]:
     print("Loading TinyStories dataset (train split)...")
     train_ds = load_dataset("roneneldan/TinyStories", split="train", streaming=False)
     print("Loading TinyStories dataset (validation split)...")
@@ -66,7 +66,7 @@ def prepare_dataset(
     train_ds = train_ds.select(range(subset_size))
     val_ds = val_ds.select(range(min(len(val_ds), eval_size)))
 
-    def tokenize_function(examples: Dict[str, Any]) -> Dict[str, Any]:
+    def tokenize_function(examples: dict[str, Any]) -> dict[str, Any]:
         tokenized = tokenizer(
             examples["text"],
             truncation=True,
@@ -114,7 +114,7 @@ def get_base_model_eval_loss(
         data_collator=DefaultDataCollator(),
     )
     results = trainer.evaluate()
-    return cast(float, results.get("eval_loss", 0.0))
+    return cast("float", results.get("eval_loss", 0.0))
 
 
 def train_full_finetune_engram(
@@ -123,7 +123,7 @@ def train_full_finetune_engram(
     train_dataset: Any,
     eval_dataset: Any,
     args: argparse.Namespace,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     print(f"\n>>> Phase 2: Training Full Finetune + Engram on {MODEL_NAME}")
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -198,7 +198,7 @@ def train_full_finetune_engram(
 
     print("Evaluating Full Finetune + Engram...")
     eval_results = trainer.evaluate()
-    eval_loss = cast(float, eval_results.get("eval_loss", 0.0))
+    eval_loss = cast("float", eval_results.get("eval_loss", 0.0))
 
     avg_time_per_step = train_result.metrics["train_runtime"] / train_result.global_step
     print(f"Full Finetune + Engram Avg Time Per Step: {avg_time_per_step:.4f}s")
@@ -237,7 +237,7 @@ def train_full_finetune_engram(
     }
 
 
-def save_metrics(metrics: Dict[str, Any]) -> None:
+def save_metrics(metrics: dict[str, Any]) -> None:
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     with open(METRICS_PATH, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
@@ -257,7 +257,7 @@ def inference_demo(
     print("\nGenerating with Base Model (No Engram)...")
     output_base = base_model.generate(
         **inputs, max_new_tokens=40, max_length=None, do_sample=False
-    )  # type: ignore[attr-defined]
+    )
     print(
         f"Output (Base):                {tokenizer.decode(output_base[0], skip_special_tokens=True)}"
     )

@@ -1,6 +1,7 @@
 import os
 import shutil
-from typing import Any, Optional
+from types import SimpleNamespace
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -13,20 +14,16 @@ from engram_peft.model import get_engram_model
 class DummyModel(nn.Module):
     def __init__(self, hidden_size: int = 768) -> None:
         super().__init__()
-
-        class Config:
-            pass
-
-        self.config = Config()
-        setattr(self.config, "hidden_size", hidden_size)
+        self.config = SimpleNamespace()
+        self.config.hidden_size = hidden_size
         self.model = nn.Module()
         self.model.layers = nn.ModuleList(
             [nn.Linear(hidden_size, hidden_size) for _ in range(12)]
         )
 
     def forward(
-        self, input_ids: Optional[torch.Tensor] = None, **kwargs: Any
-    ) -> Optional[torch.Tensor]:
+        self, input_ids: torch.Tensor | None = None, **kwargs: Any
+    ) -> torch.Tensor | None:
         return None
 
 
@@ -46,7 +43,7 @@ def main() -> None:
         n_head_per_ngram=2,
         enable_tokenizer_compression=False,
     )
-    src_model = get_engram_model(base_model, src_config)  # type: ignore[arg-type]
+    src_model = get_engram_model(base_model, src_config)
 
     # Randomize weights for demo
     for param in src_model.engram_layers.parameters():
@@ -68,7 +65,7 @@ def main() -> None:
         hc_mult=8,
         enable_tokenizer_compression=False,
     )
-    target_model = get_engram_model(base_model, target_config)  # type: ignore[arg-type]
+    target_model = get_engram_model(base_model, target_config)
     print(
         "Target model (Layers 5, 6) initialized with larger buckets and more branches."
     )

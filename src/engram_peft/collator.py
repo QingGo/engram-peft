@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, cast
+from typing import Any, cast
 
 import torch
 from transformers import DataCollatorForLanguageModeling, PreTrainedTokenizerBase
@@ -22,7 +22,7 @@ class EngramDataCollator(DataCollatorForLanguageModeling):
         self,
         tokenizer: PreTrainedTokenizerBase,
         config: EngramConfig,
-        compressor: Optional[CompressedTokenizer] = None,
+        compressor: CompressedTokenizer | None = None,
         mlm: bool = False,
         **kwargs: Any,
     ) -> None:
@@ -61,8 +61,8 @@ class EngramDataCollator(DataCollatorForLanguageModeling):
         )
 
     def __call__(
-        self, examples: Any, return_tensors: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, examples: Any, return_tensors: str | None = None
+    ) -> dict[str, Any]:
         """
         Processes a batch of examples and adds precomputed engram hash indices.
 
@@ -76,7 +76,7 @@ class EngramDataCollator(DataCollatorForLanguageModeling):
         """
         # Step 1: Call parent to get basic LM batch (handles padding, labels, etc.)
         batch = cast(
-            Dict[str, Any], super().__call__(examples, return_tensors=return_tensors)
+            "dict[str, Any]", super().__call__(examples, return_tensors=return_tensors)
         )
         input_ids = batch["input_ids"]
 

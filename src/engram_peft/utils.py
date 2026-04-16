@@ -1,13 +1,8 @@
+import math
+from collections.abc import Callable, Mapping
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Dict,
-    List,
-    Mapping,
-    Optional,
-    Type,
-    Union,
     cast,
     overload,
 )
@@ -23,8 +18,8 @@ from torch.optim.sparse_adam import SparseAdam
 if TYPE_CHECKING:
     from engram_peft import EngramModel
 
-OptimizerFactory = Callable[[List[Dict[str, Any]]], Optimizer]
-OptimizerSpec = Union[str, Type[Optimizer], OptimizerFactory]
+OptimizerFactory = Callable[[list[dict[str, Any]]], Optimizer]
+OptimizerSpec = str | type[Optimizer] | OptimizerFactory
 
 
 class MixedOptimizer(Optimizer):
@@ -34,11 +29,11 @@ class MixedOptimizer(Optimizer):
     parameters in a single Adam optimizer instance.
     """
 
-    def __init__(self, optimizers: List[Optimizer]):
+    def __init__(self, optimizers: list[Optimizer]):
         self.optimizers = optimizers
         # Combine parameter groups for transparency and compatibility
         param_groups = []
-        for i, opt in enumerate(optimizers):
+        for _i, opt in enumerate(optimizers):
             param_groups.extend(opt.param_groups)
         # We call super().__init__ to ensure the base Optimizer class
         # is correctly initialized (state, etc.)
@@ -54,7 +49,7 @@ class MixedOptimizer(Optimizer):
     @overload
     def step(self, closure: Callable[[], float]) -> float: ...
 
-    def step(self, closure: Optional[Callable[[], float]] = None) -> Optional[float]:
+    def step(self, closure: Callable[[], float] | None = None) -> float | None:
         """Performs a single optimization step, ensuring hyperparams are synced."""
         loss = None
         if closure is not None:
@@ -73,7 +68,7 @@ class MixedOptimizer(Optimizer):
                         sub_pg[key] = parent_pg[key]
                 current_idx += 1
 
-        for i, opt in enumerate(self.optimizers):
+        for _i, opt in enumerate(self.optimizers):
             # Check if gradients exist in this sub-optimizer
             has_grads = False
             for pg in opt.param_groups:
@@ -94,13 +89,13 @@ class MixedOptimizer(Optimizer):
         for opt in self.optimizers:
             opt.zero_grad(set_to_none=set_to_none)
 
-    def state_dict(self) -> Dict[str, Any]:
+    def state_dict(self) -> dict[str, Any]:
         """Returns the state of the optimizer as a dict."""
         return {"optimizers": [opt.state_dict() for opt in self.optimizers]}
 
-    def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         """Loads the optimizer state."""
-        for opt, sd in zip(self.optimizers, state_dict["optimizers"]):
+        for opt, sd in zip(self.optimizers, state_dict["optimizers"], strict=False):
             opt.load_state_dict(sd)
 
 
@@ -114,7 +109,7 @@ _OPTIMIZER_REGISTRY: Mapping[str, OptimizerFactory] = {
 
 def _build_optimizer(
     spec: OptimizerSpec,
-    param_groups: List[Dict[str, Any]],
+    param_groups: list[dict[str, Any]],
 ) -> Optimizer:
     if isinstance(spec, str):
         if spec not in _OPTIMIZER_REGISTRY:
@@ -125,16 +120,16 @@ def _build_optimizer(
         return _OPTIMIZER_REGISTRY[spec](param_groups)
 
     if isinstance(spec, type) and issubclass(spec, Optimizer):
-        optimizer_cls = cast(OptimizerFactory, spec)
+        optimizer_cls = cast("OptimizerFactory", spec)
         return optimizer_cls(param_groups)
 
-    optimizer_factory = cast(OptimizerFactory, spec)
+    optimizer_factory = cast("OptimizerFactory", spec)
     return optimizer_factory(param_groups)
 
 
 def get_trainable_param_groups(
     model: "EngramModel",
-) -> Dict[str, List[torch.nn.Parameter]]:
+) -> dict[str, list[torch.nn.Parameter]]:
     """
     Splits trainable parameters into backbone, Engram dense, and Engram sparse groups.
     """
@@ -161,13 +156,13 @@ def get_trainable_param_groups(
 def get_optimizer(
     model: "EngramModel",
     base_learning_rate: float = 4e-4,
-    backbone_learning_rate: Optional[float] = None,
-    engram_dense_learning_rate: Optional[float] = None,
-    engram_sparse_learning_rate: Optional[float] = None,
-    backbone_weight_decay: Optional[float] = None,
-    engram_dense_weight_decay: Optional[float] = None,
+    backbone_learning_rate: float | None = None,
+    engram_dense_learning_rate: float | None = None,
+    engram_sparse_learning_rate: float | None = None,
+    backbone_weight_decay: float | None = None,
+    engram_dense_weight_decay: float | None = None,
     engram_sparse_weight_decay: float = 0.0,
-    backbone_optimizer: Optional[OptimizerSpec] = None,
+    backbone_optimizer: OptimizerSpec | None = None,
     engram_dense_optimizer: OptimizerSpec = "adam",
     engram_sparse_optimizer: OptimizerSpec = "sparse_adam",
 ) -> MixedOptimizer:
@@ -210,7 +205,7 @@ def get_optimizer(
     if engram_dense_weight_decay is None:
         engram_dense_weight_decay = config_weight_decay
 
-    optimizers: List[Optimizer] = []
+    optimizers: list[Optimizer] = []
     if groups["engram_sparse"]:
         optimizers.append(
             _build_optimizer(
@@ -313,7 +308,6 @@ def get_warmup_hold_cosine_scheduler(
     Returns:
         LambdaLR: The learning rate scheduler.
     """
-    import math
 
     def lr_lambda(current_step: int) -> float:
         if current_step < warmup_steps:

@@ -1,12 +1,12 @@
 from typing import Any
 
 from engram_peft.collator import EngramDataCollator
+from engram_peft.config import EngramConfig
 
 
 def test_collator_gpt2_integration(tokenizer_gpt2: Any) -> None:
     """Integration Test: Verify collator with real GPT2 tokenizer (heavy vocab)."""
     # Using the standard large config that triggers prime calculations for 1.1M vocab
-    from engram_peft.config import EngramConfig
 
     config = EngramConfig(
         target_layers=[2, 15],

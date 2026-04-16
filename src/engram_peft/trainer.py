@@ -1,9 +1,12 @@
-from typing import Any, Dict, Optional, Union, cast
+from typing import Any, cast
 
 import torch
 import torch.nn as nn
-from torch.optim import Optimizer  # type: ignore
+from torch.optim.optimizer import Optimizer
 from transformers import Trainer
+
+from engram_peft.model import EngramModel
+from engram_peft.utils import get_scheduler
 
 
 class EngramTrainer(Trainer):
@@ -18,7 +21,7 @@ class EngramTrainer(Trainer):
     def __init__(
         self,
         *args: Any,
-        optimizer_kwargs: Optional[Dict[str, Any]] = None,
+        optimizer_kwargs: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
@@ -30,7 +33,6 @@ class EngramTrainer(Trainer):
         """
         if self.optimizer is None:
             # Check if model has the helper
-            from engram_peft.model import EngramModel
 
             if isinstance(self.model, EngramModel) and hasattr(
                 self.model, "create_optimizer"
@@ -46,7 +48,7 @@ class EngramTrainer(Trainer):
         return self.optimizer
 
     def create_scheduler(
-        self, num_training_steps: int, optimizer: Optional[Optimizer] = None
+        self, num_training_steps: int, optimizer: Optimizer | None = None
     ) -> torch.optim.lr_scheduler.LRScheduler:
         """
         Creates the scheduler. Uses standard Transformers schedulers if requested,
@@ -61,8 +63,6 @@ class EngramTrainer(Trainer):
             if optimizer is None:
                 optimizer = self.create_optimizer()
 
-            from engram_peft.model import EngramModel
-
             if isinstance(self.model, EngramModel) and hasattr(
                 self.model, "create_scheduler"
             ):
@@ -72,8 +72,6 @@ class EngramTrainer(Trainer):
                     warmup_steps=self.args.get_warmup_steps(num_training_steps),
                 )
             else:
-                from engram_peft.utils import get_scheduler
-
                 self.lr_scheduler = get_scheduler(
                     optimizer,
                     num_training_steps=num_training_steps,
@@ -81,7 +79,7 @@ class EngramTrainer(Trainer):
                 )
         return self.lr_scheduler
 
-    def _compute_total_norm(self, model: nn.Module) -> Optional[torch.Tensor]:
+    def _compute_total_norm(self, model: nn.Module) -> torch.Tensor | None:
         """Computes the total gradient norm across dense and sparse parameters."""
         grads = []
         for _, p in model.named_parameters():
@@ -97,12 +95,12 @@ class EngramTrainer(Trainer):
         # Compute the global L2 norm
         device = grads[0].device
         norms = [torch.norm(g.detach(), 2).to(device) for g in grads]
-        return cast(torch.Tensor, torch.norm(torch.stack(norms), 2))
+        return cast("torch.Tensor", torch.norm(torch.stack(norms), 2))
 
     def training_step(
         self,
         model: nn.Module,
-        inputs: Dict[str, Union[torch.Tensor, Any]],
+        inputs: dict[str, torch.Tensor | Any],
         num_items_in_batch: torch.Tensor | int | None = None,
     ) -> torch.Tensor:
         """Standard training step handles both old and new Transformers Trainer signatures."""
@@ -114,8 +112,8 @@ class EngramTrainer(Trainer):
             return super().training_step(model, inputs)
 
     def _clip_grad_norm(
-        self, model: nn.Module, max_norm: Optional[float] = None
-    ) -> Optional[torch.Tensor]:
+        self, model: nn.Module, max_norm: float | None = None
+    ) -> torch.Tensor | None:
         if max_norm is None:
             max_norm = self.args.max_grad_norm
 
@@ -141,8 +139,8 @@ class EngramTrainer(Trainer):
         return total_norm
 
     def _get_grad_norm(
-        self, model: nn.Module, grad_norm: Optional[float] = None
-    ) -> Optional[torch.Tensor]:
+        self, model: nn.Module, grad_norm: float | None = None
+    ) -> torch.Tensor | None:
         """Override _get_grad_norm to avoid SparseCPU NotImplementedError during logging."""
         if grad_norm is not None:
             return (

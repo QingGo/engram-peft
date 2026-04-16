@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -39,8 +39,8 @@ class ResolvedMetadata:
     original_vocab_size: int
     pad_token_id: int
     layer_container_path: str
-    tokenizer_name_or_path: Optional[str] = None
-    model_type: Optional[str] = None
+    tokenizer_name_or_path: str | None = None
+    model_type: str | None = None
 
 
 class ArchitectureResolver:
@@ -52,8 +52,8 @@ class ArchitectureResolver:
     @staticmethod
     def resolve(
         model: nn.Module,
-        tokenizer: Optional[PreTrainedTokenizerBase] = None,
-        config: Optional[Any] = None,
+        tokenizer: PreTrainedTokenizerBase | None = None,
+        config: Any | None = None,
     ) -> ResolvedMetadata:
         """
         Performs a full discovery pass on the model and environment.
@@ -108,9 +108,7 @@ class ArchitectureResolver:
         )
 
     @staticmethod
-    def _resolve_hidden_size(
-        model: nn.Module, config: Optional[Any]
-    ) -> Tuple[int, str]:
+    def _resolve_hidden_size(model: nn.Module, config: Any | None) -> tuple[int, str]:
         # 1. explicit config
         if config is not None:
             val = getattr(config, "hidden_size", None)
@@ -145,8 +143,8 @@ class ArchitectureResolver:
 
     @staticmethod
     def _resolve_original_vocab_size(
-        model: nn.Module, tokenizer: Optional[Any], config: Optional[Any]
-    ) -> Tuple[int, str]:
+        model: nn.Module, tokenizer: Any | None, config: Any | None
+    ) -> tuple[int, str]:
         # 1. explicit config
         if config is not None:
             val = getattr(config, "original_vocab_size", None)
@@ -170,8 +168,8 @@ class ArchitectureResolver:
 
     @staticmethod
     def _resolve_pad_id(
-        model: nn.Module, tokenizer: Optional[Any], config: Optional[Any]
-    ) -> Tuple[int, str]:
+        model: nn.Module, tokenizer: Any | None, config: Any | None
+    ) -> tuple[int, str]:
         # 1. explicit config
         if config is not None:
             val = getattr(config, "pad_id", None)
@@ -198,8 +196,8 @@ class ArchitectureResolver:
 
     @staticmethod
     def _resolve_layer_container(
-        model: nn.Module, config: Optional[Any]
-    ) -> Tuple[str, str]:
+        model: nn.Module, config: Any | None
+    ) -> tuple[str, str]:
         # 1. Explicit path
         if (
             config is not None
@@ -214,18 +212,18 @@ class ArchitectureResolver:
                 raise ValueError(
                     f"Explicit layer_container_path '{path}' exists but is not a nn.ModuleList "
                     f"(found {type(container)})."
-                )
+                ) from None
             except AttributeError:
                 raise ValueError(
                     f"Explicit layer_container_path '{path}' not found in model."
-                )
+                ) from None
             except Exception as e:
                 # Re-raise if it's already a ValueError from above, otherwise wrap
                 if isinstance(e, ValueError):
                     raise e
                 raise ValueError(
                     f"Error resolving explicit layer_container_path '{path}': {e}"
-                )
+                ) from e
 
         # 2. Registry
         model_type = ArchitectureResolver._get_model_type(model)
@@ -250,7 +248,7 @@ class ArchitectureResolver:
         )
 
     @staticmethod
-    def _get_model_type(model: nn.Module) -> Optional[str]:
+    def _get_model_type(model: nn.Module) -> str | None:
         base_config = getattr(model, "config", None)
         if base_config is not None:
             return getattr(base_config, "model_type", None)
@@ -272,9 +270,9 @@ class ArchitectureResolver:
         return curr
 
     @staticmethod
-    def find_largest_module_list(model: nn.Module) -> Optional[str]:
+    def find_largest_module_list(model: nn.Module) -> str | None:
         """Heuristically finds the largest nn.ModuleList in the model tree."""
-        candidates: List[Tuple[str, int]] = []
+        candidates: list[tuple[str, int]] = []
         for name, module in model.named_modules():
             if isinstance(module, torch.nn.ModuleList) and len(module) > 0:
                 if all(isinstance(m, torch.nn.Module) for m in module):

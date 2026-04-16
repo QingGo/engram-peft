@@ -1,79 +1,90 @@
+import pytest
 import torch
 import torch.nn as nn
+from transformers import AutoConfig, AutoModel
 
 from engram_peft.config import EngramConfig
-from engram_peft.discovery import ArchitectureResolver
+from engram_peft.model import get_engram_model
 
 
-class DummyModel(nn.Module):
-    def __init__(self, hidden_size=768, vocab_size=32000, pad_token_id=0):
-        super().__init__()
-        self.config = type(
-            "Config",
-            (),
-            {
-                "hidden_size": hidden_size,
-                "vocab_size": vocab_size,
-                "pad_token_id": pad_token_id,
-                "model_type": "llama",
-            },
-        )
-        self.layers = nn.ModuleList(
-            [nn.Linear(hidden_size, hidden_size) for _ in range(2)]
-        )
+def test_discovery_with_manual_path() -> None:
+    """Tests discovery when a manual path is provided."""
+    config = AutoConfig.from_pretrained(
+        "hf-internal-testing/tiny-random-LlamaForCausalLM"
+    )
+    with torch.device("meta"):
+        base_model = AutoModel.from_config(config)
+
+    engram_config = EngramConfig(
+        layer_container_path="layers",
+        target_layers=[0],
+        original_vocab_size=100,
+        enable_tokenizer_compression=False,
+    )
+
+    model = get_engram_model(base_model, engram_config)
+    found_layers = model._find_transformer_layers()
+    assert isinstance(found_layers, nn.ModuleList)
+    assert len(found_layers) == config.num_hidden_layers
 
 
-def test_discovery_basic():
-    """Test standard discovery from model config."""
-    model = DummyModel(hidden_size=1024, vocab_size=50000, pad_token_id=1)
-    config = EngramConfig()
+def test_discovery_error_on_invalid_path() -> None:
+    """Tests that an error is raised when an invalid path is provided."""
+    config = AutoConfig.from_pretrained(
+        "hf-internal-testing/tiny-random-LlamaForCausalLM"
+    )
+    with torch.device("meta"):
+        base_model = AutoModel.from_config(config)
 
-    metadata = ArchitectureResolver.resolve(model, config=config)
+    engram_config = EngramConfig(
+        layer_container_path="embed_tokens",
+        target_layers=[0],
+        original_vocab_size=100,
+        enable_tokenizer_compression=False,
+    )
 
-    assert metadata.hidden_size == 1024
-    assert metadata.original_vocab_size == 50000
-    assert metadata.pad_token_id == 1
-    assert metadata.layer_container_path in ["model.layers", "layers"]
-
-
-def test_discovery_override():
-    """Test that explicit config overrides discovery."""
-    model = DummyModel(hidden_size=1024, vocab_size=50000, pad_token_id=1)
-    config = EngramConfig(hidden_size=2048, pad_id=5)
-
-    metadata = ArchitectureResolver.resolve(model, config=config)
-
-    # Discovery should respect the None-check logic
-    assert metadata.hidden_size == 2048
-    assert metadata.pad_token_id == 5
-    # vocab_size was not overridden in EngramConfig, so it should be detected
-    assert metadata.original_vocab_size == 50000
+    with pytest.raises(ValueError, match="is not a nn.ModuleList"):
+        get_engram_model(base_model, engram_config)
 
 
-def test_discovery_fallback():
-    """Test fallback to defaults when detection fails."""
+def test_discovery_error_on_missing_path() -> None:
+    """Tests that an error is raised when a non-existent path is provided."""
+    config = AutoConfig.from_pretrained(
+        "hf-internal-testing/tiny-random-LlamaForCausalLM"
+    )
+    with torch.device("meta"):
+        base_model = AutoModel.from_config(config)
 
-    class EmptyModel(nn.Module):
-        def __init__(self):
+    engram_config = EngramConfig(
+        layer_container_path="non_existent.path",
+        target_layers=[0],
+        original_vocab_size=100,
+        enable_tokenizer_compression=False,
+    )
+
+    with pytest.raises(ValueError, match="not found in model"):
+        get_engram_model(base_model, engram_config)
+
+
+def test_discovery_heuristics_fallback() -> None:
+    """Tests that heuristics are used when no path is provided and model is unknown."""
+
+    class MockModel(nn.Module):
+        def __init__(self) -> None:
             super().__init__()
+            self.layers = nn.ModuleList([nn.Linear(10, 10) for _ in range(2)])
+            self.config = type(
+                "Config",
+                (),
+                {"model_type": "unknown", "vocab_size": 100, "pad_token_id": 0},
+            )()
 
-    model = EmptyModel()
-    config = EngramConfig()
+    base_model = MockModel()
+    engram_config = EngramConfig(
+        target_layers=[0],
+        enable_tokenizer_compression=False,
+    )
 
-    # Should fallback for hidden_size and pad_id, but vocab_size will raise ValueError
-    try:
-        ArchitectureResolver.resolve(model, config=config)
-    except ValueError as e:
-        assert "Could not detect original vocab_size" in str(e)
-
-
-def test_discovery_with_tokenizer():
-    """Test discovery from tokenizer."""
-    model = DummyModel()
-    tokenizer = type("Tokenizer", (), {"pad_token_id": 9, "__len__": lambda s: 42000})()
-    config = EngramConfig()
-
-    metadata = ArchitectureResolver.resolve(model, tokenizer=tokenizer, config=config)
-
-    assert metadata.pad_token_id == 9
-    assert metadata.original_vocab_size == 42000
+    model = get_engram_model(base_model, engram_config)
+    found_layers = model._find_transformer_layers()
+    assert len(found_layers) == 2

@@ -1,9 +1,8 @@
 from dataclasses import dataclass, field
-from typing import Dict, List, Set, Union
 
 import numpy as np
 import torch
-from sympy import nextprime  # type: ignore[import-untyped]
+from sympy import nextprime
 
 
 @dataclass
@@ -14,13 +13,13 @@ class NgramHashMapping:
     """
 
     compressed_vocab_size: int
-    engram_vocab_size_per_ngram: List[int] = field(
+    engram_vocab_size_per_ngram: list[int] = field(
         default_factory=lambda: [2262400 // 2, 2262400 // 2]
     )
-    ngram_sizes: List[int] = field(default_factory=lambda: [2, 3])
+    ngram_sizes: list[int] = field(default_factory=lambda: [2, 3])
     max_ngram_size: int = 3
     n_head_per_ngram: int = 8
-    layer_ids: List[int] = field(default_factory=lambda: [2, 15])
+    layer_ids: list[int] = field(default_factory=lambda: [2, 15])
     pad_id: int = 2
     seed: int = 0
 
@@ -29,7 +28,7 @@ class NgramHashMapping:
             raise ValueError("compressed_vocab_size must be a positive integer.")
 
         self.max_ngram_size = max(self.ngram_sizes)
-        self.all_multipliers: Dict[int, np.ndarray] = {}
+        self.all_multipliers: dict[int, np.ndarray] = {}
 
         for layer_id in self.layer_ids:
             # Layer-specific seed
@@ -51,7 +50,7 @@ class NgramHashMapping:
 
         self.prime_tables = self.calculate_vocab_size_across_layers()
 
-    def find_next_prime(self, start: int, seen_primes: Set[int]) -> int:
+    def find_next_prime(self, start: int, seen_primes: set[int]) -> int:
         """Finds the next unused global prime number strictly greater than start."""
         p_val = nextprime(start)
         p = start + 1 if p_val is None else int(p_val)
@@ -60,15 +59,15 @@ class NgramHashMapping:
             p = p + 1 if p_val is None else int(p_val)
         return p
 
-    def calculate_vocab_size_across_layers(self) -> Dict[int, List[List[int]]]:
+    def calculate_vocab_size_across_layers(self) -> dict[int, list[list[int]]]:
         """
         Calculates unique prime table sizes for all layers and heads.
         Matches the official demo's globally unique prime generation.
         Returns:
             Dict mapping layer_id -> List of Lists of primes [ngram_idx][head_idx]
         """
-        seen_primes: Set[int] = set()
-        primes_across_layers: Dict[int, List[List[int]]] = {}
+        seen_primes: set[int] = set()
+        primes_across_layers: dict[int, list[list[int]]] = {}
 
         for layer_id in sorted(self.layer_ids):
             layer_primes = []
@@ -91,7 +90,7 @@ class NgramHashMapping:
 
         return primes_across_layers
 
-    def _get_ngram_indices(self, input_ids: np.ndarray) -> Dict[int, np.ndarray]:
+    def _get_ngram_indices(self, input_ids: np.ndarray) -> dict[int, np.ndarray]:
         """
         Internal implementation of multi-head hashing using NumPy vectorization.
         Extracts ngrams once and broadcasts multipliers and primes across layers and heads.
@@ -117,10 +116,10 @@ class NgramHashMapping:
         # We process layer by layer but vectorize across heads.
         # Layer vectorization is possible but often memory-intensive if batch_size is large.
         # Head vectorization is the most critical for Engram (8x speedup).
-        layer_results: Dict[int, np.ndarray] = {}
+        layer_results: dict[int, np.ndarray] = {}
 
         for layer_id in self.layer_ids:
-            all_head_hashes: List[np.ndarray] = []
+            all_head_hashes: list[np.ndarray] = []
             multipliers = self.all_multipliers[layer_id]
             layer_primes = self.prime_tables[layer_id]
 
@@ -151,7 +150,7 @@ class NgramHashMapping:
 
         return layer_results
 
-    def hash(self, input_ids: Union[torch.Tensor, np.ndarray]) -> Dict[int, np.ndarray]:
+    def hash(self, input_ids: torch.Tensor | np.ndarray) -> dict[int, np.ndarray]:
         """
         Compute hashes for all tracked layers using vectorized operations.
 
