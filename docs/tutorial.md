@@ -131,13 +131,22 @@ logging.getLogger("engram_peft").setLevel(logging.INFO)
 
 **Expected Log Output:**
 ```text
-[Engram-PEFT] Identified llama architecture. Using registered path: 'model.layers'
-[Engram-PEFT] Attaching Engram layers to 22 blocks...
+[Engram-PEFT] Starting best-effort architecture discovery...
+[Engram-PEFT] Determined layer_container_path='model.layers' (source: Architecture Registry (llama))
+[Engram-PEFT] Attaching Engram layers to 32 blocks...
   - [Injected] Layer 2 -> LlamaDecoderLayer (device: cuda:0)
-  - [Injected] Layer 11 -> LlamaDecoderLayer (device: cuda:0)
+  - [Injected] Layer 15 -> LlamaDecoderLayer (device: cuda:0)
 ```
 
 ### 2. Targeting Custom Architectures
+Engram-PEFT includes a built-in registry for common architectures including:
+- **Llama-2/3, Mistral, Mixtral, Qwen2**
+- **DeepSeek V2/V3**
+- **Gemma/Gemma 2, Phi/Phi-3**
+- **BERT, RoBERTa, Longformer**
+- **GPT-2, GPT-NeoX**
+- **GLM/ChatGLM**
+
 If you are using a non-standard model that isn't in our built-in registry, Engram will fall back to a heuristic (finding the largest `nn.ModuleList`). If this fails, you can specify the path manually:
 
 ```python
@@ -227,7 +236,6 @@ engram_model.set_adapter("legal")
 # ... run training for legal knowledge ...
 
 # 3. Switch back to medical knowledge
-# 3. Switch back to medical knowledge
 engram_model.set_adapter("default")
 ```
 
@@ -253,6 +261,6 @@ model.load_weights_flexible(
 If the hashing logic differs (e.g., a different `seed` was used in `EngramConfig`), use a reference corpus to "re-discover" the correct indices via best-effort remapping:
 
 ```python
-# corpus_tokens should be a representative sample of your training data
-model.remap_from_corpus(corpus_tokens, "path/to/engram_weights.pt")
+# corpus should be a representative sample of your training data (tokens or strings)
+model.remap_from_corpus(corpus, "path/to/engram_weights.pt")
 ```

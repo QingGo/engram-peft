@@ -25,7 +25,13 @@ Configuration class for Engram PEFT module. Inherits from `transformers.Pretrain
 - `conv_dilation` (`Optional[int]`, default: `None`): Convolution dilation (defaults to `max(ngram_sizes)`).
 - `conv_zero_init` (`bool`, default: `True`): Initialize convolution weights to zero to ensure identity mapping at start.
 - `learning_rate_multiplier` (`float`, default: `5.0`): LR multiplier for sparse embedding parameters.
-- `tokenizer_name_or_path` (`str`, default: `"deepseek-ai/DeepSeek-V3"`): Tokenizer used for precomputing hashes.
+- `tokenizer_name_or_path` (`Optional[str]`, default: `None`): Tokenizer used for precomputing hashes. Recommended to set explicitly (e.g., `"deepseek-ai/DeepSeek-V3"`).
+- `seed` (`int`, default: `0`): Random seed for deterministic hashing primes.
+- `weight_decay` (`float`, default: `0.0`): Weight decay for Engram parameters.
+- `gating_zero_init` (`bool`, default: `False`): Whether to initialize gating parameters with zeros.
+- `hidden_size` (`Optional[int]`, default: `None`): The hidden dimension of the base model. Auto-detected if not provided.
+- `pad_id` (`Optional[int]`, default: `None`): The padding token ID. Auto-detected if not provided.
+- `compressed_vocab_size` (`Optional[int]`, default: `None`): Resolved size of the hashing vocabulary. Automatically set and saved after first initialization.
 - `layer_container_path` (`Optional[str]`, default: `None`): Explicit dot-separated path to the `nn.ModuleList` containing transformer layers (e.g., `"model.layers"`). If provided, it bypasses the automatic architecture discovery.
 
 **Example Usage:**
@@ -89,8 +95,8 @@ The wrapper class for the base model. Handles dynamic hook management and weight
 - `from_pretrained(base_model, engram_path)`: Loads Engram weights onto a base model.
 - `unload_engram()`: Dynamically removes all PEFT hooks (reverts to base model).
 - `load_engram(engram_path=None)`: Re-installs hooks and optionally loads weights.
-- `load_weights_flexible(checkpoint_path, layer_mapping=None, reuse_structural=False)`: Loads weights from a checkpoint even if configurations (layers, buckets, n-grams) differ.
-- `remap_from_corpus(corpus_tokens, checkpoint_path, layer_mapping=None, batch_size=32)`: "Best-effort" remapping for cases where seeds or tokenizers differ, using a reference corpus to align indices.
+- `load_weights_flexible(checkpoint_path, source_config_path=None, layer_mapping=None, reuse_structural=False)`: Loads weights from a checkpoint even if configurations (layers, buckets, n-grams) differ.
+- `remap_from_corpus(corpus, checkpoint_path, source_config_path=None, layer_mapping=None, tokenizer=None, batch_size=1024)`: "Best-effort" remapping for cases where seeds or tokenizers differ, using a reference corpus to align indices.
 
 ---
 
