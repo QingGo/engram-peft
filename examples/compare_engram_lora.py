@@ -924,7 +924,15 @@ if __name__ == "__main__":
     # Load Base Model once
     print(f"Loading Base Model to {MODEL_NAME}...")
     base_model = AutoModelForCausalLM.from_pretrained(
-        MODEL_NAME, dtype=torch.float16, device_map="auto"
+        MODEL_NAME,
+        torch_dtype=(
+            torch.bfloat16
+            if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+            else torch.float16
+            if torch.cuda.is_available()
+            else None
+        ),
+        device_map="auto" if torch.cuda.is_available() else None,
     )
 
     if torch.cuda.is_available():

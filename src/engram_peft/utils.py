@@ -98,6 +98,15 @@ class MixedOptimizer(Optimizer):
         for opt, sd in zip(self.optimizers, state_dict["optimizers"], strict=False):
             opt.load_state_dict(sd)
 
+    def unscale_(self, scaler: torch.cuda.amp.GradScaler) -> None:
+        """Proxies unscale_ to all sub-optimizers for FP16 compatibility."""
+        for opt in self.optimizers:
+            if hasattr(scaler, "unscale_"):
+                scaler.unscale_(opt)
+            else:
+                # Fallback for older versions or different scaler implementations
+                pass
+
 
 _OPTIMIZER_REGISTRY: Mapping[str, OptimizerFactory] = {
     "adam": lambda param_groups: Adam(param_groups),

@@ -94,7 +94,7 @@ class EngramTrainer(Trainer):
 
         # Compute the global L2 norm
         device = grads[0].device
-        norms = [torch.norm(g.detach(), 2).to(device) for g in grads]
+        norms = [torch.norm(g.detach().float(), 2).to(device) for g in grads]
         return cast("torch.Tensor", torch.norm(torch.stack(norms), 2))
 
     def training_step(
