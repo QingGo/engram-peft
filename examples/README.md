@@ -21,17 +21,21 @@ uv run python examples/end_to_end.py --max_steps 50 --batch_size 4 --num_workers
 
 ## 2. Baseline Comparison: `compare_engram_lora.py`
 
-This script is used to benchmark Engram against other PEFT methods like LoRA to showcase its advantages in memory and stability.
+This script is used to benchmark Engram against other training methods like LoRA and Full Finetuning to showcase its advantages in memory, speed, and learning stability.
 
 ### Features
 - **Benchmarking**: Tracks Peak VRAM usage and average wall-clock time per step.
-- **LoRA vs Engram**: Trains both methods under identical conditions for fair comparison.
+- **Multiple Methods**: Evaluates `lora`, `engram`, `lora+engram`, and `full_finetune_engram` under identical conditions.
 - **Visualization**: Generates a high-quality comparison plot (`outputs/engram_test/loss_curve.png`).
 - **Reporting**: Persists all metrics into a `training_metrics.json` file.
 
 ### Running the Comparison
 ```bash
-uv run python examples/compare_engram_lora.py --max_steps 100 --batch_size 4 --num_workers 4
+# Compare standard Engram vs LoRA
+uv run python examples/compare_engram_lora.py --methods lora engram
+
+# Heavyweight comparison including Full Finetuning
+uv run python examples/compare_engram_lora.py --methods lora engram full_finetune_engram
 ```
 
 ---
@@ -47,22 +51,7 @@ uv run python examples/end_to_end_cpu.py
 
 ---
 
-## 4. Full Finetuning + Engram: `full_finetune_engram.py`
-
-Shows how to train the backbone together with Engram using `train_mode="full_finetune"` and a layered optimizer setup. The example uses AdamW for both backbone and Engram dense parameters, plus SparseAdam for Engram sparse embeddings.
-
-### Notes
-- This example is intentionally minimal: it performs a single forward/backward sanity check and prints the optimizer layout.
-- The same API also supports custom optimizer builders, so you can plug in Muon later if your runtime upgrades to a PyTorch version that provides it.
-
-### Running the Example
-```bash
-uv run python examples/full_finetune_engram.py
-```
-
----
-
-## 5. Flexible Weight Migration: `flexible_loading.py`
+## 4. Flexible Weight Migration: `flexible_loading.py`
 
 Demonstrates how to migrate Engram weights between different model configurations (e.g., different layer counts or bucket sizes).
 
@@ -77,7 +66,7 @@ uv run python examples/flexible_loading.py
 
 ---
 
-## 6. Cross-Tokenizer Knowledge Transfer: `cross_tokenizer_migration.py`
+## 5. Cross-Tokenizer Knowledge Transfer: `cross_tokenizer_migration.py`
 
 Showcase the unique ability of Engram to transfer specialized knowledge between models using completely **different tokenizers** (e.g., Llama vs. Qwen).
 
@@ -87,7 +76,7 @@ Showcase the unique ability of Engram to transfer specialized knowledge between 
 
 ### Running the Example
 ```bash
-xi
+uv run python examples/cross_tokenizer_migration.py
 ```
 
 ---

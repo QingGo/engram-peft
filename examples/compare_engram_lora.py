@@ -8,7 +8,7 @@ This script demonstrates how Engram compares against standard PEFT methods (like
 4. Lifecycle: Demonstrates full training and dynamic management.
 
 Usage:
-    uv run python examples/compare_engram_lora.py --max_steps 3000 --batch_size 16 --grad_accum 2 --num_workers 4 --subset 100000 --methods lora engram lora+engram
+    uv run python examples/compare_engram_lora.py --max_steps 3000 --batch_size 16 --grad_accum 2 --num_workers 4 --subset 100000 --methods lora engram lora+engram full_finetune_engram
 """
 
 import argparse
@@ -25,6 +25,7 @@ import seaborn as sns
 import torch
 from datasets import load_dataset
 from peft import LoraConfig, PeftModel, TaskType, get_peft_model
+from torch.optim.adamw import AdamW
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -50,6 +51,8 @@ OUTPUT_DIR = "outputs/engram_test"
 ENGRAM_WEIGHTS_DIR = os.path.join(OUTPUT_DIR, "engram_weights")
 LORA_WEIGHTS_DIR = os.path.join(OUTPUT_DIR, "lora_weights")
 LORA_ENGRAM_DIR = os.path.join(OUTPUT_DIR, "lora_engram_weights")
+FULL_FT_ENGRAM_DIR = os.path.join(OUTPUT_DIR, "full_ft_engram_weights")
+FULL_FT_BASE_MODEL_DIR = os.path.join(OUTPUT_DIR, "full_ft_base_model")
 SEED = 42
 
 set_seed(SEED)
@@ -476,6 +479,126 @@ def train_lora_engram(
     }
 
 
+def train_full_finetune_engram(
+    base_model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizerBase,
+    train_dataset: Any,
+    eval_dataset: Any,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    print(f"\n>>> Phase 2: Training Full Finetune + Engram on {MODEL_NAME}")
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+
+    config = EngramConfig(
+        target_layers=[2, 11],
+        engram_vocab_size_per_ngram=[256000, 256000],
+        hidden_size=base_model.config.hidden_size,
+        embedding_dim=1024,
+        enable_tokenizer_compression=True,
+        tokenizer_name_or_path=MODEL_NAME,
+        pad_id=tokenizer.pad_token_id if isinstance(tokenizer.pad_token_id, int) else 0,
+        learning_rate_multiplier=3.0,
+    )
+
+    model = get_engram_model(
+        base_model,
+        config,
+        tokenizer,
+        train_mode="full_finetune",
+    )
+    model.print_trainable_parameters()
+
+    warmup_steps = int(args.max_steps * 0.03)
+    num_decay_steps = int(args.max_steps * 0.77)
+    scheduler_kwargs = {
+        "num_decay_steps": num_decay_steps,
+        "min_lr_ratio": 1e-6 / 3e-4,
+    }
+
+    collator = EngramDataCollator(tokenizer=tokenizer, config=config)
+    training_args = TrainingArguments(
+        output_dir=os.path.join(OUTPUT_DIR, "full_ft_trainer_outputs"),
+        per_device_train_batch_size=args.batch_size,
+        gradient_accumulation_steps=args.grad_accum,
+        max_steps=args.max_steps,
+        learning_rate=3e-4,
+        lr_scheduler_type="warmup_stable_decay",
+        lr_scheduler_kwargs=scheduler_kwargs,
+        warmup_steps=warmup_steps,
+        logging_steps=20,
+        save_strategy="no",
+        bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
+        fp16=not (torch.cuda.is_available() and torch.cuda.is_bf16_supported())
+        and torch.cuda.is_available(),
+        report_to="none",
+        remove_unused_columns=True,
+        dataloader_num_workers=args.num_workers,
+        dataloader_pin_memory=True,
+        eval_strategy="steps",
+        eval_steps=100,
+    )
+
+    trainer = EngramTrainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        data_collator=collator,
+        optimizer_kwargs={
+            "backbone_learning_rate": 5e-5,
+            "engram_dense_learning_rate": 3e-4,
+            "engram_sparse_learning_rate": 9e-4,
+            "backbone_optimizer": AdamW,
+            "engram_dense_optimizer": "adamw",
+            "engram_sparse_optimizer": "sparse_adam",
+        },
+    )
+
+    print("Starting Full Finetune + Engram training...")
+    train_result = trainer.train()
+
+    print("Evaluating Full Finetune + Engram...")
+    eval_results = trainer.evaluate()
+    eval_loss = cast("float", eval_results.get("eval_loss", 0.0))
+
+    avg_time_per_step = train_result.metrics["train_runtime"] / train_result.global_step
+    print(f"Full Finetune + Engram Avg Time Per Step: {avg_time_per_step:.4f}s")
+
+    peak_memory = (
+        torch.cuda.max_memory_allocated() / (1024**3)
+        if torch.cuda.is_available()
+        else 0.0
+    )
+    print(f"Full Finetune + Engram Peak Memory: {peak_memory:.2f} GB")
+
+    log_history = []
+    for log in trainer.state.log_history:
+        if "step" in log:
+            entry = {"step": log["step"]}
+            if "loss" in log:
+                entry["loss"] = log["loss"]
+            if "eval_loss" in log:
+                entry["eval_loss"] = log["eval_loss"]
+            if len(entry) > 1:
+                log_history.append(entry)
+
+    print(f"Saving Full FT Engram weights to {FULL_FT_ENGRAM_DIR}")
+    model.save_pretrained(FULL_FT_ENGRAM_DIR)
+    print(f"Saving finetuned base model to {FULL_FT_BASE_MODEL_DIR}")
+    model.base_model.save_pretrained(FULL_FT_BASE_MODEL_DIR)
+    tokenizer.save_pretrained(FULL_FT_BASE_MODEL_DIR)
+
+    model.unload_engram()
+
+    return {
+        "log_history": log_history,
+        "peak_memory_gb": peak_memory,
+        "avg_time_per_step": avg_time_per_step,
+        "eval_loss": eval_loss,
+    }
+
+
 def save_and_plot_results(results: dict[str, Any]) -> None:
     print(f"\n>>> Saving outputs and generating plot in {OUTPUT_DIR}")
 
@@ -497,11 +620,11 @@ def save_and_plot_results(results: dict[str, Any]) -> None:
         f"{'Base':<15} | {base.get('peak_memory_gb', 0):<15.2f} | {'N/A':<18} | {base.get('eval_loss', 0):.4f}"
     )
 
-    for method in ["lora", "engram", "lora+engram"]:
+    for method in ["lora", "engram", "lora+engram", "full_finetune_engram"]:
         if method in results:
             data = results[method]
             print(
-                f"{method.capitalize():<15} | {data.get('peak_memory_gb', 0):<15.2f} | {data.get('avg_time_per_step', 0):<18.4f} | {data.get('eval_loss', 0):.4f}"
+                f"{method.replace('_', ' ').capitalize():<15} | {data.get('peak_memory_gb', 0):<15.2f} | {data.get('avg_time_per_step', 0):<18.4f} | {data.get('eval_loss', 0):.4f}"
             )
     print("=" * 65 + "\n")
 
@@ -517,14 +640,17 @@ def save_and_plot_results(results: dict[str, Any]) -> None:
         "engram": "seagreen",
         "lora": "royalblue",
         "lora+engram": "darkviolet",
+        "full_finetune_engram": "orangered",
     }
     palette_eval = {
         "engram": "springgreen",
         "lora": "skyblue",
         "lora+engram": "plum",
+        "full_finetune_engram": "lightsalmon",
         "engram_final": "darkgreen",
         "lora_final": "midnightblue",
         "lora+engram_final": "indigo",
+        "full_finetune_engram_final": "darkred",
     }
 
     for method, data in results.items():
@@ -712,6 +838,29 @@ def inference_demo(
         combined_model.unload_engram()
         _restored_combined_base_model = combined_model.base_model.unload()
 
+    # 5. Full Finetune + Engram Inference
+    if "full_finetune_engram" in results:
+        print(f"\nLoading trained Full FT + Engram from {FULL_FT_BASE_MODEL_DIR}")
+        # Reload the finetuned base model
+        reloaded_ft_base = AutoModelForCausalLM.from_pretrained(
+            FULL_FT_BASE_MODEL_DIR,
+            torch_dtype=base_model.dtype,
+            device_map="auto",
+        )
+        # Load Engram wrapper
+        ft_engram_model = EngramModel.from_pretrained(
+            reloaded_ft_base, FULL_FT_ENGRAM_DIR
+        )
+
+        print("Generating with Full Finetune + Engram ENABLED...")
+        output_ft = ft_engram_model.generate(
+            **inputs, max_new_tokens=40, max_length=None, do_sample=False
+        )
+        print(
+            f"Output (Full FT): {tokenizer.decode(output_ft[0], skip_special_tokens=True)}"
+        )
+        ft_engram_model.unload_engram()
+
     print("\nEnd-to-end example completed successfully!")
 
 
@@ -751,7 +900,7 @@ if __name__ == "__main__":
         type=str,
         nargs="+",
         default=["lora", "engram"],
-        choices=["lora", "engram", "lora+engram"],
+        choices=["lora", "engram", "lora+engram", "full_finetune_engram"],
         help="Methods to benchmark",
     )
     args = parser.parse_args()
@@ -819,6 +968,10 @@ if __name__ == "__main__":
             )
         elif method == "lora+engram":
             results["lora+engram"] = train_lora_engram(
+                base_model, tokenizer, train_dataset, eval_dataset, args
+            )
+        elif method == "full_finetune_engram":
+            results["full_finetune_engram"] = train_full_finetune_engram(
                 base_model, tokenizer, train_dataset, eval_dataset, args
             )
 
