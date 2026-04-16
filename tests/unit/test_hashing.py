@@ -12,6 +12,7 @@ def test_hash_table_sizes_are_prime() -> None:
         ngram_sizes=[2, 3],
         n_head_per_ngram=4,
         layer_ids=[1, 2],
+        compressed_vocab_size=129280,
     )
     for layer_id in [1, 2]:
         layer_primes = mapping.prime_tables[layer_id]
@@ -22,8 +23,8 @@ def test_hash_table_sizes_are_prime() -> None:
 
 def test_reproducibility() -> None:
     """测试用例 2：验证相同输入产生相同哈希（可复现性）"""
-    mapping1 = NgramHashMapping(seed=42)
-    mapping2 = NgramHashMapping(seed=42)
+    mapping1 = NgramHashMapping(seed=42, compressed_vocab_size=129280)
+    mapping2 = NgramHashMapping(seed=42, compressed_vocab_size=129280)
 
     tokens = np.random.randint(0, 10000, size=(4, 32))
 
@@ -46,6 +47,7 @@ def test_uniform_distribution() -> None:
         ngram_sizes=[2],
         n_head_per_ngram=1,
         layer_ids=[1],
+        compressed_vocab_size=129280,
         seed=42,
     )
     p_size = mapping.prime_tables[1][0][0]
@@ -71,7 +73,7 @@ def test_uniform_distribution() -> None:
 
 def test_batch_processing() -> None:
     """测试用例 4：验证 batch 处理正确"""
-    mapping = NgramHashMapping()
+    mapping = NgramHashMapping(compressed_vocab_size=129280)
     batch_size = 4
     seq_len = 16
 
@@ -95,7 +97,7 @@ def test_batch_processing() -> None:
 
 def test_layer_independence() -> None:
     """测试用例 5：验证不同层有不同的哈希结果"""
-    mapping = NgramHashMapping(layer_ids=[1, 2])
+    mapping = NgramHashMapping(layer_ids=[1, 2], compressed_vocab_size=129280)
     tokens = np.random.randint(0, 1000, size=(2, 10))
 
     hashes = mapping.hash(tokens)

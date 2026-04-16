@@ -131,6 +131,7 @@ def remap_weights_from_corpus(
     src_config: EngramConfig,
     corpus: Union[List[str], List[int], np.ndarray, torch.Tensor],
     layer_mapping: Optional[Dict[int, int]] = None,
+    tokenizer: Optional[Any] = None,
     batch_size: int = 1024,
     show_progress: bool = True,
 ) -> Dict[str, torch.Tensor]:
@@ -153,14 +154,35 @@ def remap_weights_from_corpus(
         src_config.target_layers, target_config.target_layers, layer_mapping
     )
 
-    # Setup Mappers
+    # Setup Source Mapper
+    # If source used compression, we need to map the pad_id accordingly
+    src_mapped_pad_id = src_config.pad_id
+    if getattr(src_config, "enable_tokenizer_compression", True):
+        # We need a temporary compressor for the source to resolve the pad_id mapping
+        from engram_peft.compression import CompressedTokenizer
+
+        try:
+            src_compressor = CompressedTokenizer(src_config.tokenizer_name_or_path)
+            assert src_config.pad_id is not None
+            src_mapped_pad_id = src_compressor.map_id(src_config.pad_id)
+        except Exception as e:
+            logger.warning(
+                f"Could not load source compressor for pad_id mapping: {e}. Using raw pad_id."
+            )
+
+    assert src_config.compressed_vocab_size is not None, (
+        "source compressed_vocab_size must be set"
+    )
+    assert src_mapped_pad_id is not None, "source pad_id must be set"
+
     src_mapper = NgramHashMapping(
         engram_vocab_size_per_ngram=src_config.engram_vocab_size_per_ngram,
         ngram_sizes=src_config.ngram_sizes,
         n_head_per_ngram=src_config.n_head_per_ngram,
         layer_ids=list(mapping.keys()),
+        compressed_vocab_size=src_config.compressed_vocab_size,
+        pad_id=src_mapped_pad_id,
         seed=src_config.seed,
-        tokenizer_name_or_path=src_config.tokenizer_name_or_path,
     )
     # target_model's internal hash_mapping is already initialized
 
@@ -177,9 +199,8 @@ def remap_weights_from_corpus(
         # Case: Raw text corpus (Cross-Tokenizer)
         logger.info("Performing cross-tokenizer alignment using raw text corpus...")
         src_tokenizer = AutoTokenizer.from_pretrained(src_config.tokenizer_name_or_path)
-        # We assume target_model has a way to get its tokenizer or has it stored.
         # But since we are in a best-effort, we'll try to load it from config.
-        target_tokenizer = AutoTokenizer.from_pretrained(
+        target_tokenizer = tokenizer or AutoTokenizer.from_pretrained(
             target_config.tokenizer_name_or_path or src_config.tokenizer_name_or_path
         )
 

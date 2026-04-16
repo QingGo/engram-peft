@@ -154,6 +154,8 @@ def test_engram_layer_forward() -> None:
         conv_zero_init=False,
         gating_zero_init=False,
         engram_vocab_size_per_ngram=[100, 100],
+        compressed_vocab_size=100,
+        pad_id=0,
     )
 
     # Mock CompressedTokenizer
@@ -166,6 +168,7 @@ def test_engram_layer_forward() -> None:
         ngram_sizes=config.ngram_sizes,
         n_head_per_ngram=config.n_head_per_ngram,
         layer_ids=[1],
+        compressed_vocab_size=100,
     )
     primes = sum(mapping.prime_tables[1], [])
 
@@ -198,12 +201,15 @@ def test_engram_layer_indices_priority() -> None:
         hidden_size=32,
         engram_vocab_size_per_ngram=[100],
         hc_mult=1,
+        compressed_vocab_size=100,
+        pad_id=0,
     )
     mapping = NgramHashMapping(
         engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
         ngram_sizes=config.ngram_sizes,
         n_head_per_ngram=config.n_head_per_ngram,
         layer_ids=[1],
+        compressed_vocab_size=100,
     )
     primes = sum(mapping.prime_tables[1], [])
     layer = EngramLayer(config, layer_id=1, primes=primes)
@@ -233,12 +239,15 @@ def test_engram_layer_sparse_gradients() -> None:
         gating_zero_init=False,
         engram_vocab_size_per_ngram=[100],
         hc_mult=1,
+        compressed_vocab_size=100,
+        pad_id=0,
     )
     mapping = NgramHashMapping(
         engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
         ngram_sizes=config.ngram_sizes,
         n_head_per_ngram=config.n_head_per_ngram,
         layer_ids=[1],
+        compressed_vocab_size=100,
     )
     primes = sum(mapping.prime_tables[1], [])
     layer = EngramLayer(config, layer_id=1, primes=primes)
@@ -277,12 +286,15 @@ def test_engram_layer_output_shape() -> None:
         hidden_size=32,
         hc_mult=4,
         engram_vocab_size_per_ngram=[100],
+        compressed_vocab_size=100,
+        pad_id=0,
     )
     mapping = NgramHashMapping(
         engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
         ngram_sizes=config.ngram_sizes,
         n_head_per_ngram=config.n_head_per_ngram,
         layer_ids=[1],
+        compressed_vocab_size=100,
     )
     primes = sum(mapping.prime_tables[1], [])
     layer = EngramLayer(config, layer_id=1, primes=primes)

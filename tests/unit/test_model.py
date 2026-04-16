@@ -25,6 +25,8 @@ class MockTransformerBlock(nn.Module):
 class MockModelConfig(PretrainedConfig):
     model_type = "mock"
     hidden_size: int = 32
+    vocab_size: int = 100
+    pad_token_id: int = 0
 
 
 class MockPreTrainedModel(PreTrainedModel):
@@ -62,6 +64,7 @@ def create_mock_setup() -> tuple:
         target_layers=[1, 3],
         engram_vocab_size_per_ngram=[100],
         enable_tokenizer_compression=False,
+        hidden_size=32,
     )
     base_model = MockPreTrainedModel(MockModelConfig(), hidden_size=32)
     # Give some parameters true by default

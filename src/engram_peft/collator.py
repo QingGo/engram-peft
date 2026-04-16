@@ -40,14 +40,23 @@ class EngramDataCollator(DataCollatorForLanguageModeling):
         self.config = config
         self.compressor = compressor
 
+        # Map pad_id to compressed space for hashing consistency
+        mapped_pad_id = config.pad_id
+        if self.compressor is not None:
+            assert config.pad_id is not None
+            mapped_pad_id = self.compressor.map_id(config.pad_id)
+
+        assert config.compressed_vocab_size is not None
+        assert mapped_pad_id is not None
+
         # Initialize the global hashing mapping
         self.hash_mapping = NgramHashMapping(
             engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
             ngram_sizes=config.ngram_sizes,
             n_head_per_ngram=config.n_head_per_ngram,
             layer_ids=config.target_layers,
-            tokenizer_name_or_path=config.tokenizer_name_or_path,
-            pad_id=config.pad_id,
+            compressed_vocab_size=config.compressed_vocab_size,
+            pad_id=mapped_pad_id,
             seed=config.seed,
         )
 

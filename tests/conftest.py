@@ -78,4 +78,7 @@ def engram_config() -> EngramConfig:
         n_head_per_ngram=4,
         engram_vocab_size_per_ngram=[100, 100],
         seed=42,
+        hidden_size=32,
+        compressed_vocab_size=129280,
+        pad_id=0,
     )

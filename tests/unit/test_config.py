@@ -25,8 +25,8 @@ class TestEngramConfig(unittest.TestCase):
         self.assertEqual(config.conv_zero_init, True)
         self.assertEqual(config.learning_rate_multiplier, 5.0)
         self.assertEqual(config.weight_decay, 0.0)
-        self.assertEqual(config.tokenizer_name_or_path, "deepseek-ai/DeepSeek-V3")
-        self.assertEqual(config.pad_id, 2)
+        self.assertEqual(config.tokenizer_name_or_path, None)
+        self.assertEqual(config.pad_id, None)
         self.assertEqual(config.seed, 0)
         self.assertEqual(config.model_type, "engram")
 

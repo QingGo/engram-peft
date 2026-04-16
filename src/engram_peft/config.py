@@ -21,32 +21,113 @@ class EngramConfig(PretrainedConfig):
         default_factory=lambda: [1131200, 1131200],
         metadata={
             "help": "Total number of hash buckets for each N-gram size (e.g., [2, 3]). "
-            "This total capacity is distributed among the K heads."
+            "Matches Engram paper Appendix A Table 5."
         },
     )
     ngram_sizes: List[int] = field(
         default_factory=lambda: [2, 3],
-        metadata={"help": "Explicit list of N-gram sizes to use (e.g., [2, 3])."},
+        metadata={"help": "Explicit list of N-gram sizes to use. Default is [2, 3]."},
     )
-    max_ngram_size: int = 3
-    n_head_per_ngram: int = 8
-    embedding_dim: int = 1280
-    enable_tokenizer_compression: bool = True
-    layer_container_path: Optional[str] = None
-    target_layers: List[int] = field(default_factory=lambda: [2, 15])
-    target_modules: Optional[Union[List[str], str]] = None
-    hc_mult: int = 4
-    combine_mhc: bool = True
-    hidden_size: int = 2048
-    conv_kernel_size: int = 4
-    conv_dilation: Optional[int] = None
-    conv_zero_init: bool = True
-    gating_zero_init: bool = False
-    learning_rate_multiplier: float = 5.0
-    weight_decay: float = 0.0
-    tokenizer_name_or_path: str = "deepseek-ai/DeepSeek-V3"
-    pad_id: int = 2
-    seed: int = 0
+    max_ngram_size: int = field(
+        default=3,
+        metadata={"help": "Maximum N-gram size. Automatically derived if not set."},
+    )
+    n_head_per_ngram: int = field(
+        default=8,
+        metadata={"help": "Number of hashing heads per N-gram size."},
+    )
+    embedding_dim: int = field(
+        default=1280,
+        metadata={"help": "Internal dimension of Engram embeddings before projection."},
+    )
+    enable_tokenizer_compression: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to use surjective mapping V -> V' to reduce token space."
+        },
+    )
+    layer_container_path: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "[Auto-Detect] Dot-separated path to the transformer layers (e.g. 'model.layers')."
+        },
+    )
+    target_layers: List[int] = field(
+        default_factory=lambda: [2, 15],
+        metadata={
+            "help": "List of layer indices where Engram layers will be injected."
+        },
+    )
+    target_modules: Optional[Union[List[str], str]] = field(
+        default=None,
+        metadata={"help": "Reserved for future use (similar to LoRA target_modules)."},
+    )
+    hc_mult: int = field(
+        default=4,
+        metadata={
+            "help": "Hyper-constant multiplier for hashing logic. See Engram paper."
+        },
+    )
+    combine_mhc: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to combine Multi-Head features via summation or concatenation."
+        },
+    )
+    hidden_size: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "[Auto-Detect] The hidden dimension of the base model (e.g. 2048)."
+        },
+    )
+    conv_kernel_size: int = field(
+        default=4,
+        metadata={"help": "Kernel size for the Engram convolution block."},
+    )
+    conv_dilation: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Dilation for the convolution block. Defaults to max_ngram_size."
+        },
+    )
+    conv_zero_init: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to initialize convolution weights with zeros for identity behavior."
+        },
+    )
+    gating_zero_init: bool = field(
+        default=False,
+        metadata={"help": "Whether to initialize gating parameters with zeros."},
+    )
+    learning_rate_multiplier: float = field(
+        default=5.0,
+        metadata={"help": "LR multiplier for Engram weights relative to the base LR."},
+    )
+    weight_decay: float = field(
+        default=0.0,
+        metadata={"help": "Weight decay for Engram parameters."},
+    )
+    tokenizer_name_or_path: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "[Recommended] Tokenizer identifier to build compression mapping."
+        },
+    )
+    compressed_vocab_size: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "[Persistence] The size of the resolved hashing vocabulary. Stored after first init."
+        },
+    )
+    pad_id: Optional[int] = field(
+        default=None,
+        metadata={"help": "[Auto-Detect] The padding token ID of the tokenizer/model."},
+    )
+    seed: int = field(
+        default=0,
+        metadata={"help": "Random seed for deterministic hashing primes."},
+    )
 
     def __init__(
         self,
@@ -64,13 +145,57 @@ class EngramConfig(PretrainedConfig):
         gating_zero_init: bool = False,
         learning_rate_multiplier: float = 5.0,
         weight_decay: float = 0.0,
-        tokenizer_name_or_path: str = "deepseek-ai/DeepSeek-V3",
-        pad_id: int = 2,
+        tokenizer_name_or_path: Optional[str] = None,
+        compressed_vocab_size: Optional[int] = None,
+        pad_id: Optional[int] = None,
         seed: int = 0,
-        hidden_size: int = 2048,
+        hidden_size: Optional[int] = None,
         **kwargs: Any,
     ):
-        """Constructs EngramConfig."""
+        """Constructs EngramConfig.
+
+        Args:
+            engram_vocab_size_per_ngram (List[int], optional):
+                Total hash bucket capacity per N-gram size. Defaults to [1131200, 1131200].
+            ngram_sizes (List[int], optional):
+                Context window sizes for N-gram extraction. Defaults to [2, 3].
+            n_head_per_ngram (int, optional):
+                Hashing heads per N-gram. Defaults to 8.
+            embedding_dim (int, optional):
+                Internal dimension for Engram embeddings. Defaults to 1280.
+            enable_tokenizer_compression (bool, optional):
+                Enable V -> V' mapping to reduce entropy in token space. Defaults to True.
+            target_layers (List[int], optional):
+                Indices of transformer layers where Engram is injected. Defaults to [2, 15].
+            hc_mult (int, optional):
+                Multiplier for hashing logic. Defaults to 4.
+            combine_mhc (bool, optional):
+                Summation of MHC features if True. Defaults to True.
+            conv_kernel_size (int, optional):
+                Kernel size for temporal conv block. Defaults to 4.
+            conv_dilation (int, optional):
+                Dilation rate for conv block. Matches max_ngram_size if None.
+            conv_zero_init (bool, optional):
+                Initialize conv as identity. Defaults to True.
+            gating_zero_init (bool, optional):
+                Zero initialization for gates. Defaults to False.
+            learning_rate_multiplier (float, optional):
+                LR boost factor for engram params. Defaults to 5.0.
+            weight_decay (float, optional):
+                Weight decay. Defaults to 0.0.
+            tokenizer_name_or_path (str, optional):
+                [Recommended] Path/name of the tokenizer. If None, ArchitectureResolver
+                will attempt detection, but explicit path is safer for compression.
+            compressed_vocab_size (int, optional):
+                [Persistence] Resolved hashing vocab size. Automatically set after first run.
+            pad_id (int, optional):
+                [Auto-Detect] Token ID used for padding. If None, detected from model/tokenizer.
+            seed (int, optional):
+                Seed for bucket hashing. Defaults to 0.
+            hidden_size (int, optional):
+                [Auto-Detect] Dimensionality of the base model. If None, detected from model.config.
+            **kwargs: Extra arguments passed to PretrainedConfig.
+        """
         self.engram_vocab_size_per_ngram = (
             engram_vocab_size_per_ngram
             if engram_vocab_size_per_ngram is not None
@@ -97,6 +222,7 @@ class EngramConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.weight_decay = weight_decay
         self.tokenizer_name_or_path = tokenizer_name_or_path
+        self.compressed_vocab_size = compressed_vocab_size
         self.pad_id = pad_id
         self.seed = seed
 

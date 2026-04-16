@@ -25,7 +25,11 @@ def test_model_discovery_registry(model_id, expected_path, expected_layer_count)
     with torch.device("meta"):
         base_model = AutoModel.from_config(config, trust_remote_code=True)
 
-    engram_config = EngramConfig(target_layers=[0, 1], tokenizer_name_or_path=model_id)
+    engram_config = EngramConfig(
+        target_layers=[0, 1],
+        tokenizer_name_or_path=model_id,
+        enable_tokenizer_compression=False,
+    )
 
     model = get_engram_model(base_model, engram_config)
     found_layers = model._find_transformer_layers()
@@ -45,13 +49,18 @@ def test_explicit_path_override():
 
     # Intentionally provide a wrong but existing path (should error)
     # Note: AutoModel returns the base model, so the root-level attrs are things like 'layers'
-    engram_config = EngramConfig(layer_container_path="norm", target_layers=[0])
+    engram_config = EngramConfig(
+        layer_container_path="norm",
+        target_layers=[0],
+        original_vocab_size=100,  # Bypass vocab check
+        enable_tokenizer_compression=False,
+    )
 
     with pytest.raises(ValueError, match="is not a nn.ModuleList"):
         get_engram_model(base_model, engram_config)
 
     # Provide correct explicit path
-    engram_config.layer_container_path = "layers"
+    engram_config.layer_container_path = "layers"  # Qwen has layers
     model = get_engram_model(base_model, engram_config)
     assert len(model._find_transformer_layers()) == 24
 
@@ -60,7 +69,7 @@ def test_mock_registry_discovery():
     """
     Verifies that ARCH_LAYER_MAPPING works even without downloading configs.
     """
-    from engram_peft.model import ARCH_LAYER_MAPPING
+    from engram_peft.discovery import ARCH_LAYER_MAPPING
 
     class MockModel(nn.Module):
         def __init__(self, model_type):
@@ -78,11 +87,17 @@ def test_mock_registry_discovery():
                 curr, parts[-1], nn.ModuleList([nn.Linear(10, 10) for _ in range(3)])
             )
 
-            self.config = type("Config", (), {"model_type": model_type})()
+            self.config = type(
+                "Config",
+                (),
+                {"model_type": model_type, "vocab_size": 100, "pad_token_id": 0},
+            )()
 
     # Test ChatGLM style
     glm_model = MockModel("chatglm")
-    model = get_engram_model(glm_model, EngramConfig(target_layers=[0]))
+    model = get_engram_model(
+        glm_model, EngramConfig(target_layers=[0], enable_tokenizer_compression=False)
+    )
     assert len(model._find_transformer_layers()) == 3
 
 
@@ -101,7 +116,9 @@ def test_heuristic_fallback():
             self.config = type("Config", (), {"model_type": "unknown_fancy_model"})()
 
     base_model = CustomModel()
-    engram_config = EngramConfig(target_layers=[0])
+    engram_config = EngramConfig(
+        target_layers=[0], original_vocab_size=100, enable_tokenizer_compression=False
+    )
 
     model = get_engram_model(base_model, engram_config)
     found_layers = model._find_transformer_layers()

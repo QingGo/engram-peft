@@ -277,6 +277,8 @@ class EngramLayer(nn.Module):
             if config.conv_dilation is not None
             else config.max_ngram_size
         )
+        assert config.hidden_size is not None
+        assert config.embedding_dim is not None
         self.hidden_dim = config.hidden_size
 
         self.total_embedding_dim = config.embedding_dim
@@ -285,11 +287,23 @@ class EngramLayer(nn.Module):
         )
 
         # 0. Hash Mapping
+        # Map pad_id to compressed space for hashing consistency
+        mapped_pad_id = config.pad_id
+        if self.compressor is not None:
+            assert config.pad_id is not None
+            mapped_pad_id = self.compressor.map_id(config.pad_id)
+
+        assert config.compressed_vocab_size is not None
+        assert mapped_pad_id is not None
+
         self.hash_mapping = NgramHashMapping(
             engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
             ngram_sizes=config.ngram_sizes,
             n_head_per_ngram=config.n_head_per_ngram,
             layer_ids=[layer_id],
+            compressed_vocab_size=config.compressed_vocab_size,
+            pad_id=mapped_pad_id,
+            seed=config.seed,
         )
 
         # 1. MultiHeadEmbedding

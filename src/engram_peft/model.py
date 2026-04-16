@@ -9,6 +9,7 @@ from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
 from engram_peft.compression import CompressedTokenizer
 from engram_peft.config import EngramConfig
+from engram_peft.discovery import ArchitectureResolver
 from engram_peft.hashing import NgramHashMapping
 from engram_peft.layer import EngramLayer
 from engram_peft.weight_transfer import (
@@ -22,27 +23,7 @@ logger = logging.getLogger(__name__)
 
 TrainMode = Literal["engram_only", "preserve_trainable", "full_finetune"]
 
-# Map HF model_type to standard layer container paths
-# We include both full paths (for ForCausalLM) and relative paths (for base Models)
-ARCH_LAYER_MAPPING = {
-    "llama": ["model.layers", "layers"],
-    "qwen2": ["model.layers", "layers"],
-    "mistral": ["model.layers", "layers"],
-    "mixtral": ["model.layers", "layers"],
-    "deepseek_v2": ["model.layers", "layers"],
-    "deepseek_v3": ["model.layers", "layers"],
-    "gemma": ["model.layers", "layers"],
-    "gemma2": ["model.layers", "layers"],
-    "chatglm": ["transformer.encoder.layers", "encoder.layers"],
-    "glm": ["transformer.encoder.layers", "encoder.layers"],
-    "bert": ["bert.encoder.layer", "encoder.layer"],
-    "longformer": ["longformer.encoder.layer", "encoder.layer"],
-    "roberta": ["roberta.encoder.layer", "encoder.layer"],
-    "gpt2": ["transformer.h", "h"],
-    "gpt_neox": ["gpt_neox.layers", "layers"],
-    "phi": ["model.layers", "layers"],
-    "phi3": ["model.layers", "layers"],
-}
+# Architecture Layer Mapping moved to discovery.py
 
 
 class EngramModel(nn.Module):
@@ -75,15 +56,38 @@ class EngramModel(nn.Module):
         self.compressor = None
         if config.enable_tokenizer_compression:
             tokenizer_name = config.tokenizer_name_or_path
-            self.compressor = CompressedTokenizer(tokenizer_name)
+            self.compressor = CompressedTokenizer(tokenizer_name, tokenizer=tokenizer)
+            # Synchronize the actual compressed vocab size to config
+            config.compressed_vocab_size = len(self.compressor)
+        else:
+            # If no compression and not already set, we expect it to be in config
+            if config.compressed_vocab_size is None:
+                # This shouldn't normally happen if initialized via get_engram_model
+                raise ValueError(
+                    "compressed_vocab_size must be set in config if compression is disabled."
+                )
 
-        # 2. Initialize global Hash Mapping
+        # 2. Map pad_id to compressed space for hashing consistency
+        mapped_pad_id = config.pad_id
+        if self.compressor is not None:
+            assert config.pad_id is not None, (
+                "pad_id must be set for compression mapping"
+            )
+            mapped_pad_id = self.compressor.map_id(config.pad_id)
+
+        # 3. Initialize global Hash Mapping with resolved metadata
+        assert config.compressed_vocab_size is not None, (
+            "compressed_vocab_size must be set"
+        )
+        assert mapped_pad_id is not None, "pad_id must be set"
+
         self.hash_mapping = NgramHashMapping(
             engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
             ngram_sizes=config.ngram_sizes,
             n_head_per_ngram=config.n_head_per_ngram,
             layer_ids=config.target_layers,
-            tokenizer_name_or_path=config.tokenizer_name_or_path,
+            compressed_vocab_size=config.compressed_vocab_size,
+            pad_id=mapped_pad_id,
             seed=config.seed,
         )
 
@@ -185,62 +189,24 @@ class EngramModel(nn.Module):
         self.adapters[adapter_name] = new_layers
 
     def _find_transformer_layers(self) -> nn.ModuleList:
-        """
-        Find the main transformer layers module list using a prioritized
-        discovery strategy (Explicit Path -> Registry -> Heuristic).
-        """
-        from engram_peft.utils import find_largest_module_list, get_submodule_by_path
-
-        # Rank 1: Explicit user-provided path
-        if self.config.layer_container_path is not None:
-            container = get_submodule_by_path(
-                self.base_model, self.config.layer_container_path
+        """Find the main transformer layers module list using ArchitectureResolver."""
+        container_path = self.config.layer_container_path
+        if container_path is None:
+            # This should have been resolved by the factory function, but as fallback:
+            container_path = ArchitectureResolver.find_largest_module_list(
+                self.base_model
             )
-            if isinstance(container, nn.ModuleList):
-                logger.info(
-                    f"[Engram-PEFT] Using explicit layer container: '{self.config.layer_container_path}'"
+            if container_path is None:
+                raise ValueError(
+                    "Could not detect transformer layers. Specify layer_container_path."
                 )
-                return container
-            raise ValueError(
-                f"Configured layer_container_path '{self.config.layer_container_path}' "
-                f"is not a nn.ModuleList (got {type(container).__name__})."
-            )
 
-        # Rank 2: Architecture Registry
-        model_config = getattr(self.base_model, "config", None)
-        if model_config is not None:
-            model_type = getattr(model_config, "model_type", None)
-            if model_type in ARCH_LAYER_MAPPING:
-                reg_paths = ARCH_LAYER_MAPPING[model_type]
-                if isinstance(reg_paths, str):
-                    reg_paths = [reg_paths]
-
-                for reg_path in reg_paths:
-                    try:
-                        container = get_submodule_by_path(self.base_model, reg_path)
-                        if isinstance(container, nn.ModuleList):
-                            logger.info(
-                                f"[Engram-PEFT] Identified {model_type} architecture. "
-                                f"Using registered path: '{reg_path}'"
-                            )
-                            return container
-                    except (AttributeError, ValueError):
-                        continue
-
-        # Rank 3: Heuristic (Recursive Scanner)
-        heuristic_path = find_largest_module_list(self.base_model)
-        if heuristic_path:
-            container = get_submodule_by_path(self.base_model, heuristic_path)
-            # find_largest_module_list ensures it's a ModuleList
-            logger.info(
-                f"[Engram-PEFT] Autodetected layer container via heuristic: '{heuristic_path}'"
-            )
-            return cast(nn.ModuleList, container)
-
-        raise ValueError(
-            "Could not find transformer layers in the base model. "
-            "Please specify 'layer_container_path' in your EngramConfig."
+        container = ArchitectureResolver.get_submodule_by_path(
+            self.base_model, container_path
         )
+        if not isinstance(container, nn.ModuleList):
+            raise ValueError(f"Path '{container_path}' is not a nn.ModuleList.")
+        return container
 
     def _create_pre_hook(self, layer_id: int) -> Callable[[nn.Module, tuple], tuple]:
         """Creates a pre-forward hook for a specific layer."""
@@ -509,6 +475,9 @@ class EngramModel(nn.Module):
 
         src_config = EngramConfig.from_pretrained(os.path.dirname(source_config_path))
         check_compatibility(src_config, self.config)
+        assert src_config.compressed_vocab_size is not None, (
+            "source compressed_vocab_size must be set"
+        )
 
         # Initialize src_mapper with full target_layers to ensure deterministic prime generation
         src_mapper = NgramHashMapping(
@@ -516,8 +485,9 @@ class EngramModel(nn.Module):
             ngram_sizes=src_config.ngram_sizes,
             n_head_per_ngram=src_config.n_head_per_ngram,
             layer_ids=src_config.target_layers,
+            compressed_vocab_size=src_config.compressed_vocab_size,
+            pad_id=getattr(src_config, "pad_id", 2),
             seed=src_config.seed,
-            tokenizer_name_or_path=src_config.tokenizer_name_or_path,
         )
         target_mapper = self.hash_mapping
 
@@ -582,6 +552,7 @@ class EngramModel(nn.Module):
         checkpoint_path: str,
         source_config_path: Optional[str] = None,
         layer_mapping: Optional[Dict[int, int]] = None,
+        tokenizer: Optional[Any] = None,
         batch_size: int = 1024,
     ) -> None:
         """
@@ -603,6 +574,7 @@ class EngramModel(nn.Module):
             src_config,
             corpus,
             layer_mapping=layer_mapping,
+            tokenizer=tokenizer,
             batch_size=batch_size,
         )
 
@@ -661,21 +633,17 @@ def get_engram_model(
     else:
         raise ValueError(f"Unsupported train_mode: {resolved_train_mode}")
 
-    # Ensure config has the correct hidden_size if it was using default
-    base_config = getattr(model, "config", None)
-    if base_config is not None:
-        # Check various common attribute names for hidden size
-        h_size = None
-        for attr in ["hidden_size", "d_model", "dim", "n_embd"]:
-            if hasattr(base_config, attr):
-                h_size = getattr(base_config, attr)
-                break
+    # --- Auto-discovery and configuration synchronization ---
+    metadata = ArchitectureResolver.resolve(model, tokenizer, config)
 
-        if h_size is not None:
-            config.hidden_size = h_size
-    elif hasattr(model, "hidden_size"):
-        # Fallback for models without a separate config object but with a direct attribute
-        config.hidden_size = getattr(model, "hidden_size")
+    # Update config with resolved values to ensure persistence in save_pretrained
+    config.hidden_size = metadata.hidden_size
+    config.pad_id = metadata.pad_token_id
+    config.layer_container_path = metadata.layer_container_path
+
+    # If compression is disabled, the 'compressed' size is just the original vocab size
+    if not config.enable_tokenizer_compression:
+        config.compressed_vocab_size = metadata.original_vocab_size
 
     engram_model = EngramModel(model, config, tokenizer)
     engram_model.train_mode = resolved_train_mode

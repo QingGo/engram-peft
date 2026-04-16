@@ -28,6 +28,8 @@ class HeavyDummyModel(nn.Module):
 
         self.config = Config()
         setattr(self.config, "hidden_size", hidden_size)
+        setattr(self.config, "vocab_size", 2262400)
+        setattr(self.config, "pad_token_id", 0)
         self.model = nn.Module()
         self.model.layers = nn.ModuleList(
             [nn.Linear(hidden_size, hidden_size) for _ in range(32)]  # 32 layers
@@ -107,8 +109,9 @@ def test_corpus_remapping_integration(heavy_tmp_dir: Path, tokenizer_gpt2: Any) 
         hidden_size=64,
         embedding_dim=128,
         n_head_per_ngram=2,
+        tokenizer_name_or_path="gpt2",
     )
-    src_model = get_engram_model(base_model, src_config)  # type: ignore[arg-type]
+    src_model = get_engram_model(base_model, src_config, tokenizer=tokenizer_gpt2)  # type: ignore[arg-type]
     src_path = heavy_tmp_dir / "src_corpus"
     src_model.save_pretrained(str(src_path))
 
@@ -119,10 +122,12 @@ def test_corpus_remapping_integration(heavy_tmp_dir: Path, tokenizer_gpt2: Any) 
         embedding_dim=128,
         n_head_per_ngram=2,
     )
-    target_model = get_engram_model(base_model, target_config)  # type: ignore[arg-type]
+    target_model = get_engram_model(base_model, target_config, tokenizer=tokenizer_gpt2)  # type: ignore[arg-type]
 
     text = "The quick brown fox jumps over the lazy dog."
-    target_model.remap_from_corpus([text], str(src_path / "engram_weights.pt"))
+    target_model.remap_from_corpus(
+        [text], str(src_path / "engram_weights.pt"), tokenizer=tokenizer_gpt2
+    )
 
     target_emb = target_model.engram_layers[
         "0"

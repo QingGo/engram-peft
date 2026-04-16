@@ -13,6 +13,7 @@ class NgramHashMapping:
     Aligned with the official Engram demo implementation.
     """
 
+    compressed_vocab_size: int
     engram_vocab_size_per_ngram: List[int] = field(
         default_factory=lambda: [2262400 // 2, 2262400 // 2]
     )
@@ -20,11 +21,13 @@ class NgramHashMapping:
     max_ngram_size: int = 3
     n_head_per_ngram: int = 8
     layer_ids: List[int] = field(default_factory=lambda: [2, 15])
-    tokenizer_name_or_path: str = "deepseek-ai/DeepSeek-V3"
     pad_id: int = 2
     seed: int = 0
 
     def __post_init__(self) -> None:
+        if self.compressed_vocab_size <= 0:
+            raise ValueError("compressed_vocab_size must be a positive integer.")
+
         self.max_ngram_size = max(self.ngram_sizes)
         self.all_multipliers: Dict[int, np.ndarray] = {}
 
@@ -34,10 +37,9 @@ class NgramHashMapping:
             base_seed = int(self.seed + PRIME_1 * int(layer_id))
             g = np.random.default_rng(base_seed)
 
-            # Follow official demo's heuristic bound based on tokenizer_vocab_size
-            tokenizer_vocab_size = 129280
+            # Heuristic bound based on derived compressed_vocab_size
             max_long = np.iinfo(np.int64).max
-            M_max = int(max_long // tokenizer_vocab_size)
+            M_max = int(max_long // self.compressed_vocab_size)
             half_bound = max(1, M_max // 2)
 
             # Generate max_ngram_size multipliers for this layer

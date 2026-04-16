@@ -14,6 +14,8 @@ def test_collator_gpt2_integration(tokenizer_gpt2: Any) -> None:
         n_head_per_ngram=8,
         # Default capacity is large (~1.1M per ngram)
         seed=42,
+        compressed_vocab_size=50257,  # GPT2 vocab size
+        pad_id=tokenizer_gpt2.eos_token_id,
     )
 
     collator = EngramDataCollator(tokenizer=tokenizer_gpt2, config=config)

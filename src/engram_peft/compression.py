@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import torch
@@ -17,7 +17,7 @@ class CompressedTokenizer:
 
     def __init__(
         self,
-        tokenizer_name_or_path: str,
+        tokenizer_name_or_path: Optional[str] = None,
         trust_remote_code: bool = True,
         tokenizer: Any = None,
     ) -> None:
@@ -40,18 +40,23 @@ class CompressedTokenizer:
             self.compressed_vocab_size = 0
             self.lookup = torch.empty(0)
             self._build_lookup_table()
-        elif not os.path.isdir(tokenizer_name_or_path) or not os.path.exists(
-            os.path.join(tokenizer_name_or_path, "compression_config.json")
-        ):
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                tokenizer_name_or_path, trust_remote_code=trust_remote_code
+        elif tokenizer_name_or_path is not None:
+            if not os.path.isdir(tokenizer_name_or_path) or not os.path.exists(
+                os.path.join(tokenizer_name_or_path, "compression_config.json")
+            ):
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    tokenizer_name_or_path, trust_remote_code=trust_remote_code
+                )
+                self.vocab_size = len(self.tokenizer)
+                self.normalizer = self._get_default_normalizer()
+                self.mapping = {}
+                self.compressed_vocab_size = 0
+                self.lookup = torch.empty(0)
+                self._build_lookup_table()
+        else:
+            raise ValueError(
+                "Either tokenizer_name_or_path or a pre-loaded tokenizer must be provided."
             )
-            self.vocab_size = len(self.tokenizer)
-            self.normalizer = self._get_default_normalizer()
-            self.mapping = {}
-            self.compressed_vocab_size = 0
-            self.lookup = torch.empty(0)
-            self._build_lookup_table()
 
     def _get_default_normalizer(self) -> Any:
         # Sentinel for space normalization as in official demo
@@ -98,36 +103,58 @@ class CompressedTokenizer:
         self.compressed_vocab_size = len(new_tokens)
 
         # Create a lookup tensor for faster mapping
-        self.lookup = torch.zeros(self.vocab_size, dtype=torch.long)
-        for tid in range(self.vocab_size):
-            self.lookup[tid] = torch.tensor(old2new[tid], dtype=torch.long)
+        # Optimization: Build list first, then create tensor once
+        mapping_list = [old2new[tid] for tid in range(self.vocab_size)]
+        self.lookup = torch.tensor(mapping_list, dtype=torch.long)
 
-    def compress(
+    def map_ids(
         self, input_ids: Union[torch.Tensor, np.ndarray[Any, Any]]
     ) -> Union[torch.Tensor, np.ndarray[Any, Any]]:
         """
-        Compress a sequence of original token IDs into canonical IDs.
-
-        Args:
-            input_ids: Original token IDs as a torch tensor or numpy array.
-
-        Returns:
-            Compressed token IDs in the same type.
+        Maps a sequence of original token IDs to canonical (compressed) IDs.
+        Handles negative IDs (like -100 for ignore_index) by preserving them.
         """
         is_numpy = isinstance(input_ids, np.ndarray)
         if is_numpy:
-            tensor_ids = torch.from_numpy(input_ids).long()
+            tensor_ids = torch.from_numpy(input_ids).to(torch.long)
         else:
             tensor_ids = input_ids  # type: ignore
 
         if self.lookup.device != tensor_ids.device:
             self.lookup = self.lookup.to(tensor_ids.device)
 
-        compressed = self.lookup[tensor_ids]
+        # 1. Create a mask for valid (non-negative) IDs
+        mask = tensor_ids >= 0
+
+        # 2. Clone input to preserve values in negative positions
+        compressed = tensor_ids.clone()
+
+        # 3. Only perform lookup for valid IDs
+        valid_ids = tensor_ids[mask]
+        if valid_ids.numel() > 0:
+            compressed[mask] = self.lookup[valid_ids]
 
         if is_numpy:
             return compressed.cpu().numpy()
         return compressed
+
+    def map_id(self, original_id: int) -> int:
+        """Maps a single original token ID to compressed space."""
+        if original_id < 0:
+            return original_id
+        if original_id >= len(self.lookup):
+            return original_id
+        return int(self.lookup[original_id])
+
+    def compress(
+        self, input_ids: Union[torch.Tensor, np.ndarray[Any, Any]]
+    ) -> Union[torch.Tensor, np.ndarray[Any, Any]]:
+        """Surjective mapping: collapses V tokens into V' tokens (V' < V)."""
+        return self.map_ids(input_ids)
+
+    def __len__(self) -> int:
+        """Returns the size of the compressed vocabulary (V')."""
+        return self.compressed_vocab_size
 
     def save_pretrained(self, save_directory: str) -> None:
         """

@@ -11,6 +11,8 @@ from engram_peft.utils import MixedOptimizer
 class MockConfig(PretrainedConfig):
     model_type = "mock"
     hidden_size: int = 16
+    vocab_size: int = 100
+    pad_token_id: int = 0
 
 
 class MockBlock(nn.Module):
@@ -72,6 +74,7 @@ def test_engram_trainer_uses_engram_optimizer_for_engram_model(
         enable_tokenizer_compression=False,
         engram_vocab_size_per_ngram=[100, 100],
         hidden_size=16,
+        compressed_vocab_size=129280,
     )
     model = get_engram_model(base_model, config, train_mode="engram_only")
 

@@ -20,6 +20,8 @@ class DummyModel(nn.Module):
 
         self.config = Config()
         setattr(self.config, "hidden_size", hidden_size)
+        setattr(self.config, "vocab_size", 32000)
+        setattr(self.config, "pad_token_id", 0)
         self.model = nn.Module()
         self.model.layers = nn.ModuleList(
             [nn.Linear(hidden_size, hidden_size) for _ in range(12)]

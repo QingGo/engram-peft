@@ -6,7 +6,6 @@ from typing import (
     List,
     Mapping,
     Optional,
-    Tuple,
     Type,
     Union,
     cast,
@@ -289,41 +288,7 @@ def get_scheduler(
     return LambdaLR(optimizer, lr_lambda)
 
 
-def get_submodule_by_path(model: torch.nn.Module, path: str) -> torch.nn.Module:
-    """
-    Returns the submodule at the given dot-separated path.
-    Example: get_submodule_by_path(model, "model.layers")
-    """
-    if not path:
-        return model
-    segments = path.split(".")
-    curr = model
-    for seg in segments:
-        if not hasattr(curr, seg):
-            raise AttributeError(f"Module {type(curr).__name__} has no attribute {seg}")
-        curr = getattr(curr, seg)
-    return curr
-
-
-def find_largest_module_list(model: torch.nn.Module) -> Optional[str]:
-    """
-    Heuristically finds the largest nn.ModuleList in the model tree.
-    Returns the dot-separated path to it.
-    """
-    candidates: List[Tuple[str, int]] = []
-
-    for name, module in model.named_modules():
-        if isinstance(module, torch.nn.ModuleList) and len(module) > 0:
-            # We prefer ModuleLists that contain other Modules (standard for layers)
-            if all(isinstance(m, torch.nn.Module) for m in module):
-                candidates.append((name, len(module)))
-
-    if not candidates:
-        return None
-
-    # Sort by length descending, then by name length (prefer shallower paths)
-    candidates.sort(key=lambda x: (x[1], -len(x[0])), reverse=True)
-    return candidates[0][0]
+# Migrated find_largest_module_list to discovery.py
 
 
 def get_warmup_hold_cosine_scheduler(

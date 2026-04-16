@@ -27,7 +27,14 @@ class DummyModel(nn.Module):
             [nn.Linear(hidden_size, hidden_size) for _ in range(32)]
         )
         # Mock config for parameter syncing
-        self.config = cast(Any, type("MockConfig", (), {"hidden_size": hidden_size})())
+        self.config = cast(
+            Any,
+            type(
+                "MockConfig",
+                (),
+                {"hidden_size": hidden_size, "vocab_size": 1000, "pad_token_id": 0},
+            )(),
+        )
 
     def forward(self, input_ids: torch.Tensor, **kwargs: Any) -> torch.Tensor:
         batch_size, seq_len = input_ids.shape
@@ -68,6 +75,7 @@ def test_optimizer_grouping() -> None:
         weight_decay=0.1,
         enable_tokenizer_compression=False,
         engram_vocab_size_per_ngram=[100, 100],
+        compressed_vocab_size=129280,
     )
     model = get_engram_model(cast(PreTrainedModel, base_model), config)
 

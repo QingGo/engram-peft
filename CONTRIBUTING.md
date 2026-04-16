@@ -20,7 +20,7 @@ All contributors (including AI Agents) should follow these layers of verificatio
 
 ### L3: Deep Verification (Deep Logic)
 - **Tools**: Mypy & Pytest (Unit)
-- **Command**: `uv run mypy src/ tests/ examples/ && uv run pytest tests/unit`
+- **Command**: `uv run pytest tests/unit && uv run mypy src/ tests/ examples/`
 - **Goal**: Ensure 100% type safety in `src/` and verify core logic in <2 seconds.
 - **Philosophy**: Use the `tiny_tokenizer` and `tiny_compressor` fixtures for fast unit testing.
 
