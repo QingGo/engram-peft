@@ -14,6 +14,12 @@ from torch.optim.lr_scheduler import LambdaLR
 from torch.optim.optimizer import Optimizer
 from torch.optim.sgd import SGD
 from torch.optim.sparse_adam import SparseAdam
+from transformers import (
+    DataCollatorForLanguageModeling,
+    PreTrainedTokenizerBase,
+    Trainer,
+    TrainingArguments,
+)
 
 if TYPE_CHECKING:
     from engram_peft import EngramModel
@@ -337,3 +343,51 @@ def get_warmup_hold_cosine_scheduler(
         return min_lr_ratio + (1.0 - min_lr_ratio) * cosine_decay
 
     return LambdaLR(optimizer, lr_lambda)
+
+
+def evaluate_model_loss(
+    model: torch.nn.Module,
+    tokenizer: PreTrainedTokenizerBase,
+    dataset: Any,
+    batch_size: int = 8,
+    max_length: int = 128,
+    output_dir: str = "outputs/eval",
+) -> float:
+    """
+    Standardizes the calculation of Zero-shot loss for language models.
+
+    Args:
+        model: The model to evaluate.
+        tokenizer: The tokenizer to use.
+        dataset: The evaluation dataset.
+        batch_size: Evaluation batch size.
+        max_length: Maximum sequence length.
+        output_dir: Directory for temporary evaluation outputs.
+
+    Returns:
+        float: The calculated eval_loss.
+    """
+    eval_args = TrainingArguments(
+        output_dir=output_dir,
+        per_device_eval_batch_size=batch_size,
+        report_to="none",
+        bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
+        fp16=not (torch.cuda.is_available() and torch.cuda.is_bf16_supported())
+        and torch.cuda.is_available(),
+        dataloader_num_workers=0,  # Avoid overhead for quick eval
+        dataloader_pin_memory=True,
+        remove_unused_columns=True,
+    )
+
+    # Use DataCollatorForLanguageModeling to ensure correct label shifting
+    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+
+    trainer = Trainer(
+        model=model,
+        args=eval_args,
+        eval_dataset=dataset,
+        data_collator=data_collator,
+    )
+
+    metrics = trainer.evaluate()
+    return cast("float", metrics.get("eval_loss", 0.0))

@@ -110,4 +110,5 @@ dev = [
     "torchviz>=0.0.3",
     "types-seaborn>=0.13.2.20260408",
     "pre-commit>=4.5.1",
+    "wandb>=0.17.0",
 ]
