@@ -22,7 +22,7 @@ class ShortConv(nn.Module):
         self,
         hidden_size: int,
         kernel_size: int = 4,
-        dilation: int = 3,
+        dilation: int = 1,
         norm_eps: float = 1e-5,
         hc_mult: int = 4,
         activation: bool = True,
@@ -50,7 +50,7 @@ class ShortConv(nn.Module):
             padding=0,
             dilation=dilation,
             groups=total_channels,
-            bias=True,
+            bias=False,
         )
 
         # Weight/bias initialization
