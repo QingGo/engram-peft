@@ -128,14 +128,39 @@ def plot_benchmark_comparison(
                 )
 
     # 3. Create Differential Footnote
-    diffs = get_differential_params(results)
+    # Filter out CLI-only parameters that shouldn't appear in the footnote
+    exclude_keys = {
+        "methods",
+        "files",
+        "plot_only",
+        "list",
+        "wandb",
+        "wandb_offline",
+        "wandb_project",
+        "wandb_entity",
+    }
+
+    # Helper function to get relevant params
+    def get_relevant_params(r: BenchmarkResult) -> dict[str, Any]:
+        return {k: v for k, v in r.params.items() if k not in exclude_keys}
+
+    # Temporarily modify results for diff calculation (or calculate manually)
+    relevant_results = []
+    for r in results:
+        relevant_results.append(
+            BenchmarkResult(
+                method=r.method, params=get_relevant_params(r), metrics=r.metrics
+            )
+        )
+
+    diffs = get_differential_params(relevant_results)
     footnote_lines = []
 
     # Identify unique differences per experiment
     for i, label in enumerate(legend_labels):
         experiment_diffs = []
         for key in sorted(diffs.keys()):
-            val = results[i].params.get(key)
+            val = relevant_results[i].params.get(key)
             experiment_diffs.append(f"{key}={val}")
 
         if experiment_diffs:
@@ -143,21 +168,22 @@ def plot_benchmark_comparison(
 
     # Identify common parameters
     all_keys: set[str] = set()
-    for r in results:
+    for r in relevant_results:
         all_keys.update(r.params.keys())
     common_params = []
     for key in sorted(all_keys):
         if key not in diffs:
-            common_params.append(f"{key}={results[0].params.get(key)}")
+            common_params.append(f"{key}={relevant_results[0].params.get(key)}")
 
     footer_text = ""
     if footnote_lines:
         footer_text += "\n".join(footnote_lines) + "\n"
     if common_params:
+        # Show a few common params as context
         footer_text += (
             "Common: "
-            + ", ".join(common_params[:5])
-            + ("..." if len(common_params) > 5 else "")
+            + ", ".join(common_params[:8])
+            + ("..." if len(common_params) > 8 else "")
         )
 
     plt.title("Benchmarking Convergence Comparison", pad=20, fontweight="bold")
@@ -167,19 +193,29 @@ def plot_benchmark_comparison(
     # Place legend
     plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0.0)
 
-    # Add footnote at the bottom
+    # Adjust layout and bottom margin to make space for footnote
+    plt.tight_layout()
+    # Reserve significant bottom margin if footnote is present
     if footer_text:
+        # Increase figure bottom margin
+        plt.subplots_adjust(bottom=0.22)
         plt.figtext(
-            0.1,
-            -0.05,
+            0.05,
+            0.02,
             footer_text,
             wrap=True,
             horizontalalignment="left",
-            fontsize=10,
-            bbox=dict(facecolor="none", edgecolor="gray", boxstyle="round,pad=0.5"),
+            verticalalignment="bottom",
+            fontsize=9,
+            color="#333333",
+            bbox=dict(
+                facecolor="white",
+                edgecolor="#E0E0E0",
+                boxstyle="round,pad=0.8",
+                alpha=0.9,
+            ),
         )
 
-    plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close()
     print(f"Comparison plot saved to {output_path}")

@@ -99,9 +99,8 @@ def main() -> None:
 
     engine.run_all(args.methods)
 
-    # Auto-plot after run
-    latest_dict = manager.get_latest_by_method()
-    plot_benchmark_comparison(list(latest_dict.values()))
+    # Auto-plot after run (only current batch)
+    plot_benchmark_comparison(list(engine.results.values()))
 
 
 if __name__ == "__main__":
