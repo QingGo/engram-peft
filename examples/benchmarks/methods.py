@@ -130,7 +130,6 @@ def train_engram(
         target_layers=[2, 11],
         engram_vocab_size_per_ngram=[256000, 256000],
         hidden_size=base_model.config.hidden_size,
-        embedding_dim=1024,
     )
     # Apply overrides to config before model creation
     for k, v in overrides.items():
@@ -317,7 +316,6 @@ def train_full_finetune_engram(
         target_layers=[2, 11],
         engram_vocab_size_per_ngram=[256000, 256000],
         hidden_size=base_model.config.hidden_size,
-        learning_rate_multiplier=3.0,
     )
     # Apply overrides to config
     for k, v in overrides.items():

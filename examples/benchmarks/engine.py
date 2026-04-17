@@ -3,7 +3,7 @@ import os
 import shutil
 import sys
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import torch
 import wandb
@@ -101,24 +101,34 @@ class BenchmarkEngine:
 
     def run_method(self, method_spec: str) -> None:
         # Parse "method:param1=val1,param2=val2"
+        # Support for complex types (lists, nested dicts) via OmegaConf
         overrides: dict[str, Any] = {}
         if ":" in method_spec:
             method_name, overrides_str = method_spec.split(":", 1)
-            for pair in overrides_str.split(","):
-                if "=" in pair:
-                    k, val_str = pair.split("=", 1)
-                    val: Any = val_str
-                    # Try to infer type
-                    if val_str.lower() == "true":
-                        val = True
-                    elif val_str.lower() == "false":
-                        val = False
-                    else:
-                        try:
-                            val = float(val_str) if "." in val_str else int(val_str)
-                        except ValueError:
-                            pass
-                    overrides[k] = val
+            # Bracket-aware split to avoid breaking parameters like target_layers=[2,11]
+            pairs = []
+            current: list[str] = []
+            bracket_level = 0
+            for char in overrides_str:
+                if char == "[":
+                    bracket_level += 1
+                elif char == "]":
+                    bracket_level -= 1
+
+                if char == "," and bracket_level == 0:
+                    pairs.append("".join(current))
+                    current = []
+                else:
+                    current.append(char)
+            if current:
+                pairs.append("".join(current))
+
+            from omegaconf import OmegaConf
+
+            conf = OmegaConf.from_dotlist(pairs)
+            overrides = cast(
+                "dict[str, Any]", OmegaConf.to_container(conf, resolve=True)
+            )
         else:
             method_name = method_spec
 

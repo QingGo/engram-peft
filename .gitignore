@@ -155,3 +155,4 @@ outputs/*
 docs/fix_record.md
 docs/note.md
 scripts/
+wandb/
