@@ -17,6 +17,8 @@ import json
 import os
 import sys
 
+from transformers import set_seed
+
 # Ensure we can import from the current directory
 sys.path.append(os.getcwd())
 
@@ -66,6 +68,7 @@ def main() -> None:
     parser.add_argument("--wandb_entity", type=str, help="WandB entity/username")
 
     args = parser.parse_args()
+    set_seed(42)
     manager = ResultManager()
 
     if args.list:

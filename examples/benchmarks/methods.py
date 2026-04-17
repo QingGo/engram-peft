@@ -1,3 +1,4 @@
+import logging
 from typing import Any, cast
 
 import torch
@@ -17,6 +18,10 @@ from engram_peft import (
     EngramTrainer,
     get_engram_model,
 )
+
+# Configure logging to see Engram injection logs
+logging.basicConfig(level=logging.WARNING, format="%(message)s")
+logging.getLogger("engram_peft").setLevel(logging.INFO)
 
 
 def extract_trainer_metrics(trainer: Trainer, train_result: Any) -> dict[str, Any]:
@@ -68,13 +73,21 @@ def train_lora(
 
     peft_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
-        r=8,
+        r=16,
         lora_alpha=32,
         target_modules=["q_proj", "v_proj"],
         lora_dropout=0.05,
         bias="none",
     )
     model = get_peft_model(base_model, peft_config)
+    model.print_trainable_parameters()
+
+    warmup_steps = int(args.max_steps * 0.03)
+    num_decay_steps = int(args.max_steps * 0.77)
+    scheduler_kwargs = {
+        "num_decay_steps": num_decay_steps,
+        "min_lr_ratio": 1e-6 / 3e-4,
+    }
 
     training_args = TrainingArguments(
         output_dir="outputs/benchmarks/tmp/lora",
@@ -82,6 +95,9 @@ def train_lora(
         gradient_accumulation_steps=args.grad_accum,
         max_steps=args.max_steps,
         learning_rate=3e-4,
+        lr_scheduler_type="warmup_stable_decay",
+        lr_scheduler_kwargs=scheduler_kwargs,
+        warmup_steps=warmup_steps,
         logging_steps=20,
         eval_strategy="steps",
         eval_steps=100,
@@ -96,7 +112,7 @@ def train_lora(
         if hasattr(training_args, k):
             setattr(training_args, k, v)
 
-    trainer = Trainer(
+    trainer = EngramTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
@@ -127,9 +143,17 @@ def train_engram(
         torch.cuda.reset_peak_memory_stats()
 
     config = EngramConfig(
-        target_layers=[2, 11],
-        engram_vocab_size_per_ngram=[256000, 256000],
+        n_head_per_ngram=16,
+        target_layers=[11, 21],
+        engram_vocab_size_per_ngram=[512000, 512000],
         hidden_size=base_model.config.hidden_size,
+        embedding_dim=1280,
+        enable_tokenizer_compression=True,
+        tokenizer_name_or_path=args.model_name_or_path
+        if hasattr(args, "model_name_or_path")
+        else None,
+        pad_id=tokenizer.pad_token_id if isinstance(tokenizer.pad_token_id, int) else 0,
+        learning_rate_multiplier=15.0,
     )
     # Apply overrides to config before model creation
     for k, v in overrides.items():
@@ -137,6 +161,14 @@ def train_engram(
             setattr(config, k, v)
 
     model = get_engram_model(base_model, config, tokenizer)
+    model.print_trainable_parameters()
+
+    warmup_steps = int(args.max_steps * 0.03)
+    num_decay_steps = int(args.max_steps * 0.77)
+    scheduler_kwargs = {
+        "num_decay_steps": num_decay_steps,
+        "min_lr_ratio": 1e-6 / 3e-4,
+    }
 
     training_args = TrainingArguments(
         output_dir="outputs/benchmarks/tmp/engram",
@@ -144,6 +176,9 @@ def train_engram(
         gradient_accumulation_steps=args.grad_accum,
         max_steps=args.max_steps,
         learning_rate=3e-4,
+        lr_scheduler_type="warmup_stable_decay",
+        lr_scheduler_kwargs=scheduler_kwargs,
+        warmup_steps=warmup_steps,
         logging_steps=20,
         eval_strategy="steps",
         eval_steps=100,
@@ -187,6 +222,10 @@ def train_full_finetune(
         torch.cuda.reset_peak_memory_stats()
 
     base_model.requires_grad_(True)
+    print(
+        f"trainable params: {sum(p.numel() for p in base_model.parameters() if p.requires_grad):,}"
+    )
+    # Also print it manually if it were a PEFT model, but for base model we do it like this
     training_args = TrainingArguments(
         output_dir="outputs/benchmarks/tmp/full_ft",
         per_device_train_batch_size=args.batch_size,
@@ -206,7 +245,7 @@ def train_full_finetune(
         if hasattr(training_args, k):
             setattr(training_args, k, v)
 
-    trainer = Trainer(
+    trainer = EngramTrainer(
         model=base_model,
         args=training_args,
         train_dataset=train_dataset,
@@ -237,7 +276,7 @@ def train_lora_engram(
     # Load LoRA config
     peft_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
-        r=8,
+        r=16,
         lora_alpha=32,
         target_modules=["q_proj", "v_proj"],
         lora_dropout=0.05,
@@ -252,16 +291,37 @@ def train_lora_engram(
 
     # Load Engram wrapper
     config = EngramConfig(
-        target_layers=[2, 11],
-        engram_vocab_size_per_ngram=[256000, 256000],
+        n_head_per_ngram=16,
+        target_layers=[11, 21],
+        engram_vocab_size_per_ngram=[512000, 512000],
         hidden_size=base_model.config.hidden_size,
+        embedding_dim=1280,
+        enable_tokenizer_compression=True,
+        tokenizer_name_or_path=args.model_name_or_path
+        if hasattr(args, "model_name_or_path")
+        else None,
+        pad_id=tokenizer.pad_token_id if isinstance(tokenizer.pad_token_id, int) else 0,
+        learning_rate_multiplier=15.0,
     )
     # Apply overrides to engram config
     for k, v in overrides.items():
         if hasattr(config, k):
             setattr(config, k, v)
 
-    model = get_engram_model(lora_model, config, tokenizer)
+    model = get_engram_model(
+        lora_model,
+        config,
+        tokenizer,
+        train_mode="preserve_trainable",
+    )
+    model.print_trainable_parameters()
+
+    warmup_steps = int(args.max_steps * 0.03)
+    num_decay_steps = int(args.max_steps * 0.77)
+    scheduler_kwargs = {
+        "num_decay_steps": num_decay_steps,
+        "min_lr_ratio": 1e-6 / 3e-4,
+    }
 
     training_args = TrainingArguments(
         output_dir="outputs/benchmarks/tmp/lora_engram",
@@ -269,6 +329,9 @@ def train_lora_engram(
         gradient_accumulation_steps=args.grad_accum,
         max_steps=args.max_steps,
         learning_rate=3e-4,
+        lr_scheduler_type="warmup_stable_decay",
+        lr_scheduler_kwargs=scheduler_kwargs,
+        warmup_steps=warmup_steps,
         logging_steps=20,
         eval_strategy="steps",
         eval_steps=100,
@@ -313,9 +376,17 @@ def train_full_finetune_engram(
         torch.cuda.reset_peak_memory_stats()
 
     config = EngramConfig(
-        target_layers=[2, 11],
-        engram_vocab_size_per_ngram=[256000, 256000],
+        n_head_per_ngram=16,
+        target_layers=[11, 21],
+        engram_vocab_size_per_ngram=[512000, 512000],
         hidden_size=base_model.config.hidden_size,
+        embedding_dim=1280,
+        enable_tokenizer_compression=True,
+        tokenizer_name_or_path=args.model_name_or_path
+        if hasattr(args, "model_name_or_path")
+        else None,
+        pad_id=tokenizer.pad_token_id if isinstance(tokenizer.pad_token_id, int) else 0,
+        learning_rate_multiplier=15.0,
     )
     # Apply overrides to config
     for k, v in overrides.items():
@@ -328,6 +399,14 @@ def train_full_finetune_engram(
         tokenizer,
         train_mode="full_finetune",
     )
+    model.print_trainable_parameters()
+
+    warmup_steps = int(args.max_steps * 0.03)
+    num_decay_steps = int(args.max_steps * 0.77)
+    scheduler_kwargs = {
+        "num_decay_steps": num_decay_steps,
+        "min_lr_ratio": 1e-6 / 3e-4,
+    }
 
     training_args = TrainingArguments(
         output_dir="outputs/benchmarks/tmp/full_ft_engram",
@@ -335,6 +414,9 @@ def train_full_finetune_engram(
         gradient_accumulation_steps=args.grad_accum,
         max_steps=args.max_steps,
         learning_rate=3e-4,
+        lr_scheduler_type="warmup_stable_decay",
+        lr_scheduler_kwargs=scheduler_kwargs,
+        warmup_steps=warmup_steps,
         logging_steps=20,
         eval_strategy="steps",
         eval_steps=100,
@@ -359,6 +441,8 @@ def train_full_finetune_engram(
             "engram_dense_learning_rate": 3e-4,
             "engram_sparse_learning_rate": 9e-4,
             "backbone_optimizer": AdamW,
+            "engram_dense_optimizer": "adamw",
+            "engram_sparse_optimizer": "sparse_adam",
         },
     )
 

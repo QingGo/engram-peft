@@ -55,7 +55,7 @@ class EngramConfig(PretrainedConfig):
     target_layers: list[int] = field(
         default_factory=lambda: [2, 15],
         metadata={
-            "help": "List of layer indices where Engram layers will be injected."
+            "help": "List of layer indices where Engram layers will be injected. 0-indexed."
         },
     )
     target_modules: list[str] | str | None = field(
@@ -173,7 +173,7 @@ class EngramConfig(PretrainedConfig):
             enable_tokenizer_compression (bool, optional):
                 Enable V -> V' mapping to reduce entropy in token space. Defaults to True.
             target_layers (List[int], optional):
-                Indices of transformer layers where Engram is injected. Defaults to [2, 15].
+                Indices of transformer layers where Engram is injected. Defaults to [2, 15], 0-indexed.
             hc_mult (int, optional):
                 Multiplier for hashing logic. Defaults to 4.
             combine_mhc (bool, optional):

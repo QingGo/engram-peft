@@ -17,7 +17,7 @@ Configuration class for Engram PEFT module. Inherits from `transformers.Pretrain
 - `n_head_per_ngram` (`int`, default: `8`): Number of hash heads per N-gram order.
 - `embedding_dim` (`int`, default: `1280`): Dimension of the Engram retrieval embedding.
 - `enable_tokenizer_compression` (`bool`, default: `True`): Whether to use NFKC/Lowercase normalization for token grouping.
-- `target_layers` (`List[int]`, default: `[2, 15]`): Transformer layers where Engram modules are injected.
+- `target_layers` (`List[int]`, default: `[2, 15]`): Transformer layers where Engram modules are injected, 0-indexed.
 - `target_modules` (`Optional[Union[List[str], str]]`, default: `None`): Specific module names or regex patterns to target for injection.
 - `hc_mult` (`int`, default: `4`): Multi-head hyper-connection expansion factor.
 - `combine_mhc` (`bool`, default: `True`): Whether to combine multi-head hyper-connections.

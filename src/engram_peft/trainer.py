@@ -58,6 +58,7 @@ class EngramTrainer(Trainer):
         if self.lr_scheduler is None:
             # If the user explicitly requested a specific scheduler type (like cosine or wsd), use it.
             # We only use our custom Step Decay fallback if it's 'constant' or 'constant_with_warmup'.
+            print(f"[Engram-PEFT] Creating scheduler: {self.args.lr_scheduler_type}")
             if self.args.lr_scheduler_type not in ["constant", "constant_with_warmup"]:
                 return super().create_scheduler(num_training_steps, optimizer)
 
