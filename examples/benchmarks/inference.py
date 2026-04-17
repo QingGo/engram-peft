@@ -38,7 +38,7 @@ def demo_engram(
     path: str = "outputs/benchmarks/engram_weights",
 ) -> None:
     print(f"Generating with Engram ({path})...")
-    model = EngramModel.from_pretrained(base_model, path)
+    model = EngramModel.from_pretrained(base_model, path, tokenizer=tokenizer)
     with torch.no_grad():
         out = model.generate(**inputs, max_new_tokens=40, do_sample=False)
     print(f"Output (Engram): {tokenizer.decode(out[0], skip_special_tokens=True)}")
@@ -66,7 +66,7 @@ def demo_lora_engram(
     lora_model = PeftModel.from_pretrained(base_model, path)
     # Load Engram wrapper
     combined_model = EngramModel.from_pretrained(
-        cast("PreTrainedModel", lora_model), path
+        cast("PreTrainedModel", lora_model), path, tokenizer=tokenizer
     )
     with torch.no_grad():
         out = combined_model.generate(**inputs, max_new_tokens=40, do_sample=False)
@@ -89,6 +89,28 @@ def demo_full_finetune(
         out = ft_model.generate(**inputs, max_new_tokens=40, do_sample=False)
     print(f"Output (Full FT): {tokenizer.decode(out[0], skip_special_tokens=True)}")
     del ft_model
+    gc.collect()
+
+
+def demo_full_finetune_engram(
+    base_model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizerBase,
+    inputs: dict[str, Any],
+    path: str = "outputs/benchmarks/full_ft_engram_weights",
+) -> None:
+    print(f"Generating with Full FT + Engram ({path})...")
+    # Load finetuned base model from subfolder
+    sub_path = f"{path}/base_model"
+    ft_base_model = AutoModelForCausalLM.from_pretrained(
+        sub_path, torch_dtype=base_model.dtype, device_map="auto"
+    )
+    # Load Engram wrapper
+    model = EngramModel.from_pretrained(ft_base_model, path, tokenizer=tokenizer)
+    with torch.no_grad():
+        out = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+    print(f"Output (FT+Engram): {tokenizer.decode(out[0], skip_special_tokens=True)}")
+    model.unload_engram()
+    del ft_base_model
     gc.collect()
 
 
@@ -126,9 +148,7 @@ def run_inference_demo(
             elif method_name == "full_finetune":
                 demo_full_finetune(base_model, tokenizer, inputs)
             elif method_name == "full_finetune_engram":
-                print(
-                    "Skipping Full FT + Engram demo (base model persistence not yet implemented for this mode)."
-                )
+                demo_full_finetune_engram(base_model, tokenizer, inputs)
         except Exception as e:
             print(f"Error during inference demo for {method_spec}: {e}")
 

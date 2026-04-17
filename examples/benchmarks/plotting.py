@@ -142,51 +142,77 @@ def plot_benchmark_comparison(
 
     def get_relevant_params(r: BenchmarkResult) -> dict[str, Any]:
         params = {k: v for k, v in r.params.items() if k not in exclude_keys}
-        # Filter out None values for base method to keep it clean
-        if r.method == "base":
-            params = {k: v for k, v in params.items() if v is not None}
+        # Filter out None values to keep it clean
+        params = {k: v for k, v in params.items() if v is not None}
         return params
 
     relevant_configs = [get_relevant_params(r) for r in results]
 
-    # Identify Common Parameters (Value is same across ALL experiments)
+    # Identify "Standard" or "Common" parameters via Mode (most frequent value)
     all_keys: set[str] = set()
     for cfg in relevant_configs:
         all_keys.update(cfg.keys())
 
     common_params = {}
     for key in sorted(all_keys):
-        # A key is common if it's present in all results and has the same value
         values = []
-        all_present = True
         for cfg in relevant_configs:
-            if key not in cfg:
-                all_present = False
-                break
-            val = cfg[key]
-            values.append(str(val) if isinstance(val, list | dict) else val)
+            if key in cfg:
+                val = cfg[key]
+                values.append(str(val) if isinstance(val, list | dict) else val)
 
-        if all_present and len(set(values)) == 1:
-            common_params[key] = relevant_configs[0][key]
+        if not values:
+            continue
+
+        # Find the most frequent value
+        from collections import Counter
+
+        counts = Counter(values)
+        most_common_val, freq = counts.most_common(1)[0]
+
+        # If the most common value is used by nearly all methods that have the key
+        # or it's used by the majority, we treat it as common.
+        if freq > 1 or len(results) == 1:
+            # We need to find the original non-string version of the value
+            orig_val = None
+            for cfg in relevant_configs:
+                if key in cfg:
+                    v = cfg[key]
+                    v_repr = str(v) if isinstance(v, list | dict) else v
+                    if v_repr == most_common_val:
+                        orig_val = v
+                        break
+            common_params[key] = orig_val
 
     footnote_lines = []
     for i, label in enumerate(legend_labels):
         cfg = relevant_configs[i]
-        # Only show parameters that are NOT in the common set
-        diffs = {
-            k: v
-            for k, v in cfg.items()
-            if k not in common_params or common_params[k] != v
-        }
+        # Only show parameters that deviate from the most common "Common" set
+        diffs = {}
+        for k, v in cfg.items():
+            if k not in common_params:
+                diffs[k] = v
+            else:
+                # Compare value with the common/mode value
+                v_repr = str(v) if isinstance(v, list | dict) else v
+                mode_repr = (
+                    str(common_params[k])
+                    if isinstance(common_params[k], list | dict)
+                    else common_params[k]
+                )
+                if v_repr != mode_repr:
+                    diffs[k] = v
 
-        # Special case: label results if they have differences
+        # Only add a footnote line if there are actual deviations
         if diffs:
             # Sort for deterministic output
             diff_str = ", ".join([f"{k}={v}" for k, v in sorted(diffs.items())])
             footnote_lines.append(f"{label}: {diff_str}")
-        elif results[i].method == "base":
-            # For base, if no diffs (unlikely due to common filtering), at least show model
-            if "model" in cfg:
+        elif results[i].method == "base" and i == 0:
+            # Always show at least one line for Base if it's the first result
+            # but only if not everything is already in common.
+            # Actually, if everything is common, just model name is enough.
+            if "model" in cfg and "model" not in common_params:
                 footnote_lines.append(f"{label}: model={cfg['model']}")
 
     footer_text = ""
@@ -194,7 +220,7 @@ def plot_benchmark_comparison(
         footer_text += "\n".join(footnote_lines) + "\n"
 
     if common_params:
-        # Show all common params but capped for length if needed
+        # Show all common params
         common_str = ", ".join([f"{k}={v}" for k, v in sorted(common_params.items())])
         footer_text += f"\nCommon: {common_str}"
 

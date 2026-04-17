@@ -450,13 +450,16 @@ class EngramModel(nn.Module):
 
     @classmethod
     def from_pretrained(
-        cls, base_model: PreTrainedModel, engram_path: str
+        cls,
+        base_model: PreTrainedModel,
+        engram_path: str,
+        tokenizer: PreTrainedTokenizerBase | None = None,
     ) -> "EngramModel":
         """
         Load an Engram model from a directory.
         """
         config = EngramConfig.from_pretrained(engram_path)
-        model = cls(base_model, config, tokenizer=None)
+        model = cls(base_model, config, tokenizer=tokenizer)
         model.load_engram(engram_path)
         return model
 
