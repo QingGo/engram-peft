@@ -156,7 +156,7 @@ class EngramModel(nn.Module):
     @property
     def engram_layers(self) -> nn.ModuleDict:
         """Dynamic shortcut to the active adapter's Engram layers."""
-        return cast(nn.ModuleDict, self.adapters[self.active_adapter])
+        return cast("nn.ModuleDict", self.adapters[self.active_adapter])
 
     def set_adapter(self, adapter_name: str) -> None:
         """

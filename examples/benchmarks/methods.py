@@ -59,7 +59,9 @@ def train_lora(
     train_dataset: Any,
     eval_dataset: Any,
     args: Any,
+    overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    overrides = overrides or {}
     print("\n>>> Method: LoRA")
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -87,6 +89,13 @@ def train_lora(
         bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
     )
 
+    # Apply overrides
+    for k, v in overrides.items():
+        if hasattr(peft_config, k):
+            setattr(peft_config, k, v)
+        if hasattr(training_args, k):
+            setattr(training_args, k, v)
+
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -110,7 +119,9 @@ def train_engram(
     train_dataset: Any,
     eval_dataset: Any,
     args: Any,
+    overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    overrides = overrides or {}
     print("\n>>> Method: Engram Only")
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -121,6 +132,11 @@ def train_engram(
         hidden_size=base_model.config.hidden_size,
         embedding_dim=1024,
     )
+    # Apply overrides to config before model creation
+    for k, v in overrides.items():
+        if hasattr(config, k):
+            setattr(config, k, v)
+
     model = get_engram_model(base_model, config, tokenizer)
 
     training_args = TrainingArguments(
@@ -135,6 +151,11 @@ def train_engram(
         report_to="wandb" if args.wandb else "none",
         bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
     )
+
+    # Apply overrides to training_args
+    for k, v in overrides.items():
+        if hasattr(training_args, k):
+            setattr(training_args, k, v)
 
     collator = EngramDataCollator(tokenizer=tokenizer, config=config)
     trainer = EngramTrainer(
@@ -159,7 +180,9 @@ def train_full_finetune(
     train_dataset: Any,
     eval_dataset: Any,
     args: Any,
+    overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    overrides = overrides or {}
     print("\n>>> Method: Full Finetune")
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -178,6 +201,11 @@ def train_full_finetune(
         report_to="wandb" if args.wandb else "none",
         bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
     )
+
+    # Apply overrides
+    for k, v in overrides.items():
+        if hasattr(training_args, k):
+            setattr(training_args, k, v)
 
     trainer = Trainer(
         model=base_model,
@@ -200,7 +228,9 @@ def train_lora_engram(
     train_dataset: Any,
     eval_dataset: Any,
     args: Any,
+    overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    overrides = overrides or {}
     print("\n>>> Method: LoRA + Engram")
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -214,6 +244,11 @@ def train_lora_engram(
         lora_dropout=0.05,
         bias="none",
     )
+    # Apply overrides to peft_config
+    for k, v in overrides.items():
+        if hasattr(peft_config, k):
+            setattr(peft_config, k, v)
+
     lora_model = get_peft_model(base_model, peft_config)
 
     # Load Engram wrapper
@@ -222,6 +257,11 @@ def train_lora_engram(
         engram_vocab_size_per_ngram=[256000, 256000],
         hidden_size=base_model.config.hidden_size,
     )
+    # Apply overrides to engram config
+    for k, v in overrides.items():
+        if hasattr(config, k):
+            setattr(config, k, v)
+
     model = get_engram_model(lora_model, config, tokenizer)
 
     training_args = TrainingArguments(
@@ -236,6 +276,11 @@ def train_lora_engram(
         report_to="wandb" if args.wandb else "none",
         bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
     )
+
+    # Apply overrides to training_args
+    for k, v in overrides.items():
+        if hasattr(training_args, k):
+            setattr(training_args, k, v)
 
     collator = EngramDataCollator(tokenizer=tokenizer, config=config)
     trainer = EngramTrainer(
@@ -261,7 +306,9 @@ def train_full_finetune_engram(
     train_dataset: Any,
     eval_dataset: Any,
     args: Any,
+    overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    overrides = overrides or {}
     print("\n>>> Method: Full Finetune + Engram")
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -272,6 +319,10 @@ def train_full_finetune_engram(
         hidden_size=base_model.config.hidden_size,
         learning_rate_multiplier=3.0,
     )
+    # Apply overrides to config
+    for k, v in overrides.items():
+        if hasattr(config, k):
+            setattr(config, k, v)
 
     model = get_engram_model(
         base_model,
@@ -292,6 +343,11 @@ def train_full_finetune_engram(
         report_to="wandb" if args.wandb else "none",
         bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
     )
+
+    # Apply overrides to training_args
+    for k, v in overrides.items():
+        if hasattr(training_args, k):
+            setattr(training_args, k, v)
 
     collator = EngramDataCollator(tokenizer=tokenizer, config=config)
     trainer = EngramTrainer(

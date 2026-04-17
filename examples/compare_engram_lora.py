@@ -25,7 +25,7 @@ from examples.benchmarks.persistence import BenchmarkResult, ResultManager
 from examples.benchmarks.plotting import plot_benchmark_comparison
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Engram Benchmarking Suite")
     parser.add_argument("--max_steps", type=int, default=50)
     parser.add_argument("--batch_size", type=int, default=8)
@@ -36,14 +36,8 @@ def main():
     parser.add_argument(
         "--methods",
         nargs="+",
-        choices=[
-            "lora",
-            "engram",
-            "lora_engram",
-            "full_finetune",
-            "full_finetune_engram",
-        ],
         default=["lora", "engram"],
+        help="Methods to run. Can include overrides like 'engram:clip_grad_per_layer=True'",
     )
 
     parser.add_argument(

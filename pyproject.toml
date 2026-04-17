@@ -50,8 +50,6 @@ module = [
     "tqdm.*",
     "sympy.*",
     "tokenizers.*",
-    "torchview.*",
-    "torchinfo.*",
     "datasets.*",
     "matplotlib.*",
     "seaborn.*",
@@ -111,4 +109,5 @@ dev = [
     "types-seaborn>=0.13.2.20260408",
     "pre-commit>=4.5.1",
     "wandb>=0.17.0",
+    "ruff>=0.15.11",
 ]

@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from torch.optim.optimizer import Optimizer
 from transformers import Trainer
+from transformers.modeling_utils import unwrap_model
 
 from engram_peft.model import EngramModel
 from engram_peft.utils import get_scheduler
@@ -120,23 +121,51 @@ class EngramTrainer(Trainer):
         if max_norm is None or max_norm <= 0:
             return None
 
-        total_norm = self._compute_total_norm(model)
-        if total_norm is None:
-            return None
+        # Compatibility with non-Engram models is preserved so EngramTrainer can act as a
+        # robust replacement for Trainer in the benchmark suite (handling sparse grads if present).
+        unwrapped_model = unwrap_model(model)
+        use_per_layer = (
+            unwrapped_model.config.clip_grad_per_layer
+            if isinstance(unwrapped_model, EngramModel)
+            else False
+        )
 
-        # Apply in-place scaling if norm exceeds max_norm
-        clip_coef = max_norm / (total_norm + 1e-6)
-        if clip_coef < 1.0:
+        if use_per_layer:
+            # Per-tensor clipping: each parameter is clipped independently
             for p in model.parameters():
                 if p.grad is not None:
                     g = p.grad
                     if g.is_sparse:
-                        # For sparse tensors, we must scale the values directly
-                        g.coalesce().values().detach().mul_(clip_coef.to(g.device))
+                        # For sparse tensors, we must compute norm on the values
+                        p_norm = torch.norm(g.coalesce().values().detach().float(), 2)
                     else:
-                        g.detach().mul_(clip_coef.to(g.device))
+                        p_norm = torch.norm(g.detach().float(), 2)
 
-        return total_norm
+                    clip_coef = max_norm / (p_norm + 1e-6)
+                    if clip_coef < 1.0:
+                        if g.is_sparse:
+                            g.coalesce().values().detach().mul_(clip_coef.to(g.device))
+                        else:
+                            g.detach().mul_(clip_coef.to(g.device))
+            return self._compute_total_norm(
+                model
+            )  # Return global norm for logging consistency
+        else:
+            # Standard Global Norm Clipping
+            total_norm = self._compute_total_norm(model)
+            if total_norm is None:
+                return None
+
+            clip_coef = max_norm / (total_norm + 1e-6)
+            if clip_coef < 1.0:
+                for p in model.parameters():
+                    if p.grad is not None:
+                        g = p.grad
+                        if g.is_sparse:
+                            g.coalesce().values().detach().mul_(clip_coef.to(g.device))
+                        else:
+                            g.detach().mul_(clip_coef.to(g.device))
+            return total_norm
 
     def _get_grad_norm(
         self, model: nn.Module, grad_norm: float | None = None

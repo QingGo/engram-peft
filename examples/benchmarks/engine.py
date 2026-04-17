@@ -99,8 +99,30 @@ class BenchmarkEngine:
         self.is_dirty = False
         return self.base_model
 
-    def run_method(self, method_name: str) -> None:
-        print(f"\n{'=' * 20} Running: {method_name} {'=' * 20}")
+    def run_method(self, method_spec: str) -> None:
+        # Parse "method:param1=val1,param2=val2"
+        overrides: dict[str, Any] = {}
+        if ":" in method_spec:
+            method_name, overrides_str = method_spec.split(":", 1)
+            for pair in overrides_str.split(","):
+                if "=" in pair:
+                    k, val_str = pair.split("=", 1)
+                    val: Any = val_str
+                    # Try to infer type
+                    if val_str.lower() == "true":
+                        val = True
+                    elif val_str.lower() == "false":
+                        val = False
+                    else:
+                        try:
+                            val = float(val_str) if "." in val_str else int(val_str)
+                        except ValueError:
+                            pass
+                    overrides[k] = val
+        else:
+            method_name = method_spec
+
+        print(f"\n{'=' * 20} Running: {method_spec} {'=' * 20}")
 
         # Start WandB Run for this method
         run = None
@@ -111,9 +133,9 @@ class BenchmarkEngine:
             run = wandb.init(
                 project=getattr(self.args, "wandb_project", "engram-peft-benchmarks"),
                 entity=getattr(self.args, "wandb_entity", None),
-                name=f"{method_name}_{datetime.now().strftime('%m%d_%H%M')}",
+                name=f"{method_spec}_{datetime.now().strftime('%m%d_%H%M')}",
                 mode=mode,
-                config=vars(self.args),
+                config={**vars(self.args), **overrides},
                 reinit=True,
             )
 
@@ -157,15 +179,17 @@ class BenchmarkEngine:
             self.train_dataset,
             self.eval_dataset,
             self.args,
+            overrides=overrides,
         )
 
         # Save result (local JSON)
+        full_params = {**vars(self.args), **overrides}
         result = BenchmarkResult(
-            method=method_name, params=vars(self.args), metrics=metrics
+            method=method_spec, params=full_params, metrics=metrics
         )
         path = self.result_manager.save(result)
         print(f"Result saved to {path}")
-        self.results[method_name] = result
+        self.results[method_spec] = result
 
         # Log final metrics to WandB
         if run:

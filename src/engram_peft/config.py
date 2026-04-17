@@ -128,6 +128,12 @@ class EngramConfig(PretrainedConfig):
         default=0,
         metadata={"help": "Random seed for deterministic hashing primes."},
     )
+    clip_grad_per_layer: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to use per-layer gradient clipping instead of global norm clipping."
+        },
+    )
 
     def __init__(
         self,
@@ -150,6 +156,7 @@ class EngramConfig(PretrainedConfig):
         pad_id: int | None = None,
         seed: int = 0,
         hidden_size: int | None = None,
+        clip_grad_per_layer: bool = False,
         **kwargs: Any,
     ):
         """Constructs EngramConfig.
@@ -225,6 +232,7 @@ class EngramConfig(PretrainedConfig):
         self.compressed_vocab_size = compressed_vocab_size
         self.pad_id = pad_id
         self.seed = seed
+        self.clip_grad_per_layer = clip_grad_per_layer
 
         super().__init__(**kwargs)
         # Ensure extra kwargs are set, as PretrainedConfig might miss them in some environments
