@@ -140,51 +140,63 @@ def plot_benchmark_comparison(
         "wandb_entity",
     }
 
-    # Helper function to get relevant params
     def get_relevant_params(r: BenchmarkResult) -> dict[str, Any]:
-        return {k: v for k, v in r.params.items() if k not in exclude_keys}
+        params = {k: v for k, v in r.params.items() if k not in exclude_keys}
+        # Filter out None values for base method to keep it clean
+        if r.method == "base":
+            params = {k: v for k, v in params.items() if v is not None}
+        return params
 
-    # Temporarily modify results for diff calculation (or calculate manually)
-    relevant_results = []
-    for r in results:
-        relevant_results.append(
-            BenchmarkResult(
-                method=r.method, params=get_relevant_params(r), metrics=r.metrics
-            )
-        )
+    relevant_configs = [get_relevant_params(r) for r in results]
 
-    diffs = get_differential_params(relevant_results)
-    footnote_lines = []
-
-    # Identify unique differences per experiment
-    for i, label in enumerate(legend_labels):
-        experiment_diffs = []
-        for key in sorted(diffs.keys()):
-            val = relevant_results[i].params.get(key)
-            experiment_diffs.append(f"{key}={val}")
-
-        if experiment_diffs:
-            footnote_lines.append(f"{label}: " + ", ".join(experiment_diffs))
-
-    # Identify common parameters
+    # Identify Common Parameters (Value is same across ALL experiments)
     all_keys: set[str] = set()
-    for r in relevant_results:
-        all_keys.update(r.params.keys())
-    common_params = []
+    for cfg in relevant_configs:
+        all_keys.update(cfg.keys())
+
+    common_params = {}
     for key in sorted(all_keys):
-        if key not in diffs:
-            common_params.append(f"{key}={relevant_results[0].params.get(key)}")
+        # A key is common if it's present in all results and has the same value
+        values = []
+        all_present = True
+        for cfg in relevant_configs:
+            if key not in cfg:
+                all_present = False
+                break
+            val = cfg[key]
+            values.append(str(val) if isinstance(val, list | dict) else val)
+
+        if all_present and len(set(values)) == 1:
+            common_params[key] = relevant_configs[0][key]
+
+    footnote_lines = []
+    for i, label in enumerate(legend_labels):
+        cfg = relevant_configs[i]
+        # Only show parameters that are NOT in the common set
+        diffs = {
+            k: v
+            for k, v in cfg.items()
+            if k not in common_params or common_params[k] != v
+        }
+
+        # Special case: label results if they have differences
+        if diffs:
+            # Sort for deterministic output
+            diff_str = ", ".join([f"{k}={v}" for k, v in sorted(diffs.items())])
+            footnote_lines.append(f"{label}: {diff_str}")
+        elif results[i].method == "base":
+            # For base, if no diffs (unlikely due to common filtering), at least show model
+            if "model" in cfg:
+                footnote_lines.append(f"{label}: model={cfg['model']}")
 
     footer_text = ""
     if footnote_lines:
         footer_text += "\n".join(footnote_lines) + "\n"
+
     if common_params:
-        # Show a few common params as context
-        footer_text += (
-            "Common: "
-            + ", ".join(common_params[:8])
-            + ("..." if len(common_params) > 8 else "")
-        )
+        # Show all common params but capped for length if needed
+        common_str = ", ".join([f"{k}={v}" for k, v in sorted(common_params.items())])
+        footer_text += f"\nCommon: {common_str}"
 
     plt.title("Benchmarking Convergence Comparison", pad=20, fontweight="bold")
     plt.xlabel("Steps", labelpad=10)
@@ -197,8 +209,11 @@ def plot_benchmark_comparison(
     plt.tight_layout()
     # Reserve significant bottom margin if footnote is present
     if footer_text:
-        # Increase figure bottom margin
-        plt.subplots_adjust(bottom=0.22)
+        # Dynamic margin based on number of lines
+        num_lines = footer_text.count("\n") + 1
+        margin = min(0.1 + 0.03 * num_lines, 0.4)
+        plt.subplots_adjust(bottom=margin)
+
         plt.figtext(
             0.05,
             0.02,
@@ -209,10 +224,10 @@ def plot_benchmark_comparison(
             fontsize=9,
             color="#333333",
             bbox=dict(
-                facecolor="white",
+                facecolor="#F9F9F9",
                 edgecolor="#E0E0E0",
                 boxstyle="round,pad=0.8",
-                alpha=0.9,
+                alpha=0.95,
             ),
         )
 

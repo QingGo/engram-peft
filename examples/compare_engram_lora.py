@@ -1,9 +1,19 @@
 """
 Engram-PEFT Modular Benchmark Wrapper.
 
+Available Methods:
+    - lora: Standard LoRA finetuning (rank=16).
+    - engram: Engram-only adapter training (backbone frozen).
+    - lora_engram: Stacked LoRA + Engram adapter training.
+    - full_finetune: Full backbone finetuning.
+    - full_finetune_engram: Full backbone finetuning with Engram enabled.
+
 Usage:
     # Run new experiments
-    uv run python examples/compare_engram_lora.py --methods engram --max_steps 50
+    uv run python examples/compare_engram_lora.py --methods engram lora --max_steps 50
+
+    # Run with parameter overrides
+    uv run python examples/compare_engram_lora.py --methods engram:target_layers=[2,15]
 
     # Just replot latest results
     uv run python examples/compare_engram_lora.py --plot_only
@@ -23,6 +33,7 @@ from transformers import set_seed
 sys.path.append(os.getcwd())
 
 from examples.benchmarks.engine import BenchmarkEngine
+from examples.benchmarks.inference import run_inference_demo
 from examples.benchmarks.persistence import BenchmarkResult, ResultManager
 from examples.benchmarks.plotting import plot_benchmark_comparison
 
@@ -39,7 +50,10 @@ def main() -> None:
         "--methods",
         nargs="+",
         default=["lora", "engram"],
-        help="Methods to run. Can include overrides like 'engram:clip_grad_per_layer=True'",
+        help=(
+            "Methods to run. Options: lora, engram, full_finetune, lora_engram, full_finetune_engram. "
+            "Can include overrides like 'engram:clip_grad_per_layer=True,target_layers=[2,15]'"
+        ),
     )
 
     parser.add_argument(
@@ -106,6 +120,9 @@ def main() -> None:
 
     # Auto-plot after run (only current batch)
     plot_benchmark_comparison(list(engine.results.values()))
+
+    # Qualitative Inference Demo
+    run_inference_demo(engine)
 
 
 if __name__ == "__main__":

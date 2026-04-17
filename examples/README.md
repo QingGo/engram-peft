@@ -25,8 +25,8 @@ This script is used to benchmark Engram against other training methods like LoRA
 
 ### Features
 - **Benchmarking**: Tracks Peak VRAM usage and average wall-clock time per step.
-- **Multiple Methods**: Evaluates `lora`, `engram`, `lora+engram`, and `full_finetune_engram` under identical conditions.
-- **Hyperparameter Sweeps**: Support for per-method parameter overrides using the `method:param=val` syntax.
+- **Multiple Methods**: Evaluates `lora`, `engram`, `lora_engram`, `full_finetune`, and `full_finetune_engram` under identical conditions.
+- **Hyperparameter Sweeps**: Support for per-method parameter overrides using the `method:param=val` syntax (handles lists like `target_layers=[2,15]`).
 - **Layer-wise Clipping**: Toggleable per-layer gradient clipping via `clip_grad_per_layer=True` to improve sparse training stability.
 - **Visualization**: Generates a high-quality comparison plot (`outputs/benchmarks/loss_curve.png`).
 - **Reporting**: Persists all metrics into timestamped JSON files for historical comparison.
@@ -36,11 +36,14 @@ This script is used to benchmark Engram against other training methods like LoRA
 # Compare standard Engram vs LoRA
 uv run python examples/compare_engram_lora.py --methods lora engram
 
+# Compare all available methods
+uv run python examples/compare_engram_lora.py --methods lora engram lora_engram full_finetune full_finetune_engram
+
 # Hyperparameter Sweep: Compare different clipping strategies for Engram
 uv run python examples/compare_engram_lora.py --methods engram:clip_grad_per_layer=False engram:clip_grad_per_layer=True
 
-# Mix multiple methods with overrides
-uv run python examples/compare_engram_lora.py --methods lora:learning_rate=1e-4 engram:clip_grad_per_layer=True
+# Mix multiple methods with overrides (including list parameters)
+uv run python examples/compare_engram_lora.py --methods lora:learning_rate=1e-4 engram:target_layers=[2,15]
 ```
 
 ---
