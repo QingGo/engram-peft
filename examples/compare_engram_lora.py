@@ -53,7 +53,9 @@ def main() -> None:
         "--wandb", action="store_true", help="Enable Weights & Biases tracking"
     )
     parser.add_argument(
-        "--wandb_offline", action="store_true", help="Run wandb in offline mode"
+        "--wandb_offline",
+        action="store_true",
+        help="Run wandb in offline mode, use 'wandb sync wandb/...' to sync later",
     )
     parser.add_argument(
         "--wandb_project",
