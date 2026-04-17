@@ -1,0 +1,125 @@
+from typing import Any
+from unittest.mock import MagicMock, patch
+
+import torch
+import torch.nn as nn
+from transformers import TrainingArguments
+
+from engram_peft import EngramConfig, EngramModel, EngramTrainer
+
+
+class MockEngramLayer(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.gating = MagicMock()
+        # Mocking last_gate as [B, L, M, 1]
+        # Half 1.0, half 0.0 -> mean 0.5, inactive_rate 0.5
+        self.gating.last_gate = torch.tensor([1.0, 0.0, 1.0, 0.0]).view(1, 4, 1, 1)
+
+
+def test_model_telemetry_stats() -> None:
+    # 1. Setup mock config and model
+    config = EngramConfig(
+        target_layers=[0],
+        enable_telemetry=True,
+        hidden_size=16,
+        enable_tokenizer_compression=False,
+        compressed_vocab_size=32000,
+        pad_id=0,
+    )
+
+    # We need to mock EngramModel.engram_layers which is a property
+    with patch("engram_peft.model.EngramModel.load_engram"):
+        model = EngramModel(MagicMock(spec=nn.Module), config)
+
+        # Manually set up some mock layers
+        model.adapters["default"] = nn.ModuleDict(
+            {"0": MockEngramLayer(), "1": MockEngramLayer()}
+        )
+
+        stats = model.get_telemetry_stats()
+
+        assert "gating/mean" in stats
+        assert abs(stats["gating/mean"] - 0.5) < 1e-5
+        assert abs(stats["gating/inactive_rate"] - 0.5) < 1e-5
+        assert stats["gating/max"] == 1.0
+        assert stats["gating/min"] == 0.0
+
+
+def test_trainer_telemetry_collection(tmp_path: Any) -> None:
+    config = EngramConfig(target_layers=[0], enable_telemetry=True, hidden_size=16)
+
+    class MockModel(nn.Module):
+        def __init__(self, config_obj: EngramConfig) -> None:
+            super().__init__()
+            self.config = config_obj
+            self.backbone_param = nn.Parameter(torch.ones(10))
+            self.dense_param = nn.Parameter(torch.zeros(10))  # zero_rate should be 1.0
+            self.sparse_param = nn.Parameter(torch.ones(10) * 0.5)
+
+        def get_telemetry_stats(self) -> dict:
+            return {"mock_gate": 123.0}
+
+    model = MockModel(config)
+
+    # Mock gradients
+    model.backbone_param.grad = torch.ones(10) * 0.1
+    model.dense_param.grad = torch.zeros(10)  # grad_zero_rate should be 1.0
+
+    args = TrainingArguments(output_dir=str(tmp_path))
+
+    # Mock unwrap and groups
+    groups = {
+        "backbone": [model.backbone_param],
+        "engram_dense": [model.dense_param],
+        "engram_sparse": [model.sparse_param],
+    }
+
+    with (
+        patch("engram_peft.trainer.unwrap_model", return_value=model),
+        patch("engram_peft.trainer.get_trainable_param_groups", return_value=groups),
+        patch(
+            "engram_peft.trainer.isinstance",
+            side_effect=lambda obj, cls: True
+            if cls == EngramModel
+            else isinstance(obj, cls),
+        ),
+    ):
+        trainer = EngramTrainer(model=model, args=args)
+        # Capture initial weights happens in __init__
+
+        # Change a param to create drift
+        with torch.no_grad():
+            model.dense_param.add_(1.0)
+            # Original was 0.0, now 1.0. Drift = ||1.0|| / (||0.0|| + eps) = sqrt(10) / eps (very large)
+            # Actually norm(1.0-0.0) = sqrt(10), norm(0.0) = 0. Drift = sqrt(10) / 1e-6
+
+        stats = trainer._collect_telemetry()
+
+        # Verify groups are present
+        assert "telemetry/backbone/param_norm" in stats
+        assert "telemetry/engram_dense/param_zero_rate" in stats
+        assert (
+            stats["telemetry/engram_dense/param_zero_rate"] == 0.0
+        )  # because we added 1.0
+        assert stats["telemetry/engram_dense/grad_zero_rate"] == 1.0
+        assert "telemetry/engram_sparse/param_max" in stats
+        assert abs(stats["telemetry/engram_sparse/param_max"] - 0.5) < 1e-5
+
+        # Drift
+        assert "telemetry/engram_dense/weight_drift" in stats
+        assert (
+            stats["telemetry/engram_dense/weight_drift"] > 1000.0
+        )  # drifted from 0 to 1
+
+        # Model activation stats
+        assert stats["telemetry/mock_gate"] == 123.0
+
+
+if __name__ == "__main__":
+    test_model_telemetry_stats()
+    # Need to provide a mock path if running directly
+    from pathlib import Path
+
+    test_trainer_telemetry_collection(Path("tmp"))
+    print("All telemetry tests passed!")

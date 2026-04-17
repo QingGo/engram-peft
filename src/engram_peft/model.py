@@ -153,6 +153,41 @@ class EngramModel(nn.Module):
             f"trainable%: {100 * trainable_params / all_param:.4f}"
         )
 
+    def get_telemetry_stats(self) -> dict[str, float]:
+        """
+        Collects activation statistics from all active Engram layers.
+        Primarily focuses on Gating behavior (ContextAwareGating).
+        """
+        all_gates = []
+        for _, layer in self.engram_layers.items():
+            if hasattr(layer, "gating") and hasattr(layer.gating, "last_gate"):
+                gate = layer.gating.last_gate
+                if gate is not None:
+                    # gate shape: [B, L, M, 1]
+                    all_gates.append(gate.float().flatten())
+
+        if not all_gates:
+            return {}
+
+        concat_gates = torch.cat(all_gates)
+        # Statistics
+        mean = concat_gates.mean().item()
+        std = concat_gates.std().item()
+        max_val = concat_gates.max().item()
+        min_val = concat_gates.min().item()
+
+        # Inactive rate: percentage of gates < 0.01 (near zero)
+        inactive_mask = concat_gates < 0.01
+        inactive_rate = (inactive_mask.sum().float() / concat_gates.numel()).item()
+
+        return {
+            "gating/mean": mean,
+            "gating/std": std,
+            "gating/max": max_val,
+            "gating/min": min_val,
+            "gating/inactive_rate": inactive_rate,
+        }
+
     @property
     def engram_layers(self) -> nn.ModuleDict:
         """Dynamic shortcut to the active adapter's Engram layers."""

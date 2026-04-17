@@ -27,6 +27,22 @@ class EngramTrainer(Trainer):
     ) -> None:
         super().__init__(*args, **kwargs)
         self.optimizer_kwargs = optimizer_kwargs or {}
+        self._initial_weights: dict[int, torch.Tensor] = {}
+        if self.model is not None:
+            self._capture_initial_weights()
+
+    def _capture_initial_weights(self) -> None:
+        """Captures initial weights of Engram modules on CPU for drift calculation."""
+        if self.model is None:
+            return
+        unwrapped = unwrap_model(self.model)
+        if isinstance(unwrapped, EngramModel) and unwrapped.config.enable_telemetry:
+            print("[Engram-PEFT] Capturing initial weights for telemetry...")
+            groups = get_trainable_param_groups(unwrapped)
+            # We only track drift for Engram groups to save memory
+            for group_name in ["engram_dense", "engram_sparse"]:
+                for p in groups[group_name]:
+                    self._initial_weights[id(p)] = p.detach().cpu().clone()
 
     def create_optimizer(self, model: Any = None) -> Optimizer:
         """
@@ -187,3 +203,93 @@ class EngramTrainer(Trainer):
             )
 
         return self._compute_total_norm(model.parameters())
+
+    def _collect_telemetry(self) -> dict[str, float]:
+        """Performs deep telemetry collection across parameter groups."""
+        if self.model is None:
+            return {}
+        unwrapped = unwrap_model(self.model)
+        if (
+            not isinstance(unwrapped, EngramModel)
+            or not unwrapped.config.enable_telemetry
+        ):
+            return {}
+
+        stats: dict[str, float] = {}
+        groups = get_trainable_param_groups(unwrapped)
+
+        for group_name, params in groups.items():
+            if not params:
+                continue
+
+            # 1. Parameter Stats
+            all_p = []
+            for p in params:
+                all_p.append(p.detach().float().flatten())
+
+            p_concat = torch.cat(all_p)
+            p_norm = torch.norm(p_concat, 2).item()
+            p_max = p_concat.abs().max().item()
+            p_zero_rate = (p_concat.abs() < 1e-7).float().mean().item()
+
+            stats[f"telemetry/{group_name}/param_norm"] = p_norm
+            stats[f"telemetry/{group_name}/param_max"] = p_max
+            stats[f"telemetry/{group_name}/param_zero_rate"] = p_zero_rate
+
+            # 2. Gradient Stats
+            all_g = []
+            for p in params:
+                if p.grad is not None:
+                    g = p.grad
+                    if g.is_sparse:
+                        all_g.append(g.coalesce().values().detach().float().flatten())
+                    else:
+                        all_g.append(g.detach().float().flatten())
+
+            if all_g:
+                g_concat = torch.cat(all_g)
+                g_norm = torch.norm(g_concat, 2).item()
+                g_max = g_concat.abs().max().item()
+                g_zero_rate = (g_concat.abs() < 1e-9).float().mean().item()
+
+                stats[f"telemetry/{group_name}/grad_norm"] = g_norm
+                stats[f"telemetry/{group_name}/grad_max"] = g_max
+                stats[f"telemetry/{group_name}/grad_zero_rate"] = g_zero_rate
+                stats[f"telemetry/{group_name}/grad_to_param_ratio"] = g_norm / (
+                    p_norm + 1e-6
+                )
+
+            # 3. Weight Drift (relative to initial)
+            if group_name in ["engram_dense", "engram_sparse"]:
+                drift_norms = []
+                init_norms = []
+                for p in params:
+                    p_id = id(p)
+                    if p_id in self._initial_weights:
+                        w0 = self._initial_weights[p_id].to(p.device)
+                        drift_norms.append(
+                            torch.norm(p.detach().float() - w0.float(), 2)
+                        )
+                        init_norms.append(torch.norm(w0.float(), 2))
+
+                if drift_norms:
+                    total_drift = torch.norm(torch.stack(drift_norms), 2).item()
+                    total_init = torch.norm(torch.stack(init_norms), 2).item()
+                    stats[f"telemetry/{group_name}/weight_drift"] = total_drift / (
+                        total_init + 1e-6
+                    )
+
+        # 4. Activation Stats from Model
+        model_stats = unwrapped.get_telemetry_stats()
+        for k, v in model_stats.items():
+            stats[f"telemetry/{k}"] = v
+
+        return stats
+
+    def log(self, logs: dict[str, float], start_time: float | None = None) -> None:
+        """Injects deep telemetry into the logs before they are sent to callbacks."""
+        # Only collect telemetry if we are logging (i.e. at logging_steps)
+        # We don't want to slow down every step
+        extra_stats = self._collect_telemetry()
+        logs.update(extra_stats)
+        super().log(logs, start_time=start_time)

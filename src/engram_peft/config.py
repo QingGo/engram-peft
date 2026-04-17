@@ -134,6 +134,12 @@ class EngramConfig(PretrainedConfig):
             "help": "Whether to use group-wise gradient clipping (Backbone vs Engram) instead of global norm clipping."
         },
     )
+    enable_telemetry: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to collect deep metrics (norm, max, zero-rate) for all parameter groups during training."
+        },
+    )
 
     def __init__(
         self,
@@ -157,6 +163,7 @@ class EngramConfig(PretrainedConfig):
         seed: int = 0,
         hidden_size: int | None = None,
         clip_grad_per_group: bool = False,
+        enable_telemetry: bool = False,
         **kwargs: Any,
     ):
         """Constructs EngramConfig.
@@ -233,6 +240,7 @@ class EngramConfig(PretrainedConfig):
         self.pad_id = pad_id
         self.seed = seed
         self.clip_grad_per_group = clip_grad_per_group
+        self.enable_telemetry = enable_telemetry
 
         super().__init__(**kwargs)
         # Ensure extra kwargs are set, as PretrainedConfig might miss them in some environments
