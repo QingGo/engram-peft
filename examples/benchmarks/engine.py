@@ -7,6 +7,7 @@ from typing import Any, Literal, cast
 
 import torch
 import wandb
+from omegaconf import OmegaConf
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -122,8 +123,6 @@ class BenchmarkEngine:
                     current.append(char)
             if current:
                 pairs.append("".join(current))
-
-            from omegaconf import OmegaConf
 
             conf = OmegaConf.from_dotlist(pairs)
             overrides = cast(

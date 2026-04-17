@@ -398,7 +398,7 @@ def train_full_finetune_engram(
         if hasattr(args, "model_name_or_path")
         else None,
         pad_id=tokenizer.pad_token_id if isinstance(tokenizer.pad_token_id, int) else 0,
-        learning_rate_multiplier=15.0,
+        learning_rate_multiplier=8.0,
         clip_grad_per_group=True,
     )
     # Apply overrides to config
@@ -451,8 +451,8 @@ def train_full_finetune_engram(
         data_collator=collator,
         optimizer_kwargs={
             "backbone_learning_rate": 5e-5,
-            "engram_dense_learning_rate": 3e-4,
-            "engram_sparse_learning_rate": 4.5e-3,  # align engram lr 3e-4 * 15
+            "engram_dense_learning_rate": 1.5e-4,
+            "engram_sparse_learning_rate": 2.4e-3,  # align engram lr 3e-4 * 8
             "backbone_optimizer": AdamW,
             "engram_dense_optimizer": "adamw",
             "engram_sparse_optimizer": "sparse_adam",

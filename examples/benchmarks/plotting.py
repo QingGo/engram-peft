@@ -1,3 +1,4 @@
+from collections import Counter
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -165,8 +166,6 @@ def plot_benchmark_comparison(
             continue
 
         # Find the most frequent value
-        from collections import Counter
-
         counts = Counter(values)
         most_common_val, freq = counts.most_common(1)[0]
 

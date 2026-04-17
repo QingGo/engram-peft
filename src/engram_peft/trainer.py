@@ -125,6 +125,9 @@ class EngramTrainer(Trainer):
         # Compatibility with non-Engram models is preserved so EngramTrainer can act as a
         # robust replacement for Trainer in the benchmark suite (handling sparse grads if present).
         unwrapped_model = unwrap_model(model)
+        # Compute the original total norm BEFORE clipping for accurate logging
+        total_norm = self._compute_total_norm(model.parameters())
+
         use_per_group = (
             unwrapped_model.config.clip_grad_per_group
             if isinstance(unwrapped_model, EngramModel)
@@ -154,11 +157,10 @@ class EngramTrainer(Trainer):
                             else:
                                 g.detach().mul_(clip_coef.to(g.device))
 
-            # Return global norm for logging consistency
-            return self._compute_total_norm(model.parameters())
+            # Return the cached original total norm for logging consistency
+            return total_norm
         else:
             # Standard Global Norm Clipping
-            total_norm = self._compute_total_norm(model.parameters())
             if total_norm is None:
                 return None
 

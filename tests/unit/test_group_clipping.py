@@ -44,9 +44,9 @@ def test_group_wise_clipping_logic(tmp_path: Any) -> None:
         patch("engram_peft.trainer.get_trainable_param_groups", return_value=groups),
         patch(
             "engram_peft.trainer.isinstance",
-            side_effect=lambda obj, cls: True
-            if cls == EngramModel
-            else isinstance(obj, cls),
+            side_effect=lambda obj, cls: (
+                True if cls == EngramModel else isinstance(obj, cls)
+            ),
         ),
     ):
         trainer._clip_grad_norm(model)
