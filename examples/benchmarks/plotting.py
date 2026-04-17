@@ -67,21 +67,65 @@ def plot_benchmark_comparison(
         legend_labels.append(label)
 
     # 2. Extract and Plot Log Histories
-    for i, r in enumerate(results):
+    # Separate base results for horizontal line
+    base_results = [r for r in results if r.method == "base"]
+    other_results = [r for r in results if r.method != "base"]
+    other_labels = [
+        label
+        for r, label in zip(results, legend_labels, strict=False)
+        if r.method != "base"
+    ]
+
+    # Plot baseline first so it's in the background
+    for r in base_results:
+        if "eval_loss" in r.metrics:
+            plt.axhline(
+                y=r.metrics["eval_loss"],
+                color="crimson",
+                linestyle="--",
+                linewidth=2,
+                label="Base Model (Zero-shot)",
+                alpha=0.8,
+                zorder=1,
+            )
+
+    for i, r in enumerate(other_results):
         history = r.metrics.get("log_history", [])
         if not history:
             continue
 
         df = pd.DataFrame(history)
+        label = other_labels[i]
+
+        # Plot training loss
+        color = None
         if "loss" in df.columns:
-            sns.lineplot(
+            line = sns.lineplot(
                 data=df,
                 x="step",
                 y="loss",
-                label=legend_labels[i],
+                label=label,
                 alpha=0.8,
                 linewidth=2,
             )
+            color = line.get_lines()[-1].get_color()
+
+        # Plot eval loss points if they exist
+        if "eval_loss" in df.columns:
+            eval_df = df.dropna(subset=["eval_loss"])
+            if not eval_df.empty:
+                # Use training line color if available, else let scatterplot pick
+                sns.scatterplot(
+                    data=eval_df,
+                    x="step",
+                    y="eval_loss",
+                    color=color,
+                    s=100,
+                    marker="o",
+                    edgecolor="white",
+                    zorder=5,
+                    legend=False,
+                )
 
     # 3. Create Differential Footnote
     diffs = get_differential_params(results)
@@ -118,7 +162,7 @@ def plot_benchmark_comparison(
 
     plt.title("Benchmarking Convergence Comparison", pad=20, fontweight="bold")
     plt.xlabel("Steps", labelpad=10)
-    plt.ylabel("Training Loss", labelpad=10)
+    plt.ylabel("Loss (Training: Line, Eval: Dots)", labelpad=10)
 
     # Place legend
     plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0.0)

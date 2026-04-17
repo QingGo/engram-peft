@@ -95,26 +95,26 @@ class EngramModel(nn.Module):
             seed=config.seed,
         )
 
-        # 3. Initialize Engram layers
-        self.engram_layers = nn.ModuleDict()
+        # 3. Named adapter management & Initialization
+        self.active_adapter = "default"
+        self.peft_config = {"default": config}
+        self.adapters = nn.ModuleDict()
+
+        # Initialize Engram layers for the default adapter
+        default_layers = nn.ModuleDict()
         for layer_id in config.target_layers:
             flat_primes = sum(self.hash_mapping.prime_tables[layer_id], [])
-            self.engram_layers[str(layer_id)] = EngramLayer(
+            default_layers[str(layer_id)] = EngramLayer(
                 config=config,
                 layer_id=layer_id,
                 primes=flat_primes,
                 compressor=self.compressor,
             )
+        self.adapters["default"] = default_layers
 
         self._hook_handles: list[Any] = []
         self._current_hash_indices: dict[int, Any] | torch.Tensor | None = None
         self._engram_enabled = True
-
-        # Named adapter management
-        self.active_adapter = "default"
-        self.peft_config = {"default": config}
-        self.adapters = nn.ModuleDict()
-        self.adapters["default"] = self.engram_layers
 
         # Attach hooks immediately
         self.load_engram()
@@ -153,6 +153,11 @@ class EngramModel(nn.Module):
             f"trainable%: {100 * trainable_params / all_param:.4f}"
         )
 
+    @property
+    def engram_layers(self) -> nn.ModuleDict:
+        """Dynamic shortcut to the active adapter's Engram layers."""
+        return cast(nn.ModuleDict, self.adapters[self.active_adapter])
+
     def set_adapter(self, adapter_name: str) -> None:
         """
         Sets the active adapter.
@@ -160,7 +165,6 @@ class EngramModel(nn.Module):
         if adapter_name not in self.adapters:
             raise ValueError(f"Adapter {adapter_name} not found.")
         self.active_adapter = adapter_name
-        self.engram_layers = cast("nn.ModuleDict", self.adapters[adapter_name])
         self.config = self.peft_config[adapter_name]
         # Reinstate hooks to ensure they point to the correct layers if needed,
         # but since hooks use self.engram_layers[str(layer_id)], and we just

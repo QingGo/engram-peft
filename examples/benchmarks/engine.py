@@ -1,5 +1,6 @@
 import gc
 import os
+import shutil
 import sys
 from datetime import datetime
 from typing import Any, Literal
@@ -182,6 +183,12 @@ class BenchmarkEngine:
         # Update dirty flag for full-ft methods
         if "full_finetune" in method_name:
             self.is_dirty = True
+
+        # Cleanup tmp directory (checkpoints)
+        tmp_dir = "outputs/benchmarks/tmp"
+        if os.path.exists(tmp_dir):
+            print(f"Cleaning up temporary checkpoints in {tmp_dir}...")
+            shutil.rmtree(tmp_dir)
 
     def run_all(self, method_names: list[str]) -> None:
         for name in method_names:
