@@ -5,7 +5,7 @@ import torch
 from peft import LoraConfig, TaskType, get_peft_model
 from torch.optim.adamw import AdamW
 from transformers import (
-    DefaultDataCollator,
+    DataCollatorForLanguageModeling,
     PreTrainedModel,
     PreTrainedTokenizerBase,
     Trainer,
@@ -117,7 +117,7 @@ def train_lora(
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        data_collator=DefaultDataCollator(),
+        data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False),
     )
 
     train_result = trainer.train()
@@ -225,6 +225,14 @@ def train_full_finetune(
     print(
         f"trainable params: {sum(p.numel() for p in base_model.parameters() if p.requires_grad):,}"
     )
+
+    warmup_steps = int(args.max_steps * 0.03)
+    num_decay_steps = int(args.max_steps * 0.77)
+    scheduler_kwargs = {
+        "num_decay_steps": num_decay_steps,
+        "min_lr_ratio": 1e-6 / 5e-5,
+    }
+
     # Also print it manually if it were a PEFT model, but for base model we do it like this
     training_args = TrainingArguments(
         output_dir="outputs/benchmarks/tmp/full_ft",
@@ -232,7 +240,9 @@ def train_full_finetune(
         gradient_accumulation_steps=args.grad_accum,
         max_steps=args.max_steps,
         learning_rate=5e-5,
-        lr_scheduler_type="cosine",
+        lr_scheduler_type="warmup_stable_decay",
+        lr_scheduler_kwargs=scheduler_kwargs,
+        warmup_steps=warmup_steps,
         logging_steps=20,
         eval_strategy="steps",
         eval_steps=100,
@@ -250,7 +260,7 @@ def train_full_finetune(
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        data_collator=DefaultDataCollator(),
+        data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False),
     )
 
     train_result = trainer.train()
@@ -407,7 +417,7 @@ def train_full_finetune_engram(
     num_decay_steps = int(args.max_steps * 0.77)
     scheduler_kwargs = {
         "num_decay_steps": num_decay_steps,
-        "min_lr_ratio": 1e-6 / 3e-4,
+        "min_lr_ratio": 1e-6 / 5e-5,
     }
 
     training_args = TrainingArguments(
@@ -441,7 +451,7 @@ def train_full_finetune_engram(
         optimizer_kwargs={
             "backbone_learning_rate": 5e-5,
             "engram_dense_learning_rate": 3e-4,
-            "engram_sparse_learning_rate": 9e-4,
+            "engram_sparse_learning_rate": 4.5e-3,  # align engram lr 3e-4 * 15
             "backbone_optimizer": AdamW,
             "engram_dense_optimizer": "adamw",
             "engram_sparse_optimizer": "sparse_adam",
