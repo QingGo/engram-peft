@@ -82,8 +82,11 @@ def demo_full_finetune(
     path: str = "outputs/benchmarks/full_ft_only_weights",
 ) -> None:
     print(f"Generating with Full FT ({path})...")
-    ft_model = AutoModelForCausalLM.from_pretrained(
-        path, torch_dtype=base_model.dtype, device_map="auto"
+    ft_model = cast(
+        PreTrainedModel,
+        AutoModelForCausalLM.from_pretrained(
+            path, torch_dtype=base_model.dtype, device_map="auto"
+        ),
     )
     with torch.no_grad():
         out = ft_model.generate(**inputs, max_new_tokens=40, do_sample=False)
@@ -101,8 +104,11 @@ def demo_full_finetune_engram(
     print(f"Generating with Full FT + Engram ({path})...")
     # Load finetuned base model from subfolder
     sub_path = f"{path}/base_model"
-    ft_base_model = AutoModelForCausalLM.from_pretrained(
-        sub_path, torch_dtype=base_model.dtype, device_map="auto"
+    ft_base_model = cast(
+        PreTrainedModel,
+        AutoModelForCausalLM.from_pretrained(
+            sub_path, torch_dtype=base_model.dtype, device_map="auto"
+        ),
     )
     # Load Engram wrapper
     model = EngramModel.from_pretrained(ft_base_model, path, tokenizer=tokenizer)

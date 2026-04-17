@@ -399,6 +399,7 @@ def train_full_finetune_engram(
         else None,
         pad_id=tokenizer.pad_token_id if isinstance(tokenizer.pad_token_id, int) else 0,
         learning_rate_multiplier=15.0,
+        clip_grad_per_group=True,
     )
     # Apply overrides to config
     for k, v in overrides.items():

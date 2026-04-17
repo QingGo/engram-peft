@@ -7,7 +7,7 @@ from transformers import Trainer
 from transformers.modeling_utils import unwrap_model
 
 from engram_peft.model import EngramModel
-from engram_peft.utils import get_scheduler
+from engram_peft.utils import get_scheduler, get_trainable_param_groups
 
 
 class EngramTrainer(Trainer):
@@ -81,10 +81,10 @@ class EngramTrainer(Trainer):
                 )
         return self.lr_scheduler
 
-    def _compute_total_norm(self, model: nn.Module) -> torch.Tensor | None:
+    def _compute_total_norm(self, parameters: Any) -> torch.Tensor | None:
         """Computes the total gradient norm across dense and sparse parameters."""
         grads = []
-        for _, p in model.named_parameters():
+        for p in parameters:
             if p.grad is not None:
                 if p.grad.is_sparse:
                     grads.append(p.grad.coalesce().values())
@@ -125,35 +125,40 @@ class EngramTrainer(Trainer):
         # Compatibility with non-Engram models is preserved so EngramTrainer can act as a
         # robust replacement for Trainer in the benchmark suite (handling sparse grads if present).
         unwrapped_model = unwrap_model(model)
-        use_per_layer = (
-            unwrapped_model.config.clip_grad_per_layer
+        use_per_group = (
+            unwrapped_model.config.clip_grad_per_group
             if isinstance(unwrapped_model, EngramModel)
             else False
         )
 
-        if use_per_layer:
-            # Per-tensor clipping: each parameter is clipped independently
-            for p in model.parameters():
-                if p.grad is not None:
-                    g = p.grad
-                    if g.is_sparse:
-                        # For sparse tensors, we must compute norm on the values
-                        p_norm = torch.norm(g.coalesce().values().detach().float(), 2)
-                    else:
-                        p_norm = torch.norm(g.detach().float(), 2)
+        if use_per_group:
+            # Group-wise clipping: each major group (Backbone, Engram) is clipped independently
+            groups = get_trainable_param_groups(cast("EngramModel", unwrapped_model))
+            for _group_name, params in groups.items():
+                if not params:
+                    continue
 
-                    clip_coef = max_norm / (p_norm + 1e-6)
-                    if clip_coef < 1.0:
-                        if g.is_sparse:
-                            g.coalesce().values().detach().mul_(clip_coef.to(g.device))
-                        else:
-                            g.detach().mul_(clip_coef.to(g.device))
-            return self._compute_total_norm(
-                model
-            )  # Return global norm for logging consistency
+                group_norm = self._compute_total_norm(params)
+                if group_norm is None:
+                    continue
+
+                clip_coef = max_norm / (group_norm + 1e-6)
+                if clip_coef < 1.0:
+                    for p in params:
+                        if p.grad is not None:
+                            g = p.grad
+                            if g.is_sparse:
+                                g.coalesce().values().detach().mul_(
+                                    clip_coef.to(g.device)
+                                )
+                            else:
+                                g.detach().mul_(clip_coef.to(g.device))
+
+            # Return global norm for logging consistency
+            return self._compute_total_norm(model.parameters())
         else:
             # Standard Global Norm Clipping
-            total_norm = self._compute_total_norm(model)
+            total_norm = self._compute_total_norm(model.parameters())
             if total_norm is None:
                 return None
 
@@ -179,4 +184,4 @@ class EngramTrainer(Trainer):
                 else grad_norm
             )
 
-        return self._compute_total_norm(model)
+        return self._compute_total_norm(model.parameters())
