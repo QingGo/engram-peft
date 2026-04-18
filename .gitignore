@@ -156,3 +156,4 @@ docs/fix_record.md
 docs/note.md
 scripts/
 wandb/
+.agent_memory.md
