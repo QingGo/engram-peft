@@ -669,6 +669,56 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#tutorial-8-performance-benchmarking-comparison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tutorial 8: Performance Benchmarking &amp; Comparison
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tutorial 8: Performance Benchmarking &amp; Comparison">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-running-all-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Running All Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-custom-sweeps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Custom Sweeps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-visualizing-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Visualizing Results
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -961,6 +1011,56 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#tutorial-8-performance-benchmarking-comparison" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tutorial 8: Performance Benchmarking &amp; Comparison
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tutorial 8: Performance Benchmarking &amp; Comparison">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-running-all-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Running All Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-custom-sweeps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Custom Sweeps
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-visualizing-results" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Visualizing Results
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1203,6 +1303,22 @@ In <code>train_mode="full_finetune"</code>, <code>model.save_pretrained(...)</co
 <p>If the hashing logic differs (e.g., a different <code>seed</code> was used in <code>EngramConfig</code>), use a reference corpus to "re-discover" the correct indices via best-effort remapping:</p>
 <div class="highlight"><pre><span></span><code><span class="c1"># corpus should be a representative sample of your training data (tokens or strings)</span>
 <span class="n">model</span><span class="o">.</span><span class="n">remap_from_corpus</span><span class="p">(</span><span class="n">corpus</span><span class="p">,</span> <span class="s2">&quot;path/to/engram_weights.pt&quot;</span><span class="p">)</span>
+</code></pre></div>
+<hr />
+<h2 id="tutorial-8-performance-benchmarking-comparison">Tutorial 8: Performance Benchmarking &amp; Comparison</h2>
+<p>To truly understand the benefits of Engram vs. traditional PEFT methods (like LoRA), you can use our built-in benchmarking suite.</p>
+<h3 id="1-running-all-methods">1. Running All Methods</h3>
+<p>We provide a shortcut to run a standard suite of experiments (LoRA, Engram, LoRA+Engram, Full Finetune, etc.) in one go.</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/compare_engram_lora.py<span class="w"> </span>--all<span class="w"> </span>--max_steps<span class="w"> </span><span class="m">500</span>
+</code></pre></div>
+<h3 id="2-custom-sweeps">2. Custom Sweeps</h3>
+<p>You can also run specific methods or perform hyperparameter sweeps (e.g., comparing different layer counts) using the <code>--methods</code> flag with overrides:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Compare different layer configurations for Engram</span>
+uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/compare_engram_lora.py<span class="w"> </span>--methods<span class="w"> </span>engram:target_layers<span class="o">=[</span><span class="m">2</span>,11<span class="o">]</span><span class="w"> </span>engram:target_layers<span class="o">=[</span><span class="m">11</span>,21<span class="o">]</span><span class="w"> </span>
+</code></pre></div>
+<h3 id="3-visualizing-results">3. Visualizing Results</h3>
+<p>After the run is complete, the script automatically generates a comparison plot in <code>outputs/benchmarks/loss_curve.png</code>. To re-plot historical data, use:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/compare_engram_lora.py<span class="w"> </span>--plot_only
 </code></pre></div>
 
 

@@ -1062,7 +1062,7 @@
 - <code>n_head_per_ngram</code> (<code>int</code>, default: <code>8</code>): Number of hash heads per N-gram order.
 - <code>embedding_dim</code> (<code>int</code>, default: <code>1280</code>): Dimension of the Engram retrieval embedding.
 - <code>enable_tokenizer_compression</code> (<code>bool</code>, default: <code>True</code>): Whether to use NFKC/Lowercase normalization for token grouping.
-- <code>target_layers</code> (<code>List[int]</code>, default: <code>[2, 15]</code>): Transformer layers where Engram modules are injected.
+- <code>target_layers</code> (<code>List[int]</code>, default: <code>[2, 15]</code>): Transformer layers where Engram modules are injected, 0-indexed.
 - <code>target_modules</code> (<code>Optional[Union[List[str], str]]</code>, default: <code>None</code>): Specific module names or regex patterns to target for injection.
 - <code>hc_mult</code> (<code>int</code>, default: <code>4</code>): Multi-head hyper-connection expansion factor.
 - <code>combine_mhc</code> (<code>bool</code>, default: <code>True</code>): Whether to combine multi-head hyper-connections.
@@ -1073,7 +1073,7 @@
 - <code>tokenizer_name_or_path</code> (<code>Optional[str]</code>, default: <code>None</code>): Tokenizer used for precomputing hashes. Recommended to set explicitly (e.g., <code>"deepseek-ai/DeepSeek-V3"</code>).
 - <code>seed</code> (<code>int</code>, default: <code>0</code>): Random seed for deterministic hashing primes.
 - <code>weight_decay</code> (<code>float</code>, default: <code>0.0</code>): Weight decay for Engram parameters.
-- <code>gating_zero_init</code> (<code>bool</code>, default: <code>False</code>): Whether to initialize gating parameters with zeros.
+- <code>gating_zero_init</code> (<code>bool</code>, default: <code>True</code>): Whether to initialize gating parameters with zeros.
 - <code>hidden_size</code> (<code>Optional[int]</code>, default: <code>None</code>): The hidden dimension of the base model. Auto-detected if not provided.
 - <code>pad_id</code> (<code>Optional[int]</code>, default: <code>None</code>): The padding token ID. Auto-detected if not provided.
 - <code>compressed_vocab_size</code> (<code>Optional[int]</code>, default: <code>None</code>): Resolved size of the hashing vocabulary. Automatically set and saved after first initialization.
