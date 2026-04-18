@@ -37,7 +37,7 @@ This script is used to benchmark Engram against other training methods like LoRA
 uv run python examples/compare_engram_lora.py --methods lora engram
 
 # Compare all available methods
-uv run python examples/compare_engram_lora.py --methods lora engram lora_engram full_finetune full_finetune_engram
+uv run python examples/compare_engram_lora.py --all
 
 # Hyperparameter Sweep: Compare different clipping strategies for Engram
 uv run python examples/compare_engram_lora.py --methods engram:clip_grad_per_layer=False engram:clip_grad_per_layer=True

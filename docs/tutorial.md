@@ -264,3 +264,31 @@ If the hashing logic differs (e.g., a different `seed` was used in `EngramConfig
 # corpus should be a representative sample of your training data (tokens or strings)
 model.remap_from_corpus(corpus, "path/to/engram_weights.pt")
 ```
+
+---
+
+## Tutorial 8: Performance Benchmarking & Comparison
+
+To truly understand the benefits of Engram vs. traditional PEFT methods (like LoRA), you can use our built-in benchmarking suite.
+
+### 1. Running All Methods
+We provide a shortcut to run a standard suite of experiments (LoRA, Engram, LoRA+Engram, Full Finetune, etc.) in one go.
+
+```bash
+uv run python examples/compare_engram_lora.py --all --max_steps 500
+```
+
+### 2. Custom Sweeps
+You can also run specific methods or perform hyperparameter sweeps (e.g., comparing different layer counts) using the `--methods` flag with overrides:
+
+```bash
+# Compare different layer configurations for Engram
+uv run python examples/compare_engram_lora.py --methods engram:target_layers=[2,11] engram:target_layers=[11,21] 
+```
+
+### 3. Visualizing Results
+After the run is complete, the script automatically generates a comparison plot in `outputs/benchmarks/loss_curve.png`. To re-plot historical data, use:
+
+```bash
+uv run python examples/compare_engram_lora.py --plot_only
+```

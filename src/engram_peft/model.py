@@ -155,16 +155,27 @@ class EngramModel(nn.Module):
 
     def get_telemetry_stats(self) -> dict[str, float]:
         """
-        Collects activation statistics from all active Engram layers.
-        Primarily focuses on Gating behavior (ContextAwareGating).
+        Collects activation statistics and diagnostics from all active Engram layers.
         """
         all_gates = []
+        all_entropies = []
+        all_norm_ratios = []
+
         for _, layer in self.engram_layers.items():
+            # 1. Gating Stats
             if hasattr(layer, "gating") and hasattr(layer.gating, "last_gate"):
                 gate = layer.gating.last_gate
                 if gate is not None:
-                    # gate shape: [B, L, M, 1]
                     all_gates.append(gate.float().flatten())
+
+                entropy = getattr(layer.gating, "last_entropy", None)
+                if entropy is not None:
+                    all_entropies.append(entropy)
+
+            # 2. Layer Diagnostics
+            norm_ratio = getattr(layer, "last_norm_ratio", None)
+            if norm_ratio is not None:
+                all_norm_ratios.append(norm_ratio)
 
         if not all_gates:
             return {}
@@ -180,13 +191,36 @@ class EngramModel(nn.Module):
         inactive_mask = concat_gates < 0.01
         inactive_rate = (inactive_mask.sum().float() / concat_gates.numel()).item()
 
-        return {
+        stats = {
             "gating/mean": mean,
             "gating/std": std,
             "gating/max": max_val,
             "gating/min": min_val,
             "gating/inactive_rate": inactive_rate,
         }
+        if all_entropies:
+            stats["gating/entropy"] = sum(all_entropies) / len(all_entropies)
+        if all_norm_ratios:
+            stats["diagnostics/contribution_ratio"] = sum(all_norm_ratios) / len(
+                all_norm_ratios
+            )
+
+        return stats
+
+    def get_total_gating_entropy(self) -> torch.Tensor:
+        """
+        Aggregates the gating entropy tensors from all active layers.
+        Returns a scalar tensor (sum of entropies) for regularization.
+        """
+        entropies = []
+        for _, layer in self.engram_layers.items():
+            if hasattr(layer, "gating") and hasattr(layer.gating, "gating_entropy"):
+                entropies.append(layer.gating.gating_entropy)
+
+        if not entropies:
+            return torch.tensor(0.0, device=next(self.parameters()).device)
+
+        return torch.stack(entropies).mean()
 
     @property
     def engram_layers(self) -> nn.ModuleDict:

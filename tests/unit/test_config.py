@@ -24,6 +24,7 @@ class TestEngramConfig(unittest.TestCase):
         self.assertEqual(config.conv_dilation, 3)  # default max_ngram_size
         self.assertEqual(config.conv_zero_init, True)
         self.assertEqual(config.learning_rate_multiplier, 5.0)
+        self.assertEqual(config.entropy_loss_weight, 0.0)
         self.assertEqual(config.weight_decay, 0.0)
         self.assertEqual(config.tokenizer_name_or_path, None)
         self.assertEqual(config.pad_id, None)

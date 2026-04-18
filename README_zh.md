@@ -73,7 +73,7 @@ model.print_trainable_parameters()
 ### Loss 曲线对比
 ![Loss 曲线对比](figures/loss_curve_with_full.png)
 
-*\* Engram 采用稀疏检索机制；每步仅有极小比例（约 1%）的参数被激活并接收梯度更新。关于性能、计算开销和显存占用的详细对比分析，请参阅 [性能对比分析报告 (英文)](docs/compare_engram_lora_analysis.md)。*
+*\* Engram 采用稀疏检索机制；每步仅有极小比例（约 1%）的参数被激活并接收梯度更新。如需在您的硬件上复现这些基准测试，请运行 `uv run python examples/compare_engram_lora.py --all`。关于性能、计算开销和显存占用的详细对比分析，请参阅 [性能对比分析报告 (英文)](docs/compare_engram_lora_analysis.md)。*
 
 ---
 

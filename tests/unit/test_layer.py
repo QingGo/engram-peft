@@ -84,7 +84,8 @@ def test_cag_output_shape() -> None:
     hc_mult = 4
     batch_size, seq_len = 2, 5
 
-    module = ContextAwareGating(engram_hidden_size, hidden_size, hc_mult)
+    config = EngramConfig(hidden_size=hidden_size, embedding_dim=engram_hidden_size)
+    module = ContextAwareGating(config, engram_hidden_size, hidden_size, hc_mult)
     embeddings = torch.randn(batch_size, seq_len, engram_hidden_size)
     hidden_states = torch.randn(batch_size, seq_len, hc_mult, hidden_size)
 
@@ -94,7 +95,10 @@ def test_cag_output_shape() -> None:
 
 def test_cag_gate_values() -> None:
     """测试用例 6：验证门控值在 (0, 1) 之间"""
-    module = ContextAwareGating(engram_hidden_size=128, hidden_size=64, hc_mult=2)
+    config = EngramConfig(hidden_size=64, embedding_dim=128)
+    module = ContextAwareGating(
+        config, engram_hidden_size=128, hidden_size=64, hc_mult=2
+    )
     e = torch.randn(1, 4, 128)
     h = torch.randn(1, 4, 2, 64)
     out = module(e, h)
@@ -113,8 +117,9 @@ def test_cag_multi_branch() -> None:
     hidden_size = 128
     hc_mult = 3
 
+    config = EngramConfig(hidden_size=hidden_size, embedding_dim=engram_hidden_size)
     module = ContextAwareGating(
-        engram_hidden_size, hidden_size, hc_mult, zero_init=False
+        config, engram_hidden_size, hidden_size, hc_mult, zero_init=False
     )
     e = torch.randn(2, 5, engram_hidden_size)
     h = torch.randn(2, 5, hc_mult, hidden_size)
@@ -129,7 +134,10 @@ def test_cag_multi_branch() -> None:
 
 def test_cag_gradients() -> None:
     """测试用例 8：验证前向/反向传播无错误"""
-    module = ContextAwareGating(engram_hidden_size=32, hidden_size=64, hc_mult=2)
+    config = EngramConfig(hidden_size=64, embedding_dim=32)
+    module = ContextAwareGating(
+        config, engram_hidden_size=32, hidden_size=64, hc_mult=2
+    )
     e = torch.randn(2, 4, 32, requires_grad=True)
     h = torch.randn(2, 4, 2, 64, requires_grad=True)
 
@@ -147,16 +155,13 @@ def test_cag_gradients() -> None:
 def test_engram_layer_forward() -> None:
     """测试用例 9：验证完整EngramLayer的前向传播"""
     config = EngramConfig(
-        ngram_sizes=[2, 3],
-        n_head_per_ngram=4,
-        embedding_dim=128,
-        hidden_size=32,
-        hc_mult=1,
-        conv_zero_init=False,
-        gating_zero_init=False,
+        target_layers=[0],
+        hidden_size=128,
         engram_vocab_size_per_ngram=[100, 100],
         compressed_vocab_size=100,
         pad_id=0,
+        conv_zero_init=False,
+        gating_zero_init=False,
     )
 
     # Mock CompressedTokenizer
@@ -173,9 +178,10 @@ def test_engram_layer_forward() -> None:
     )
     primes = sum(mapping.prime_tables[1], [])
 
+    # Use the primes calculated from mapping
     layer = EngramLayer(config, layer_id=1, primes=primes, compressor=compressor)
 
-    batch_size = 2
+    batch_size = 1
     seq_len = 8
     input_ids = torch.randint(0, 100, (batch_size, seq_len))
     hidden_states = torch.randn(batch_size, seq_len, cast("int", config.hidden_size))

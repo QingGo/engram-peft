@@ -28,7 +28,7 @@ Configuration class for Engram PEFT module. Inherits from `transformers.Pretrain
 - `tokenizer_name_or_path` (`Optional[str]`, default: `None`): Tokenizer used for precomputing hashes. Recommended to set explicitly (e.g., `"deepseek-ai/DeepSeek-V3"`).
 - `seed` (`int`, default: `0`): Random seed for deterministic hashing primes.
 - `weight_decay` (`float`, default: `0.0`): Weight decay for Engram parameters.
-- `gating_zero_init` (`bool`, default: `False`): Whether to initialize gating parameters with zeros.
+- `gating_zero_init` (`bool`, default: `True`): Whether to initialize gating parameters with zeros.
 - `hidden_size` (`Optional[int]`, default: `None`): The hidden dimension of the base model. Auto-detected if not provided.
 - `pad_id` (`Optional[int]`, default: `None`): The padding token ID. Auto-detected if not provided.
 - `compressed_vocab_size` (`Optional[int]`, default: `None`): Resolved size of the hashing vocabulary. Automatically set and saved after first initialization.

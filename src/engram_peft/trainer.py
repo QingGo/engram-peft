@@ -28,8 +28,29 @@ class EngramTrainer(Trainer):
         super().__init__(*args, **kwargs)
         self.optimizer_kwargs = optimizer_kwargs or {}
         self._initial_weights: dict[int, torch.Tensor] = {}
+        # Metrics for Fair Comparison
+        self._last_ce_loss: float = 0.0
+        self._last_entropy_loss: float = 0.0
+
         if self.model is not None:
+            self._handle_initial_freezing()
             self._capture_initial_weights()
+
+    def _handle_initial_freezing(self) -> None:
+        """Initially freezes the backbone if backbone_freeze_steps > 0."""
+        if self.model is None:
+            return
+        unwrapped = unwrap_model(self.model)
+        if not isinstance(unwrapped, EngramModel):
+            return
+
+        freeze_steps = getattr(unwrapped.config, "backbone_freeze_steps", 0)
+        if freeze_steps > 0:
+            print(
+                f"[Engram-PEFT] Adapter-First Mode: Freezing backbone for {freeze_steps} steps."
+            )
+            for param in unwrapped.base_model.parameters():
+                param.requires_grad = False
 
     def _capture_initial_weights(self) -> None:
         """Captures initial weights of Engram modules on CPU for drift calculation."""
@@ -41,7 +62,7 @@ class EngramTrainer(Trainer):
             groups = get_trainable_param_groups(unwrapped)
             # We only track drift for Engram groups to save memory
             for group_name in ["engram_dense", "engram_sparse"]:
-                for p in groups[group_name]:
+                for p in groups.get(group_name, []):
                     self._initial_weights[id(p)] = p.detach().cpu().clone()
 
     def create_optimizer(self, model: Any = None) -> Optimizer:
@@ -97,6 +118,52 @@ class EngramTrainer(Trainer):
                 )
         return self.lr_scheduler
 
+    def compute_loss(
+        self,
+        model: nn.Module,
+        inputs: dict[str, Any],
+        return_outputs: bool = False,
+        num_items_in_batch: torch.Tensor | int | None = None,
+    ) -> torch.Tensor | tuple[torch.Tensor, dict[str, Any]]:
+        """
+        Overrides compute_loss to add an entropy penalty during training,
+        but returns pure ce_loss during evaluation for fair comparison.
+        """
+        if num_items_in_batch is not None:
+            ce_loss, ce_outputs = super().compute_loss(
+                model,
+                inputs,
+                return_outputs=True,
+                num_items_in_batch=num_items_in_batch,
+            )
+        else:
+            ce_loss, ce_outputs = super().compute_loss(
+                model, inputs, return_outputs=True
+            )
+
+        self._last_ce_loss = ce_loss.item()
+
+        # Calculate Entropy Penalty
+        unwrapped = unwrap_model(model)
+        total_loss = ce_loss
+        self._last_entropy_loss = 0.0
+
+        if isinstance(unwrapped, EngramModel):
+            alpha = getattr(unwrapped.config, "entropy_loss_weight", 0.0)
+            if alpha > 0:
+                entropy = unwrapped.get_total_gating_entropy()
+                penalty = alpha * entropy
+                self._last_entropy_loss = penalty.item()
+
+                # IMPORTANT: Only add penalty to return loss during training
+                if model.training:
+                    total_loss = ce_loss + penalty
+                else:
+                    # In evaluation, we return the pure CE loss for fair baseline comparison
+                    total_loss = ce_loss
+
+        return (total_loss, ce_outputs) if return_outputs else total_loss
+
     def _compute_total_norm(self, parameters: Any) -> torch.Tensor | None:
         """Computes the total gradient norm across dense and sparse parameters."""
         grads = []
@@ -118,16 +185,40 @@ class EngramTrainer(Trainer):
     def training_step(
         self,
         model: nn.Module,
-        inputs: dict[str, torch.Tensor | Any],
+        inputs: dict[str, Any],
         num_items_in_batch: torch.Tensor | int | None = None,
     ) -> torch.Tensor:
-        """Standard training step handles both old and new Transformers Trainer signatures."""
-        try:
+        """
+        Perform a training step. Injected for stage-wise training (backbone unfreezing).
+        """
+        if self.model is None:
             return super().training_step(
                 model, inputs, num_items_in_batch=num_items_in_batch
             )
+        unwrapped = unwrap_model(self.model)
+        if isinstance(unwrapped, EngramModel):
+            freeze_steps = getattr(unwrapped.config, "backbone_freeze_steps", 0)
+            if freeze_steps > 0 and self.state.global_step == freeze_steps:
+                print(
+                    f"\n[Engram-PEFT] Step {freeze_steps}: Unfreezing backbone for joint training."
+                )
+                for param in unwrapped.base_model.parameters():
+                    param.requires_grad = True
+
+        try:
+            loss = super().training_step(
+                model, inputs, num_items_in_batch=num_items_in_batch
+            )
         except TypeError:
-            return super().training_step(model, inputs)
+            loss = super().training_step(model, inputs)
+
+        # Capture telemetry AFTER backward but BEFORE optimizer zero_grad/step finishes
+        # This ensures we capture gradients accurately.
+        # Note: In Distributed/Gradient Accumulation, this runs every substep,
+        # but _collect_telemetry is only logging-triggered.
+        self._collect_telemetry()
+
+        return loss
 
     def _clip_grad_norm(
         self, model: nn.Module, max_norm: float | None = None
@@ -215,74 +306,106 @@ class EngramTrainer(Trainer):
         ):
             return {}
 
+        # Guard: only run on logging steps to avoid significant training slowdown
+        # Also skip step 0 as gradients are not yet populated/stable
+        if (
+            self.state.global_step == 0
+            or self.state.global_step % self.args.logging_steps != 0
+        ):
+            return {}
+
         stats: dict[str, float] = {}
         groups = get_trainable_param_groups(unwrapped)
+        backbone_grad_norm = 0.0
+        engram_grads_list = []
 
         for group_name, params in groups.items():
             if not params:
                 continue
 
-            # 1. Parameter Stats
-            all_p = []
+            device = next(unwrapped.parameters()).device
+            sum_sq_p = torch.tensor(0.0, device=device)
+            max_p = torch.tensor(0.0, device=device)
+            total_elements = 0
+            total_zeros = 0.0
+
             for p in params:
-                all_p.append(p.detach().float().flatten())
+                p_detached = p.detach().float()
+                sum_sq_p += p_detached.pow(2).sum()
+                max_p = torch.max(max_p, p_detached.abs().max())
+                total_elements += p.numel()
+                total_zeros += (p_detached.abs() < 1e-7).sum().item()
 
-            p_concat = torch.cat(all_p)
-            p_norm = torch.norm(p_concat, 2).item()
-            p_max = p_concat.abs().max().item()
-            p_zero_rate = (p_concat.abs() < 1e-7).float().mean().item()
-
+            p_norm = torch.sqrt(sum_sq_p).item()
             stats[f"telemetry/{group_name}/param_norm"] = p_norm
-            stats[f"telemetry/{group_name}/param_max"] = p_max
-            stats[f"telemetry/{group_name}/param_zero_rate"] = p_zero_rate
+            stats[f"telemetry/{group_name}/param_max"] = max_p.item()
+            stats[f"telemetry/{group_name}/param_zero_rate"] = total_zeros / max(
+                1, total_elements
+            )
 
-            # 2. Gradient Stats
-            all_g = []
+            # 2. Gradient Stats - Iterative calculation
+            sum_sq_g = torch.tensor(0.0, device=device)
+            has_g = False
             for p in params:
                 if p.grad is not None:
-                    g = p.grad
+                    # Handle sparse or dense grads
+                    g = p.grad.detach().float()
                     if g.is_sparse:
-                        all_g.append(g.coalesce().values().detach().float().flatten())
-                    else:
-                        all_g.append(g.detach().float().flatten())
+                        g = g.coalesce().values()
+                    sum_sq_g += g.pow(2).sum()
+                    has_g = True
 
-            if all_g:
-                g_concat = torch.cat(all_g)
-                g_norm = torch.norm(g_concat, 2).item()
-                g_max = g_concat.abs().max().item()
-                g_zero_rate = (g_concat.abs() < 1e-9).float().mean().item()
-
+            if has_g:
+                g_norm = torch.sqrt(sum_sq_g).item()
                 stats[f"telemetry/{group_name}/grad_norm"] = g_norm
-                stats[f"telemetry/{group_name}/grad_max"] = g_max
-                stats[f"telemetry/{group_name}/grad_zero_rate"] = g_zero_rate
-                stats[f"telemetry/{group_name}/grad_to_param_ratio"] = g_norm / (
-                    p_norm + 1e-6
-                )
+                if group_name == "backbone":
+                    backbone_grad_norm = g_norm
+                elif "engram" in group_name:
+                    # Engram groups are small enough to cat if we really need conflict analysis,
+                    # but let's keep it safe and just store the already computed norm
+                    engram_grads_list.append(g_norm)
 
-            # 3. Weight Drift (relative to initial)
-            if group_name in ["engram_dense", "engram_sparse"]:
-                drift_norms = []
-                init_norms = []
+        # 3. Weight Drift - (Keep as-is or optimize if needed, usually smaller)
+        # Weight drift is skipped for backbone to save time/memory
+        # 3. Weight Drift - Engram only
+        # We compare current weights to the CPU-cached initial weights
+        for group_name, params in groups.items():
+            if group_name != "backbone":
+                total_drift = 0.0
+                drift_count = 0
                 for p in params:
-                    p_id = id(p)
-                    if p_id in self._initial_weights:
-                        w0 = self._initial_weights[p_id].to(p.device)
-                        drift_norms.append(
-                            torch.norm(p.detach().float() - w0.float(), 2)
-                        )
-                        init_norms.append(torch.norm(w0.float(), 2))
-
-                if drift_norms:
-                    total_drift = torch.norm(torch.stack(drift_norms), 2).item()
-                    total_init = torch.norm(torch.stack(init_norms), 2).item()
-                    stats[f"telemetry/{group_name}/weight_drift"] = total_drift / (
-                        total_init + 1e-6
+                    pid = id(p)
+                    if pid in self._initial_weights:
+                        init_p = self._initial_weights[pid]
+                        # Calculate on CPU or ensures it's safe
+                        total_drift += torch.norm(
+                            p.detach().cpu().float() - init_p.float(), 2
+                        ).item()
+                        drift_count += 1
+                if drift_count > 0:
+                    stats[f"telemetry/{group_name}/weight_drift"] = (
+                        total_drift / drift_count
                     )
 
-        # 4. Activation Stats from Model
+        # 4. Deep Diagnostic: Gradient Analysis
+        stats["telemetry/diagnostics/heartbeat"] = 1.0
+        if engram_grads_list:
+            # We already stored g_norm (floats) in the list to save space
+            # Total L2 norm of concatenated vectors = sqrt(sum(norms^2))
+            total_e_norm = (sum(ng**2 for ng in engram_grads_list)) ** 0.5
+            if backbone_grad_norm > 0:
+                stats["telemetry/diagnostics/grad_norm_ratio"] = total_e_norm / (
+                    backbone_grad_norm + 1e-8
+                )
+
+        # 5. Model Activation Stats (Entropy, Contribution)
         model_stats = unwrapped.get_telemetry_stats()
         for k, v in model_stats.items():
             stats[f"telemetry/{k}"] = v
+
+        # 6. Fair Loss Stats
+        stats["telemetry/loss/ce"] = self._last_ce_loss
+        stats["telemetry/loss/entropy_penalty"] = self._last_entropy_loss
 
         return stats
 

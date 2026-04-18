@@ -128,12 +128,14 @@ class ContextAwareGating(nn.Module):
 
     def __init__(
         self,
+        config: EngramConfig,
         engram_hidden_size: int,
         hidden_size: int,
         hc_mult: int = 4,
         zero_init: bool = True,
     ):
         super().__init__()
+        self.config = config
         self.engram_hidden_size = engram_hidden_size
         self.hidden_size = hidden_size
         self.hc_mult = hc_mult
@@ -155,6 +157,7 @@ class ContextAwareGating(nn.Module):
         self.norm_h = nn.ModuleList([nn.RMSNorm(hidden_size) for _ in range(hc_mult)])
         self.norm_k = nn.ModuleList([nn.RMSNorm(hidden_size) for _ in range(hc_mult)])
         self.last_gate: torch.Tensor | None = None
+        self.last_entropy: float = 0.0  # Default to zero
 
     def forward(
         self, embeddings: torch.Tensor, hidden_states: torch.Tensor
@@ -192,6 +195,16 @@ class ContextAwareGating(nn.Module):
 
         # Store for visualization
         self.last_gate = gate.detach()
+
+        # Calculate Entropy
+        # p=gate, 1-p=(1-gate)
+        p = gate.clamp(1e-6, 1 - 1e-6)
+        # We always compute the tensor version for loss regularization support
+        self.gating_entropy = -(p * p.log() + (1 - p) * (1 - p).log()).mean()
+
+        if self.config.enable_telemetry:
+            with torch.no_grad():
+                self.last_entropy = self.gating_entropy.item()
 
         # 步骤5：门控调制
         gated_value = gate * value.unsqueeze(
@@ -313,6 +326,7 @@ class EngramLayer(nn.Module):
 
         # 2. Context-Aware Gating
         self.gating = ContextAwareGating(
+            config=config,
             engram_hidden_size=self.total_embedding_dim,
             hidden_size=self.hidden_dim,
             hc_mult=self.num_branches,
@@ -328,6 +342,7 @@ class EngramLayer(nn.Module):
             activation=True,
             zero_init=config.conv_zero_init,
         )
+        self.last_norm_ratio: float = 0.0  # Default to zero
 
     @property
     def value_proj(self) -> nn.Linear:
@@ -409,5 +424,15 @@ class EngramLayer(nn.Module):
             else:
                 # Sum branches if no out_proj is provided
                 y = y.sum(dim=2)
+
+        if self.config.enable_telemetry:
+            with torch.no_grad():
+                y_norm = torch.norm(y.float(), 2)
+                h_norm = (
+                    torch.norm(hidden_states.float(), 2)
+                    if is_3d
+                    else torch.norm(hidden_states_m.float(), 2)
+                )
+                self.last_norm_ratio = (y_norm / (h_norm + 1e-8)).item()
 
         return cast("torch.Tensor", (hidden_states + y).to(hidden_states.dtype))

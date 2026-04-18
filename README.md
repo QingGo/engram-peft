@@ -73,7 +73,7 @@ model.print_trainable_parameters()
 ### Loss Curve Comparison
 ![Loss Curve Comparison](figures/loss_curve_with_full.png)
 
-*\* Engram employs sparse lookup; only a tiny fraction of parameters (approx. 1%) are active and receive gradient updates per step. For a detailed breakdown of performance, computation, and memory, see our [Performance Analysis](docs/compare_engram_lora_analysis.md).*
+*\* Engram employs sparse lookup; only a tiny fraction of parameters (approx. 1%) are active and receive gradient updates per step. To reproduce these benchmarks on your own hardware, run `uv run python examples/compare_engram_lora.py --all`. For a detailed breakdown of performance, computation, and memory, see our [Performance Analysis](docs/compare_engram_lora_analysis.md).*
 
 ---
 

@@ -97,12 +97,14 @@ class EngramConfig(PretrainedConfig):
         },
     )
     gating_zero_init: bool = field(
-        default=False,
+        default=True,
         metadata={"help": "Whether to initialize gating parameters with zeros."},
     )
     learning_rate_multiplier: float = field(
         default=5.0,
-        metadata={"help": "LR multiplier for Engram weights relative to the base LR."},
+        metadata={
+            "help": "LR multiplier for Engram base weights relative to the base LR."
+        },
     )
     weight_decay: float = field(
         default=0.0,
@@ -140,6 +142,16 @@ class EngramConfig(PretrainedConfig):
             "help": "Whether to collect deep metrics (norm, max, zero-rate) for all parameter groups during training."
         },
     )
+    entropy_loss_weight: float = field(
+        default=0.0,
+        metadata={"help": "Weight for the gating entropy penalty loss."},
+    )
+    backbone_freeze_steps: int = field(
+        default=0,
+        metadata={
+            "help": "Number of initial steps to freeze the backbone for 'Adapter-First' pre-training."
+        },
+    )
 
     def __init__(
         self,
@@ -154,7 +166,7 @@ class EngramConfig(PretrainedConfig):
         conv_kernel_size: int = 4,
         conv_dilation: int | None = None,
         conv_zero_init: bool = True,
-        gating_zero_init: bool = False,
+        gating_zero_init: bool = True,
         learning_rate_multiplier: float = 5.0,
         weight_decay: float = 0.0,
         tokenizer_name_or_path: str | None = None,
@@ -164,6 +176,8 @@ class EngramConfig(PretrainedConfig):
         hidden_size: int | None = None,
         clip_grad_per_group: bool = False,
         enable_telemetry: bool = False,
+        entropy_loss_weight: float = 0.0,
+        backbone_freeze_steps: int = 0,
         **kwargs: Any,
     ):
         """Constructs EngramConfig.
@@ -191,8 +205,7 @@ class EngramConfig(PretrainedConfig):
                 Dilation rate for conv block. Matches max_ngram_size if None.
             conv_zero_init (bool, optional):
                 Initialize conv as identity. Defaults to True.
-            gating_zero_init (bool, optional):
-                Zero initialization for gates. Defaults to False.
+            gating_zero_init (bool, optional): Zero initialization for gates. Defaults to True.
             learning_rate_multiplier (float, optional):
                 LR boost factor for engram params. Defaults to 5.0.
             weight_decay (float, optional):
@@ -241,6 +254,8 @@ class EngramConfig(PretrainedConfig):
         self.seed = seed
         self.clip_grad_per_group = clip_grad_per_group
         self.enable_telemetry = enable_telemetry
+        self.entropy_loss_weight = entropy_loss_weight
+        self.backbone_freeze_steps = backbone_freeze_steps
 
         super().__init__(**kwargs)
         # Ensure extra kwargs are set, as PretrainedConfig might miss them in some environments

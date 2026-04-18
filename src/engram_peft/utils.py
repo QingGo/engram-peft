@@ -148,11 +148,16 @@ def get_trainable_param_groups(
     """
     Splits trainable parameters into backbone, Engram dense, and Engram sparse groups.
     """
+    # Include backbone parameters if they are trainable OR if they will be unfrozen later
+    freeze_steps = getattr(model.config, "backbone_freeze_steps", 0)
     backbone_params = [
-        param for _, param in model.base_model.named_parameters() if param.requires_grad
+        param
+        for _, param in model.base_model.named_parameters()
+        if param.requires_grad or freeze_steps > 0
     ]
     engram_sparse_params = []
     engram_dense_params = []
+
     for name, param in model.engram_layers.named_parameters():
         if not param.requires_grad:
             continue
@@ -211,10 +216,14 @@ def get_optimizer(
         backbone_optimizer = "adam"
     if backbone_learning_rate is None:
         backbone_learning_rate = base_learning_rate
+    # Use multipliers from config if specific LRs are not provided
     if engram_dense_learning_rate is None:
         engram_dense_learning_rate = base_learning_rate
+
     if engram_sparse_learning_rate is None:
+        # We now trust the base multiplier for sparse as well, or we could add a sparse-specific multiplier to config
         engram_sparse_learning_rate = base_learning_rate * lr_multiplier
+
     if backbone_weight_decay is None:
         backbone_weight_decay = config_weight_decay
     if engram_dense_weight_decay is None:

@@ -85,7 +85,7 @@ def demo_full_finetune(
     ft_model = cast(
         "PreTrainedModel",
         AutoModelForCausalLM.from_pretrained(
-            path, torch_dtype=base_model.dtype, device_map="auto"
+            path, dtype=base_model.dtype, device_map="auto"
         ),
     )
     with torch.no_grad():
@@ -107,7 +107,7 @@ def demo_full_finetune_engram(
     ft_base_model = cast(
         "PreTrainedModel",
         AutoModelForCausalLM.from_pretrained(
-            sub_path, torch_dtype=base_model.dtype, device_map="auto"
+            sub_path, dtype=base_model.dtype, device_map="auto"
         ),
     )
     # Load Engram wrapper

@@ -15,6 +15,9 @@ Usage:
     # Run with parameter overrides
     uv run python examples/compare_engram_lora.py --methods engram:target_layers=[2,15]
 
+    # Run all methods at once
+    uv run python examples/compare_engram_lora.py --all --max_steps 100
+
     # Just replot latest results
     uv run python examples/compare_engram_lora.py --plot_only
 
@@ -55,6 +58,9 @@ def main() -> None:
             "Can include overrides like 'engram:clip_grad_per_layer=True,target_layers=[2,15]'"
         ),
     )
+    parser.add_argument(
+        "--all", action="store_true", help="Run all available benchmarking methods"
+    )
 
     parser.add_argument(
         "--plot_only", action="store_true", help="Don't run, just aggregate and plot"
@@ -82,6 +88,16 @@ def main() -> None:
     parser.add_argument("--wandb_entity", type=str, help="WandB entity/username")
 
     args = parser.parse_args()
+
+    if args.all:
+        args.methods = [
+            "lora",
+            "engram",
+            "lora_engram",
+            "full_finetune",
+            "full_finetune_engram",
+        ]
+
     set_seed(42)
     manager = ResultManager()
 

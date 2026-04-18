@@ -85,7 +85,7 @@ class BenchmarkEngine:
             else torch.float16
         )
         model = AutoModelForCausalLM.from_pretrained(
-            self.model_name, torch_dtype=dtype, device_map="auto"
+            self.model_name, dtype=dtype, device_map="auto"
         )
         return model
 

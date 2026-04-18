@@ -27,7 +27,7 @@ class DummyModel(nn.Module):
         self.hidden_size = hidden_size
         self.model = nn.Module()
         self.model.layers = nn.ModuleList(
-            [nn.Linear(hidden_size, hidden_size) for _ in range(32)]
+            [nn.Linear(hidden_size, hidden_size) for _ in range(2)]
         )
         # Mock config for parameter syncing
         self.config = cast(
@@ -86,7 +86,7 @@ def test_optimizer_grouping() -> None:
     optimizer = get_optimizer(model, base_learning_rate=base_lr)
 
     assert isinstance(optimizer, MixedOptimizer)
-    assert len(optimizer.optimizers) == 2  # SparseAdam and Adam
+    assert len(optimizer.optimizers) == 2  # SparseAdam, DenseAdam
 
     # Check LR and groups
     sparse_opt = optimizer.optimizers[0]
@@ -137,10 +137,14 @@ def test_optimizer_grouping_full_finetune() -> None:
         p.numel() for p in optimizer.optimizers[0].param_groups[0]["params"]
     ) == sum(p.numel() for p in groups["engram_sparse"])
     assert optimizer.optimizers[0].param_groups[0]["lr"] == pytest.approx(3e-3)
+
+    # Dense
     assert sum(
         p.numel() for p in optimizer.optimizers[1].param_groups[0]["params"]
     ) == sum(p.numel() for p in groups["engram_dense"])
     assert optimizer.optimizers[1].param_groups[0]["lr"] == pytest.approx(5e-4)
+
+    # Backbone
     assert sum(
         p.numel() for p in optimizer.optimizers[2].param_groups[0]["params"]
     ) == sum(p.numel() for p in groups["backbone"])
