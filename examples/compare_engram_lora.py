@@ -82,7 +82,7 @@ def main() -> None:
     parser.add_argument(
         "--wandb_project",
         type=str,
-        default="engram-peft-benchmarks",
+        default="engram-peft",
         help="WandB project name",
     )
     parser.add_argument("--wandb_entity", type=str, help="WandB entity/username")
