@@ -9,6 +9,7 @@ engram_config:
 training_args:
   output_dir: "./outputs/tinyllama-engram"
   max_steps: 100
+  save_strategy: "no"
   learning_rate: 0.0002
   bf16: true
 

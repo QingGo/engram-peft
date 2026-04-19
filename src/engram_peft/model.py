@@ -115,6 +115,7 @@ class EngramModel(nn.Module):
 
         self._hook_handles: list[Any] = []
         self._current_hash_indices: dict[int, Any] | torch.Tensor | None = None
+        self._inference_token_buffer: torch.Tensor | None = None
         self._engram_enabled = True
 
         # Attach hooks immediately
@@ -343,8 +344,12 @@ class EngramModel(nn.Module):
                 return None
 
             # PERFORMANCE OPTIMIZATION:
-            # If indices are already precomputed (e.g. by DataLoader or previous hook), Skip!
-            if self._current_hash_indices is not None:
+            # If indices are already precomputed (e.g. by DataLoader), Skip!
+            if (
+                self._current_hash_indices is not None
+                and not self.base_model.training
+                and self._inference_token_buffer is None
+            ):
                 return None
 
             # Try to get input_ids from kwargs then args
@@ -353,24 +358,60 @@ class EngramModel(nn.Module):
                 input_ids = args[0]
 
             if input_ids is not None:
+                # Incremental Generation Handling
+                if not self.base_model.training:
+                    curr_batch_size, curr_seq_len = input_ids.shape
+                    # If it's a new prompt (seq_len > 1), or buffer is missing
+                    if curr_seq_len > 1 or self._inference_token_buffer is None:
+                        self._inference_token_buffer = input_ids
+                    else:
+                        # Append new tokens to buffer
+                        self._inference_token_buffer = torch.cat(
+                            [self._inference_token_buffer, input_ids], dim=1
+                        )
+
+                    # Only keep enough context for the max ngram size
+                    # This prevents memory leaks during long generation
+                    max_n = self.hash_mapping.max_ngram_size
+                    if self._inference_token_buffer.size(1) > max_n * 2:
+                        self._inference_token_buffer = self._inference_token_buffer[
+                            :, -max_n * 2 :
+                        ]
+
+                    input_ids_to_hash = self._inference_token_buffer
+                else:
+                    input_ids_to_hash = input_ids
+
                 # Precompute global hash indices
                 if self.compressor:
-                    c_ids = self.compressor.compress(input_ids)
+                    c_ids = self.compressor.compress(input_ids_to_hash)
                     if isinstance(c_ids, torch.Tensor):
                         c_ids = c_ids.cpu().numpy()
                     self._current_hash_indices = self.hash_mapping.hash(c_ids)
                 else:
                     input_ids_np = (
-                        input_ids.cpu().numpy()
-                        if isinstance(input_ids, torch.Tensor)
-                        else input_ids
+                        input_ids_to_hash.cpu().numpy()
+                        if isinstance(input_ids_to_hash, torch.Tensor)
+                        else input_ids_to_hash
                     )
                     self._current_hash_indices = self.hash_mapping.hash(input_ids_np)
+
+                # If we used a buffer, only keep the hash indices for the *current* tokens
+                if (
+                    not self.base_model.training
+                    and input_ids_to_hash.shape != input_ids.shape
+                ):
+                    new_seq_len = input_ids.shape[1]
+                    for layer_id in self._current_hash_indices:
+                        self._current_hash_indices[layer_id] = (
+                            self._current_hash_indices[layer_id][:, -new_seq_len:, :]
+                        )
             elif "hidden_states" not in kwargs and not (
                 len(args) > 0 and torch.is_tensor(args[0]) and args[0].dim() >= 3
             ):
                 # If this is a top-level call without input_ids, reset indices to avoid stale values
                 self._current_hash_indices = None
+                self._inference_token_buffer = None
 
             return None
 
@@ -480,6 +521,9 @@ class EngramModel(nn.Module):
 
     def generate(self, *args: Any, **kwargs: Any) -> Any:
         """Delegates generation to the underlying base_model."""
+        # Reset inference buffer before generation to avoid context leakage
+        self._inference_token_buffer = None
+        self._current_hash_indices = None
         generate_func = self.base_model.generate
         return generate_func(*args, **kwargs)
 

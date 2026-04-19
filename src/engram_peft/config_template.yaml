@@ -46,8 +46,9 @@ training_args:
   # Base learning rate for the entire model (scaled by multipliers internally).
   learning_rate: 0.0002
 
-  # Total number of training passes through the dataset.
-  num_train_epochs: 3
+  # Total number of training steps to perform.
+  # Set to a small value (e.g., 100) for a quick demo.
+  max_steps: 100
 
   # Batch size per GPU. Adjusted based on available VRAM.
   per_device_train_batch_size: 2
@@ -62,8 +63,9 @@ training_args:
   # Frequency of logging loss and metrics to the console/tracker.
   logging_steps: 10
 
-  # Frequency of saving intermediate checkpoints.
-  save_steps: 50
+  # Checkpoint saving strategy ('no', 'steps', or 'epoch').
+  # 'no' saves disk space by only keeping the final result.
+  save_strategy: 'no'
 
   # Evaluation strategy ('no', 'steps', or 'epoch').
   eval_strategy: 'no'

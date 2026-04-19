@@ -215,7 +215,16 @@ def train(
         tokenizer=tokenizer, config=engram_config, mlm=False
     )
 
-    output_dir = Path(training_dict.pop("output_dir", "./outputs"))
+    output_dir_default = (
+        f"./outputs/{model_name.split('/')[-1]}-engram" if model_name else "./outputs"
+    )
+    output_dir = Path(training_dict.pop("output_dir", output_dir_default))
+
+    # Apply demo defaults if not specified
+    training_dict.setdefault("max_steps", 100)
+    training_dict.setdefault("save_strategy", "no")
+    training_dict.setdefault("logging_steps", 10)
+
     training_args = TrainingArguments(output_dir=str(output_dir), **training_dict)
 
     trainer = EngramTrainer(
