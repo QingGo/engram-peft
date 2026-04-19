@@ -1,3 +1,4 @@
+import importlib.resources
 import logging
 from pathlib import Path
 from typing import Annotated, Any, cast
@@ -64,11 +65,59 @@ def apply_overrides(config: dict[str, Any], overrides: list[str]) -> None:
 
 
 @app.command()
+def config_template(
+    output: Annotated[
+        Path | None, typer.Option("--output", "-o", help="Path to save the template.")
+    ] = None,
+) -> None:
+    """Generates a clean YAML configuration template with sensible defaults."""
+
+    # Load the template from package resources
+    # importlib.resources.files is available in Python 3.9+
+    template_file = importlib.resources.files("engram_peft").joinpath(
+        "config_template.yaml"
+    )
+    content = template_file.read_text()
+
+    if output:
+        output.write_text(content)
+        typer.secho(f"Template saved to {output}", fg=typer.colors.GREEN)
+    else:
+        typer.echo(content)
+
+
+def generate_inference_script(output_dir: Path, model_name: str) -> None:
+    """Generates a simple inference.py script in the output directory."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Load the inference boilerplate from package resources
+    template_file = importlib.resources.files("engram_peft").joinpath(
+        "inference_template.py"
+    )
+    template = template_file.read_text()
+    # Inject the model name into the placeholder
+    script_content = template.replace("{{MODEL_NAME}}", model_name)
+
+    (output_dir / "inference.py").write_text(script_content)
+
+
+@app.command()
 def train(
     config_path: Annotated[
-        Path,
+        Path | None,
         typer.Option("--config", "-c", help="Path to the YAML configuration file."),
-    ],
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", "-m", help="Base model Name or Path."),
+    ] = None,
+    dataset_path: Annotated[
+        str | None,
+        typer.Option(
+            "--dataset", "-d", help="Path to local dataset (json/parquet/csv)."
+        ),
+    ] = None,
     overrides: Annotated[
         list[str] | None,
         typer.Option(
@@ -78,33 +127,33 @@ def train(
         ),
     ] = None,
 ) -> None:
-    """Trains an Engram-augmented model using the specified configuration."""
-    if not config_path.exists():
+    """Trains an Engram-augmented model."""
+    config = {}
+    if config_path:
+        if not config_path.exists():
+            typer.secho(
+                f"Error: Configuration file not found at {config_path}",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(code=1)
+        with open(config_path) as f:
+            config = yaml.safe_load(f)
+    elif model:
+        config = {"model_name_or_path": model}
+    else:
         typer.secho(
-            f"Error: Configuration file not found at {config_path}", fg=typer.colors.RED
+            "Error: Either --config or --model must be provided.", fg=typer.colors.RED
         )
         raise typer.Exit(code=1)
-
-    with open(config_path) as f:
-        try:
-            config = yaml.safe_load(f)
-        except yaml.YAMLError as e:
-            typer.secho(f"Error parsing YAML: {e}", fg=typer.colors.RED)
-            raise typer.Exit(code=1) from e
 
     if overrides:
         apply_overrides(config, overrides)
 
-    # Validate mandatory sections
-    required_keys = ["model_name_or_path"]
-    for k in required_keys:
-        if k not in config:
-            typer.secho(
-                f"Error: Missing required config key '{k}'", fg=typer.colors.RED
-            )
-            raise typer.Exit(code=1)
+    model_name = config.get("model_name_or_path")
+    if not model_name:
+        typer.secho("Error: Missing 'model_name_or_path'.", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
 
-    model_name = config["model_name_or_path"]
     engram_dict = config.get("engram_config", {})
     training_dict = config.get("training_args", {})
     data_dict = config.get("data_args", {})
@@ -115,7 +164,6 @@ def train(
         tokenizer.pad_token = tokenizer.eos_token
 
     # Build EngramConfig
-    # We allow overrides to populate engram_config correctly
     engram_config = EngramConfig(tokenizer_name_or_path=model_name, **engram_dict)
 
     base_model = AutoModelForCausalLM.from_pretrained(
@@ -123,18 +171,29 @@ def train(
     )
 
     typer.echo("[*] Wrapping model with Engram layers")
-    model = get_engram_model(base_model, engram_config, tokenizer=tokenizer)
+    engram_model = get_engram_model(base_model, engram_config, tokenizer=tokenizer)
 
-    typer.echo(f"[*] Loading dataset: {data_dict.get('dataset_name', 'unknown')}")
-    dataset = load_dataset(
-        data_dict.get("dataset_name"),
-        data_dict.get("dataset_config_name"),
-        split=data_dict.get("split", "train"),
-    )
+    # Dataset Loading
+    ds_name = data_dict.get("dataset_name")
+    if dataset_path:
+        typer.echo(f"[*] Loading local dataset: {dataset_path}")
+        ext = Path(dataset_path).suffix[1:]
+        if ext == "jsonl":
+            ext = "json"
+        dataset = load_dataset(ext, data_files=dataset_path, split="train")
+    elif ds_name:
+        typer.echo(f"[*] Loading Hugging Face dataset: {ds_name}")
+        dataset = load_dataset(
+            ds_name,
+            data_dict.get("dataset_config_name"),
+            split=data_dict.get("split", "train"),
+        )
+    else:
+        typer.secho("Error: No dataset specified.", fg=typer.colors.RED)
+        raise typer.Exit(code=1)
 
     def tokenize_function(examples: dict[str, Any]) -> dict[str, Any]:
         text_column = data_dict.get("text_column", "text")
-
         return cast(
             "dict[str, Any]",
             tokenizer(
@@ -150,20 +209,17 @@ def train(
         tokenize_function,
         batched=True,
         remove_columns=dataset.column_names,
-        desc="Running tokenizer on dataset",
     )
 
     data_collator = EngramDataCollator(
         tokenizer=tokenizer, config=engram_config, mlm=False
     )
 
-    typer.echo("[*] Initializing Trainer")
-    # Ensure output_dir is present and not duplicated in **training_dict
-    output_dir = training_dict.pop("output_dir", "./outputs")
-    training_args = TrainingArguments(output_dir=output_dir, **training_dict)
+    output_dir = Path(training_dict.pop("output_dir", "./outputs"))
+    training_args = TrainingArguments(output_dir=str(output_dir), **training_dict)
 
     trainer = EngramTrainer(
-        model=model,
+        model=engram_model,
         args=training_args,
         train_dataset=tokenized_dataset,
         data_collator=data_collator,
@@ -172,10 +228,12 @@ def train(
     typer.echo("[*] Starting training...")
     trainer.train()
 
-    typer.echo(f"[*] Saving adapter to {training_args.output_dir}")
-    out_dir = training_args.output_dir
-    assert out_dir is not None, "training_args.output_dir must be specified"
-    model.save_pretrained(out_dir)
+    typer.echo(f"[*] Saving adapter to {output_dir}")
+    engram_model.save_pretrained(str(output_dir))
+
+    typer.echo("[*] Generating inference script...")
+    generate_inference_script(output_dir, model_name)
+
     typer.secho("Success: Training complete.", fg=typer.colors.GREEN, bold=True)
 
 

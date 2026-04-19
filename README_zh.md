@@ -61,11 +61,14 @@ model.print_trainable_parameters()
 除了 Python 脚本，您也可以直接通过 YAML 配置文件触发训练，无需编写任何代码：
 
 ```bash
-# 1. 使用标准配置模板
-engram-peft train --config examples/config.yaml
+# 1. 生成包含完整注释的配置模板
+engram-peft config-template --output training_config.yaml
 
-# 2. 在运行时动态覆盖特定参数
-engram-peft train --config examples/config.yaml --overrides "training_args.learning_rate=5e-5"
+# 2. 使用配置文件（或极简的 examples/config.yaml）启动训练
+engram-peft train --config training_config.yaml
+
+# 3. 在运行时动态覆盖特定参数
+engram-peft train --config training_config.yaml --overrides "training_args.learning_rate=5e-5"
 ```
 
 ---

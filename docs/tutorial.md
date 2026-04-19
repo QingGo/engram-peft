@@ -64,23 +64,29 @@ model.save_pretrained("medical_knowledge_pack")
 
 For most standard use cases, you don't need to write a custom Python script. Engram-PEFT provides a high-level CLI powered by `typer`.
 
-### 1. The Configuration File
-We provide a standard template in `examples/config.yaml`. It is divided into four main sections:
+### 1. Generating a Configuration Template
+We provide a minimal example in `examples/config.yaml`, but we highly recommend generating a full, documented template using the CLI to see all available options:
+
+```bash
+engram-peft config-template --output my_config.yaml
+```
+
+The generated file is divided into four main sections with detailed comments:
 - `model_name_or_path`: The base model identifier.
 - `engram_config`: Core hyperparameters for Engram layers.
 - `training_args`: All standard `transformers.TrainingArguments`.
 - `data_args`: Dataset name and tokenization settings.
 
 ### 2. Launching Training
-Trigger the training pipeline with a single command:
+Trigger the training pipeline using your configuration file:
 ```bash
-engram-peft train --config examples/config.yaml
+engram-peft train --config my_config.yaml
 ```
 
 ### 3. Quick Overrides
 You can override any nested configuration value using dot notation without editing the YAML file:
 ```bash
-engram-peft train --config examples/config.yaml \
+engram-peft train --config my_config.yaml \
     --overrides "training_args.learning_rate=1e-5" \
     --overrides "engram_config.target_layers=[2,15,31]"
 ```

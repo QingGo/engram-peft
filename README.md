@@ -61,11 +61,14 @@ model.print_trainable_parameters()
 You can also trigger training through a YAML configuration file without writing Python scripts:
 
 ```bash
-# 1. Use the standard template
-engram-peft train --config examples/config.yaml
+# 1. Generate a full, documented configuration template
+engram-peft config-template --output training_config.yaml
 
-# 2. Override specific arguments on the fly
-engram-peft train --config examples/config.yaml --overrides "training_args.learning_rate=5e-5"
+# 2. Launch training using the YAML file (or our minimal examples/config.yaml)
+engram-peft train --config training_config.yaml
+
+# 3. Override specific arguments on the fly
+engram-peft train --config training_config.yaml --overrides "training_args.learning_rate=5e-5"
 ```
 
 ---

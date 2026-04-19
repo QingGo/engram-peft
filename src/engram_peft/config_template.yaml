@@ -1,0 +1,79 @@
+# Engram-PEFT Configuration Template
+# This file serves as a blueprint for training Engram-augmented models.
+
+# The base model to which Engram layers will be injected.
+# Can be a Hugging Face ID (e.g., TinyLlama/TinyLlama-1.1B-Chat-v1.0) or a local path.
+model_name_or_path: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
+engram_config:
+  # Total number of hash buckets (memory slots) for each N-gram size.
+  # Larger values allow more conditional memory but increase VRAM/disk usage.
+  # Matches Engram paper Appendix A Table 5 recommendations.
+  engram_vocab_size_per_ngram: [512000, 512000]
+
+  # The lengths of token sequences to use for sparse retrieval.
+  # Typically [2, 3] captures sufficient local context for most tasks.
+  ngram_sizes: [2, 3]
+
+  # Layer indices for Engram layer injection. 2nd and penultimate layers are common targets.
+  # Injecting into too many layers may slow down training.
+  target_layers: [2, 15]
+
+  # Internal dimension of Engram embeddings.
+  # High dimensionality allows more expressive memory retrieval but increases footprint.
+  embedding_dim: 1024
+
+  # Scale factor for Engram-specific weights relative to the base model's learning rate.
+  # Engram layers often benefit from a higher LR (e.g., 5.0x - 10.0x) than the backbone.
+  learning_rate_multiplier: 5.0
+
+  # Enables detailed metric logging (norms, max values) during training.
+  # Highly recommended for monitoring stability and detecting gradient issues.
+  enable_telemetry: true
+
+  # Uses surjective mapping to reduce the token space before hashing.
+  # Helps mitigate hash collisions and improves memory efficiency.
+  enable_tokenizer_compression: true
+
+  # Number of initial steps where only Engram layers are trained while the backbone is frozen.
+  # Helps stabilize the newly injected layers before performing joint fine-tuning.
+  backbone_freeze_steps: 0
+
+training_args:
+  # Directory where checkpoints and the final adapter will be saved.
+  output_dir: ./outputs
+
+  # Base learning rate for the entire model (scaled by multipliers internally).
+  learning_rate: 0.0002
+
+  # Total number of training passes through the dataset.
+  num_train_epochs: 3
+
+  # Batch size per GPU. Adjusted based on available VRAM.
+  per_device_train_batch_size: 2
+
+  # Number of steps to accumulate gradients before performing an optimizer update.
+  # Effectively increases batch size: Actual Batch Size = per_device * accumulation * num_gpus.
+  gradient_accumulation_steps: 4
+
+  # Use BFloat16 precision for training (requires NVIDIA Ampere+ GPUs like A100/H100).
+  bf16: true
+
+  # Frequency of logging loss and metrics to the console/tracker.
+  logging_steps: 10
+
+  # Frequency of saving intermediate checkpoints.
+  save_steps: 50
+
+  # Evaluation strategy ('no', 'steps', or 'epoch').
+  eval_strategy: 'no'
+
+data_args:
+  # Hugging Face dataset ID or local path to a JSONL/Parquet/CSV file.
+  dataset_name: tatsu-lab/alpaca
+
+  # The field in the dataset containing the training text.
+  text_column: text
+
+  # Maximum sequence length. Longer sequences require more VRAM.
+  max_length: 512
