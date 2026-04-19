@@ -12,6 +12,19 @@ from engram_peft.model import EngramModel, get_engram_model
 from engram_peft.saving import ADAPTER_SAFE_NAME
 
 
+class MockBatchEncoding(dict):
+    """Simulates a BatchEncoding object from transformers."""
+
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return self[name]
+        except KeyError as e:
+            raise AttributeError(f"No attribute {name}") from e
+
+    def to_dict(self) -> dict:
+        return dict(self)
+
+
 class MockTransformerBlock(nn.Module):
     def __init__(self, hidden_size: int) -> None:
         super().__init__()
@@ -47,8 +60,21 @@ class MockModel(nn.Module):
             hs = layer(hs)[0]
         return hs
 
-    def generate(self, *args: Any, **kwargs: Any) -> str:
-        return "mock_generation"
+    def generate(
+        self, *args: Any, input_ids: Any = None, **kwargs: Any
+    ) -> torch.Tensor:
+        # If input_ids was passed as first positional arg, extract it
+        target_ids = input_ids if input_ids is not None else (args[0] if args else None)
+
+        if target_ids is None:
+            raise ValueError("input_ids required for generate")
+
+        # The core of the test: Verify input_ids is a TENSOR
+        # EngramModel.generate should have extracted it from BatchEncoding
+        if not isinstance(target_ids, torch.Tensor):
+            raise TypeError(f"Expected torch.Tensor, got {type(target_ids)}")
+
+        return torch.tensor([[1, 2, 3]])
 
 
 def create_mock_setup() -> tuple:
@@ -157,3 +183,27 @@ def test_incremental_generation_hook() -> None:
     # Verify buffer updated (5 tokens in step1 + 1 token in step2 = 6)
     assert engram_model._inference_token_buffer is not None
     assert engram_model._inference_token_buffer.size(1) == 6
+
+
+def test_generate_robustness() -> None:
+    config, base_model = create_mock_setup()
+    engram_model = get_engram_model(base_model, config, tokenizer=None)
+    engram_model.eval()
+
+    # 1. Test with BatchEncoding (positional)
+    input_ids = torch.randint(0, 100, (1, 10))
+    gen_inputs = MockBatchEncoding(
+        {"input_ids": input_ids, "attention_mask": torch.ones_like(input_ids)}
+    )
+    output = engram_model.generate(gen_inputs, max_new_tokens=5)
+    assert isinstance(output, torch.Tensor)
+    assert output.tolist() == [[1, 2, 3]]
+
+    # 2. Test with BatchEncoding (keyword)
+    output = engram_model.generate(input_ids=gen_inputs, max_new_tokens=5)
+    assert isinstance(output, torch.Tensor)
+
+    # 3. Test with raw dict (keyword)
+    raw_dict = {"input_ids": input_ids, "attention_mask": torch.ones_like(input_ids)}
+    output = engram_model.generate(input_ids=raw_dict, max_new_tokens=5)
+    assert isinstance(output, torch.Tensor)

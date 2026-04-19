@@ -545,10 +545,37 @@ class EngramModel(nn.Module):
         )
 
     def generate(self, *args: Any, **kwargs: Any) -> Any:
-        """Delegates generation to the underlying base_model."""
+        """
+        Delegates generation to the underlying base_model.
+        Includes defensive logic to extract tensors from BatchEncoding/dict inputs.
+        """
         # Reset inference buffer before generation to avoid context leakage
         self._inference_token_buffer = None
         self._current_hash_indices = None
+
+        # Robust input handling: if first arg or 'input_ids' kwarg is a dict-like object,
+        # extract its contents to ensure base_model.generate handles it correctly.
+        if len(args) > 0 and (isinstance(args[0], dict) or hasattr(args[0], "to_dict")):
+            input_dict = args[0].to_dict() if hasattr(args[0], "to_dict") else args[0]
+            args = args[1:]
+            # Only update kwargs if not already set
+            for k, v in input_dict.items():
+                if k not in kwargs:
+                    kwargs[k] = v
+        elif "input_ids" in kwargs and (
+            isinstance(kwargs["input_ids"], dict)
+            or hasattr(kwargs["input_ids"], "to_dict")
+        ):
+            input_dict = (
+                kwargs["input_ids"].to_dict()
+                if hasattr(kwargs["input_ids"], "to_dict")
+                else kwargs["input_ids"]
+            )
+            kwargs.pop("input_ids")
+            for k, v in input_dict.items():
+                if k not in kwargs:
+                    kwargs[k] = v
+
         generate_func = self.base_model.generate
         return generate_func(*args, **kwargs)
 

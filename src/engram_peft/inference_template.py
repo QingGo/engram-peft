@@ -39,24 +39,44 @@ prompt = "What is the secret of life?"
 # Use Chat Template if available (recommended for Chat models)
 if hasattr(tokenizer, "apply_chat_template") and tokenizer.chat_template is not None:
     messages = [{"role": "user", "content": prompt}]
-    input_ids = cast(
-        "torch.Tensor",
-        tokenizer.apply_chat_template(
-            messages, tokenize=True, add_generation_prompt=True, return_tensors="pt"
-        ),
-    ).to(model.base_model.device)
+    # apply_chat_template can return BatchEncoding or Tensor depending on version
+    gen_inputs = tokenizer.apply_chat_template(
+        messages, tokenize=True, add_generation_prompt=True, return_tensors="pt"
+    )
     print(f"\n[*] Prompt: '{prompt}' (Applied Chat Template)")
 else:
-    input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(
-        model.base_model.device
-    )
+    gen_inputs = tokenizer(prompt, return_tensors="pt")
     print(f"\n[*] Prompt: '{prompt}'")
+
+# Robustly extract input_ids if the tokenizer returned a BatchEncoding/dict
+if isinstance(gen_inputs, dict) or hasattr(gen_inputs, "input_ids"):
+    input_ids = (
+        gen_inputs["input_ids"]
+        if isinstance(gen_inputs, dict)
+        else gen_inputs.input_ids
+    )
+else:
+    input_ids = gen_inputs
+
+# Move to correct device
+input_ids = input_ids.to(model.base_model.device)
+# Capture other inputs (like attention_mask) if they exist
+gen_kwargs: dict[str, Any] = (
+    {
+        k: v.to(model.base_model.device)
+        for k, v in gen_inputs.items()
+        if k != "input_ids" and torch.is_tensor(v)
+    }
+    if isinstance(gen_inputs, dict)
+    else {}
+)
 
 print("[*] Generating response...")
 
 with torch.no_grad():
     outputs = model.generate(
         input_ids=input_ids,
+        **gen_kwargs,
         max_new_tokens=50,
         do_sample=True,
         temperature=0.7,
