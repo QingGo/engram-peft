@@ -137,3 +137,23 @@ def test_dynamic_load_unload() -> None:
     engram_model.load_engram()
     assert len(engram_model._hook_handles) == 3
     assert engram_model._engram_enabled is True
+
+
+def test_incremental_generation_hook() -> None:
+    config, base_model = create_mock_setup()
+    engram_model = get_engram_model(base_model, config, tokenizer=None)
+    engram_model.eval()
+
+    # 1. First step: full prompt (length 5)
+    input_ids = torch.randint(0, 100, (1, 5))
+    engram_model(input_ids=input_ids)
+
+    # 2. Second step: incremental token (length 1)
+    # The hooks should NOT crash and should successfully slice the hash indices
+    next_token_id = torch.randint(0, 100, (1, 1))
+    output = engram_model(input_ids=next_token_id)
+
+    assert output.shape == (1, 1, 32)
+    # Verify buffer updated (5 tokens in step1 + 1 token in step2 = 6)
+    assert engram_model._inference_token_buffer is not None
+    assert engram_model._inference_token_buffer.size(1) == 6

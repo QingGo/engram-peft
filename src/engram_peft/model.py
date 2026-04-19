@@ -305,7 +305,11 @@ class EngramModel(nn.Module):
 
             if isinstance(self._current_hash_indices, dict):
                 indices_np = self._current_hash_indices[layer_id]
-                # Check if sequence length matches
+                # During inference (incremental generation), hidden_states might be [B, 1, D]
+                # while current_hash_indices contains the whole buffered context.
+                if not self.base_model.training and indices_np.shape[1] > curr_seq_len:
+                    indices_np = indices_np[:, -curr_seq_len:]
+
                 if indices_np.shape[1] != curr_seq_len:
                     return args
 
@@ -315,14 +319,21 @@ class EngramModel(nn.Module):
             else:
                 # Assume it's the stacked tensor [B, L, num_layers, total_heads]
                 try:
-                    # Check if sequence length matches
-                    if self._current_hash_indices.size(1) != curr_seq_len:
+                    target_indices = self._current_hash_indices
+                    # Same logic for stacked tensor: slice if in inference
+                    if (
+                        not self.base_model.training
+                        and target_indices.size(1) > curr_seq_len
+                    ):
+                        target_indices = target_indices[:, -curr_seq_len:]
+
+                    if target_indices.size(1) != curr_seq_len:
                         return args
 
                     layer_idx = self.config.target_layers.index(layer_id)
-                    engram_hash_indices = self._current_hash_indices[
-                        :, :, layer_idx, :
-                    ].to(hidden_states.device)
+                    engram_hash_indices = target_indices[:, :, layer_idx, :].to(
+                        hidden_states.device
+                    )
                 except (ValueError, IndexError, AttributeError):
                     return args
 
@@ -345,25 +356,16 @@ class EngramModel(nn.Module):
             if not self._engram_enabled:
                 return None
 
-            # PERFORMANCE OPTIMIZATION:
-            # If indices are already precomputed (e.g. by DataLoader), Skip!
-            if (
-                self._current_hash_indices is not None
-                and not self.base_model.training
-                and self._inference_token_buffer is None
-            ):
-                return None
-
             # Try to get input_ids from kwargs then args
             input_ids = kwargs.get("input_ids")
             if input_ids is None and len(args) > 0:
                 input_ids = args[0]
 
             if input_ids is not None:
-                # Incremental Generation Handling
+                # 1. Update Inference Buffer (Inference Only)
+                # This must happen regardless of whether indices are already set
                 if not self.base_model.training:
-                    curr_batch_size, curr_seq_len = input_ids.shape
-                    # If it's a new prompt (seq_len > 1), or buffer is missing
+                    curr_seq_len = input_ids.shape[1]
                     if curr_seq_len > 1 or self._inference_token_buffer is None:
                         self._inference_token_buffer = input_ids
                     else:
@@ -374,17 +376,29 @@ class EngramModel(nn.Module):
 
                     # Only keep enough context for the max ngram size
                     # This prevents memory leaks during long generation
+                    # We keep at least 1024 tokens to avoid frequent truncation
                     max_n = self.hash_mapping.max_ngram_size
-                    if self._inference_token_buffer.size(1) > max_n * 2:
+                    limit = max(max_n * 2, 1024)
+                    if self._inference_token_buffer.size(1) > limit:
                         self._inference_token_buffer = self._inference_token_buffer[
-                            :, -max_n * 2 :
+                            :, -limit:
                         ]
 
                     input_ids_to_hash = self._inference_token_buffer
                 else:
                     input_ids_to_hash = input_ids
 
-                # Precompute global hash indices
+                # 2. Performance Optimization
+                # If indices are already precomputed AND it's not incremental generation, Skip!
+                # Incremental generation (seq_len == 1) ALWAYS needs the buffer-based hash.
+                if (
+                    self._current_hash_indices is not None
+                    and not self.base_model.training
+                    and input_ids.size(1) > 1
+                ):
+                    return None
+
+                # 3. Precompute global hash indices
                 if self.compressor:
                     c_ids = self.compressor.compress(input_ids_to_hash)
                     if isinstance(c_ids, torch.Tensor):
@@ -398,16 +412,24 @@ class EngramModel(nn.Module):
                     )
                     self._current_hash_indices = self.hash_mapping.hash(input_ids_np)
 
-                # If we used a buffer, only keep the hash indices for the *current* tokens
+                # 4. If using a buffer during inference, slice indices to match current tokens
                 if (
                     not self.base_model.training
-                    and input_ids_to_hash.shape != input_ids.shape
+                    and input_ids_to_hash.shape[1] != input_ids.shape[1]
                 ):
                     new_seq_len = input_ids.shape[1]
-                    for layer_id in self._current_hash_indices:
-                        self._current_hash_indices[layer_id] = (
-                            self._current_hash_indices[layer_id][:, -new_seq_len:, :]
-                        )
+                    if isinstance(self._current_hash_indices, dict):
+                        for layer_id in self._current_hash_indices:
+                            self._current_hash_indices[layer_id] = (
+                                self._current_hash_indices[layer_id][
+                                    :, -new_seq_len:, :
+                                ]
+                            )
+                    elif isinstance(self._current_hash_indices, torch.Tensor):
+                        self._current_hash_indices = self._current_hash_indices[
+                            :, -new_seq_len:, :, :
+                        ]
+
             elif "hidden_states" not in kwargs and not (
                 len(args) > 0 and torch.is_tensor(args[0]) and args[0].dim() >= 3
             ):
