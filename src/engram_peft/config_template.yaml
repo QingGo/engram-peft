@@ -39,6 +39,17 @@ engram_config:
   # Helps stabilize the newly injected layers before performing joint fine-tuning.
   backbone_freeze_steps: 0
 
+# [OPTIONAL] PEFT (LoRA) Configuration
+# Injecting LoRA alongside Engram allows both structural adaptation and high-capacity knowledge storage.
+# This combination (LoRA+Engram) often yields the best convergence and accuracy.
+lora_config:
+  r: 8
+  lora_alpha: 32
+  target_modules: ["q_proj", "v_proj"]
+  lora_dropout: 0.05
+  bias: "none"
+  task_type: "CAUSAL_LM"
+
 training_args:
   # Directory where checkpoints and the final adapter will be saved.
   output_dir: ./outputs

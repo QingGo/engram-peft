@@ -6,6 +6,12 @@ model_name_or_path: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 engram_config:
   target_layers: [2, 15]  # Inject into matching layers
 
+# Recommended: Use LoRA for structural adaptation + Engram for knowledge
+lora_config:
+  r: 8
+  lora_alpha: 32
+  target_modules: ["q_proj", "v_proj"]
+
 training_args:
   output_dir: "./outputs/tinyllama-engram"
   max_steps: 100

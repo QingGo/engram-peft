@@ -113,19 +113,21 @@ class EngramModel(nn.Module):
             )
         self.adapters["default"] = default_layers
 
-        self._hook_handles: list[Any] = []
-        self._current_hash_indices: dict[int, Any] | torch.Tensor | None = None
+        self._hook_handles: list[torch.utils.hooks.RemovableHandle] = []
+        self._current_hash_indices: dict[int, np.ndarray] | torch.Tensor | None = None
         self._inference_token_buffer: torch.Tensor | None = None
-        self._engram_enabled = True
+        self._engram_enabled: bool = True
 
-        # Attach hooks immediately
-        self.load_engram()
+        self._engram_enabled = True
 
         # Note: We do NOT unconditionally cast to base_model.dtype here.
         # Keeping Engram layers in float32 is essential for training stability
         # when the backbone is float16/bfloat16 (Mixed Precision).
         # Trainer/autocast will handle the precision transitions during forward/backward.
         self.adapters.float()
+
+        # Attach hooks immediately
+        self.load_engram()
 
     def print_trainable_parameters(self) -> None:
         """
@@ -437,7 +439,9 @@ class EngramModel(nn.Module):
         self._hook_handles.append(model_hook)
 
         # 2. Attach hooks to target transformer layers or specific modules
-        logger.info(f"[Engram-PEFT] Attaching Engram layers to {len(layers)} blocks...")
+        logger.info(
+            f"[Engram-PEFT] Attaching Engram layers to {len(self.config.target_layers)} blocks..."
+        )
 
         # Current layer-based targeting
         for layer_id in self.config.target_layers:
@@ -445,16 +449,15 @@ class EngramModel(nn.Module):
                 target_module = layers[layer_id]
                 module_class = type(target_module).__name__
 
-                # Determine target device (from transformer block)
-                target_device = "unknown"
+                # Determine target device and dtype (from transformer block)
                 try:
-                    target_device = str(next(target_module.parameters()).device)
+                    example_param = next(target_module.parameters())
+                    target_device = example_param.device
+                    target_dtype = example_param.dtype
 
-                    # Align the entire adapter module to target device (including embeddings)
-                    engram_layer = cast(
-                        "EngramLayer", self.engram_layers[str(layer_id)]
-                    )
-                    engram_layer.to(target_device)
+                    # Align the entire adapter module to target device AND dtype
+                    engram_layer = self.engram_layers[str(layer_id)]
+                    engram_layer.to(device=target_device, dtype=target_dtype)
                 except (StopIteration, AttributeError):
                     pass
 

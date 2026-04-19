@@ -43,6 +43,13 @@ with torch.no_grad():
 # Decode only the NEWLY generated tokens
 input_len = inputs.input_ids.shape[-1]
 response_tokens = outputs[0][input_len:]
+
+if len(response_tokens) == 0:
+    print(
+        f"\n[!] Warning: No tokens were generated. Output length: {len(outputs[0])}, Input length: {input_len}"
+    )
+    print(f"[*] Raw output IDs: {outputs[0].tolist()}")
+
 response_text = tokenizer.decode(response_tokens, skip_special_tokens=True)
 
 # Ensure response_text is a string for mypy

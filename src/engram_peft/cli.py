@@ -6,11 +6,17 @@ from typing import Annotated, Any, cast
 import typer
 import yaml
 from datasets import load_dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
+from peft import LoraConfig, get_peft_model
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    PreTrainedModel,
+    TrainingArguments,
+)
 
 from engram_peft.collator import EngramDataCollator
 from engram_peft.config import EngramConfig
-from engram_peft.model import get_engram_model
+from engram_peft.model import TrainMode, get_engram_model
 from engram_peft.trainer import EngramTrainer
 
 app = typer.Typer(help="Engram-PEFT Command Line Interface")
@@ -155,6 +161,7 @@ def train(
         raise typer.Exit(code=1)
 
     engram_dict = config.get("engram_config", {})
+    lora_dict = config.get("lora_config")
     training_dict = config.get("training_args", {})
     data_dict = config.get("data_args", {})
 
@@ -166,12 +173,33 @@ def train(
     # Build EngramConfig
     engram_config = EngramConfig(tokenizer_name_or_path=model_name, **engram_dict)
 
-    base_model = AutoModelForCausalLM.from_pretrained(
+    # Explicitly type base_model to satisfy mypy
+    base_model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
         model_name, torch_dtype="auto", device_map="auto"
     )
 
-    typer.echo("[*] Wrapping model with Engram layers")
-    engram_model = get_engram_model(base_model, engram_config, tokenizer=tokenizer)
+    # 1. Apply LoRA if configured
+    train_mode = config.get("train_mode")
+    if lora_dict:
+        typer.echo("[*] Applying LoRA (PEFT) to backbone")
+        lora_config = LoraConfig(**lora_dict)
+        # Cast to satisfy mypy's requirement for PreTrainedModel or _BaseModelWithGenerate
+        base_model = cast("PreTrainedModel", get_peft_model(base_model, lora_config))
+        # Default to preserving LoRA trainable weights
+        if train_mode is None:
+            train_mode = "preserve_trainable"
+
+    # 2. Inject Engram layers
+    if train_mode is None:
+        train_mode = "engram_only"
+
+    typer.echo(f"[*] Wrapping model with Engram layers (train_mode={train_mode})")
+    engram_model = get_engram_model(
+        base_model,
+        engram_config,
+        tokenizer=tokenizer,
+        train_mode=cast("TrainMode", train_mode),
+    )
 
     # Dataset Loading
     ds_name = data_dict.get("dataset_name")

@@ -76,7 +76,7 @@ class TestCLI(unittest.TestCase):
             config_path = Path(f.name)
 
         def mock_get_engram_side_effect(
-            model: Any, config: Any, tokenizer: Any = None
+            model: Any, config: Any, tokenizer: Any = None, **kwargs: Any
         ) -> Any:
             # Simulate ArchitectureResolver/EngramModel side effects on config
             config.compressed_vocab_size = 1000
@@ -145,7 +145,7 @@ class TestCLI(unittest.TestCase):
 
         # We need to simulate EngramModel behavior on config for the collator check
         def mock_get_engram_side_effect(
-            model: Any, config: Any, tokenizer: Any = None
+            model: Any, config: Any, tokenizer: Any = None, **kwargs: Any
         ) -> Any:
             config.compressed_vocab_size = 1000
             config.pad_id = 0
