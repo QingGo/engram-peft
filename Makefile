@@ -56,7 +56,7 @@ test-integ:
 # Start the sprintest daemon for test acceleration.
 # This keeps the model and weights in memory to eliminate startup latency.
 test-daemon:
-	SPRINTEST_TARGET_PKG=engram-peft uv run sprintest-daemon
+	SPRINTEST_TARGET_PKG=engram_peft uv run sprintest-daemon
 
 # Stop the type-check daemon and delete all tool-generated cache directories
 clean: daemon-stop
