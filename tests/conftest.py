@@ -1,11 +1,6 @@
 from typing import Any
 
 import pytest
-import torch
-from transformers import AutoTokenizer
-
-from engram_peft.compression import CompressedTokenizer
-from engram_peft.config import EngramConfig
 
 
 class MockTokenizer:
@@ -26,7 +21,10 @@ class MockTokenizer:
 
     def pad(
         self, examples: list[dict[str, Any]], return_tensors: str = "pt", **kwargs: Any
-    ) -> dict[str, torch.Tensor]:
+    ) -> dict[str, Any]:
+        """Basic padding simulation for unit tests without top-level torch."""
+        import torch
+
         # Basic padding simulation for unit tests
         input_ids = [torch.tensor(ex["input_ids"]) for ex in examples]
         max_len = max(len(x) for x in input_ids)
@@ -51,6 +49,8 @@ class MockTokenizer:
 @pytest.fixture(scope="session")
 def tokenizer_gpt2() -> Any:
     """Session-scoped GPT2 tokenizer."""
+    from transformers import AutoTokenizer
+
     tok = AutoTokenizer.from_pretrained("gpt2")
     tok.pad_token = tok.eos_token
     return tok
@@ -63,15 +63,19 @@ def tiny_tokenizer() -> MockTokenizer:
 
 
 @pytest.fixture(scope="session")
-def tiny_compressor(tiny_tokenizer: MockTokenizer) -> CompressedTokenizer:
+def tiny_compressor(tiny_tokenizer: MockTokenizer) -> Any:
     """A CompressedTokenizer using the tiny mock tokenizer (fast)."""
+    from engram_peft.compression import CompressedTokenizer
+
     # Create an actual CompressedTokenizer but with our mock tokenizer to skip loops
     return CompressedTokenizer("mock/tiny", tokenizer=tiny_tokenizer)
 
 
 @pytest.fixture
-def engram_config() -> EngramConfig:
+def engram_config() -> Any:
     """Standard EngramConfig fixture."""
+    from engram_peft.config import EngramConfig
+
     return EngramConfig(
         target_layers=[2, 15],
         ngram_sizes=[2, 3],

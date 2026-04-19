@@ -60,6 +60,33 @@ model.save_pretrained("medical_knowledge_pack")
 
 ---
 
+## Tutorial 1.5: Simplified Training via CLI
+
+For most standard use cases, you don't need to write a custom Python script. Engram-PEFT provides a high-level CLI powered by `typer`.
+
+### 1. The Configuration File
+We provide a standard template in `examples/config.yaml`. It is divided into four main sections:
+- `model_name_or_path`: The base model identifier.
+- `engram_config`: Core hyperparameters for Engram layers.
+- `training_args`: All standard `transformers.TrainingArguments`.
+- `data_args`: Dataset name and tokenization settings.
+
+### 2. Launching Training
+Trigger the training pipeline with a single command:
+```bash
+engram-peft train --config examples/config.yaml
+```
+
+### 3. Quick Overrides
+You can override any nested configuration value using dot notation without editing the YAML file:
+```bash
+engram-peft train --config examples/config.yaml \
+    --overrides "training_args.learning_rate=1e-5" \
+    --overrides "engram_config.target_layers=[2,15,31]"
+```
+
+---
+
 ## Tutorial 2: Injecting Medical Knowledge into Llama-3
 
 Engram is specifically designed to store vast amounts of static knowledge without interfering with the model's original reasoning capabilities.

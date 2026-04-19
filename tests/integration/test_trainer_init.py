@@ -45,7 +45,7 @@ class TestTrainerInit(unittest.TestCase):
 
         args = TrainingArguments(output_dir="tmp_test")
 
-        def mock_init(self, *args: Any, **kwargs: Any) -> None:
+        def mock_init(self: Any, *args: Any, **kwargs: Any) -> None:
             self.model = kwargs.get("model") or (args[0] if len(args) > 0 else None)
             self.args = kwargs.get("args") or (args[1] if len(args) > 1 else None)
             self._initial_weights = {}
@@ -57,9 +57,9 @@ class TestTrainerInit(unittest.TestCase):
             ),
             patch(
                 "engram_peft.trainer.isinstance",
-                side_effect=lambda obj, cls: True
-                if cls == EngramModel
-                else isinstance(obj, cls),
+                side_effect=lambda obj, cls: (
+                    True if cls == EngramModel else isinstance(obj, cls)
+                ),
             ),
             patch(
                 "transformers.Trainer.__init__", autospec=True, side_effect=mock_init

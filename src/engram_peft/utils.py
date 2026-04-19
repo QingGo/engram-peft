@@ -1,5 +1,5 @@
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -400,3 +400,142 @@ def evaluate_model_loss(
 
     metrics = trainer.evaluate()
     return cast("float", metrics.get("eval_loss", 0.0))
+
+
+def compute_grad_norm(parameters: Iterable[torch.nn.Parameter]) -> torch.Tensor | None:
+    """Computes the total gradient norm across dense and sparse parameters."""
+    grads = []
+    for p in parameters:
+        if p.grad is not None:
+            if p.grad.is_sparse:
+                grads.append(p.grad.coalesce().values())
+            else:
+                grads.append(p.grad)
+
+    if not grads:
+        return None
+
+    # Compute the global L2 norm
+    device = grads[0].device
+    # Ensure float32 for norm stability
+    norms = [torch.norm(g.detach().float(), 2).to(device) for g in grads]
+    return cast("torch.Tensor", torch.norm(torch.stack(norms), 2))
+
+
+def apply_group_wise_clipping(
+    groups: dict[str, list[torch.nn.Parameter]],
+    max_norm: float,
+) -> None:
+    """Applies gradient clipping independently to each parameter group."""
+    for _group_name, params in groups.items():
+        if not params:
+            continue
+
+        group_norm = compute_grad_norm(params)
+        if group_norm is None:
+            continue
+
+        clip_coef = max_norm / (group_norm + 1e-6)
+        if clip_coef < 1.0:
+            for p in params:
+                if p.grad is not None:
+                    g = p.grad
+                    if g.is_sparse:
+                        g.coalesce().values().detach().mul_(clip_coef.to(g.device))
+                    else:
+                        g.detach().mul_(clip_coef.to(g.device))
+
+
+def compute_telemetry_stats(
+    groups: dict[str, list[torch.nn.Parameter]],
+    initial_weights: dict[int, torch.Tensor] = None,
+    model_telemetry_stats: dict[str, float] = None,
+    last_ce_loss: float = 0.0,
+    last_entropy_loss: float = 0.0,
+) -> dict[str, float]:
+    """Computes parameter/gradient statistics and weight drift across groups."""
+    stats: dict[str, float] = {}
+    backbone_grad_norm = 0.0
+    engram_grads_list = []
+
+    for group_name, params in groups.items():
+        if not params:
+            continue
+
+        device = next(iter(params)).device
+        sum_sq_p = torch.tensor(0.0, device=device)
+        max_p = torch.tensor(0.0, device=device)
+        total_elements = 0
+        total_zeros = 0.0
+
+        for p in params:
+            p_detached = p.detach().float()
+            sum_sq_p += p_detached.pow(2).sum()
+            max_p = torch.max(max_p, p_detached.abs().max())
+            total_elements += p.numel()
+            total_zeros += (p_detached.abs() < 1e-7).sum().item()
+
+        p_norm = torch.sqrt(sum_sq_p).item()
+        stats[f"telemetry/{group_name}/param_norm"] = p_norm
+        stats[f"telemetry/{group_name}/param_max"] = max_p.item()
+        stats[f"telemetry/{group_name}/param_zero_rate"] = total_zeros / max(
+            1, total_elements
+        )
+
+        # 2. Gradient Stats
+        sum_sq_g = torch.tensor(0.0, device=device)
+        has_g = False
+        for p in params:
+            if p.grad is not None:
+                g = p.grad.detach().float()
+                if g.is_sparse:
+                    g = g.coalesce().values()
+                sum_sq_g += g.pow(2).sum()
+                has_g = True
+
+        if has_g:
+            g_norm = torch.sqrt(sum_sq_g).item()
+            stats[f"telemetry/{group_name}/grad_norm"] = g_norm
+            if group_name == "backbone":
+                backbone_grad_norm = g_norm
+            elif "engram" in group_name:
+                engram_grads_list.append(g_norm)
+
+    # 3. Weight Drift - Engram only
+    if initial_weights:
+        for group_name, params in groups.items():
+            if group_name != "backbone":
+                total_drift = 0.0
+                drift_count = 0
+                for p in params:
+                    pid = id(p)
+                    if pid in initial_weights:
+                        init_p = initial_weights[pid]
+                        total_drift += torch.norm(
+                            p.detach().cpu().float() - init_p.float(), 2
+                        ).item()
+                        drift_count += 1
+                if drift_count > 0:
+                    stats[f"telemetry/{group_name}/weight_drift"] = (
+                        total_drift / drift_count
+                    )
+
+    # 4. Diagnostics
+    stats["telemetry/diagnostics/heartbeat"] = 1.0
+    if engram_grads_list:
+        total_e_norm = (sum(ng**2 for ng in engram_grads_list)) ** 0.5
+        if backbone_grad_norm > 0:
+            stats["telemetry/diagnostics/grad_norm_ratio"] = total_e_norm / (
+                backbone_grad_norm + 1e-8
+            )
+
+    # 5. Model Activation Stats
+    if model_telemetry_stats:
+        for k, v in model_telemetry_stats.items():
+            stats[f"telemetry/{k}"] = v
+
+    # 6. Loss Stats
+    stats["telemetry/loss/ce"] = last_ce_loss
+    stats["telemetry/loss/entropy_penalty"] = last_entropy_loss
+
+    return stats

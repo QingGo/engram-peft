@@ -89,6 +89,26 @@ uv run python examples/cross_tokenizer_migration.py
 
 ---
 
+## 6. YAML Configuration (CLI): `config.yaml`
+
+A declarative way to define training experiments. This allows you to run the standardized `engram-peft train` pipeline without writing custom logic.
+
+### Features
+- **Separation of Concerns**: Decouples model config, training params, and dataset metadata.
+- **Reproducibility**: Easily share specific experiment configurations.
+- **Dynamic Overrides**: Combine the YAML file with CLI-level parameter injection.
+
+### Running the Example
+```bash
+# Start training with the provided configuration template
+engram-peft train --config examples/config.yaml
+
+# Perform a quick learning rate sweep via overrides
+engram-peft train --config examples/config.yaml --overrides "training_args.learning_rate=5e-5"
+```
+
+---
+
 ## 🛠 Prerequisites
 
 The examples require additional libraries (`matplotlib`, `seaborn`, `pandas`, `peft`, `datasets`) which are included in the project's dev dependencies.

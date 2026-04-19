@@ -56,6 +56,18 @@ model.print_trainable_parameters()
 # trainable params: ... (backbone: 0, engram: ...) || all params: ... || trainable%: ...
 ```
 
+### YAML-Driven Training (CLI)
+
+You can also trigger training through a YAML configuration file without writing Python scripts:
+
+```bash
+# 1. Use the standard template
+engram-peft train --config examples/config.yaml
+
+# 2. Override specific arguments on the fly
+engram-peft train --config examples/config.yaml --overrides "training_args.learning_rate=5e-5"
+```
+
 ---
 
 ## 📊 Performance Comparison

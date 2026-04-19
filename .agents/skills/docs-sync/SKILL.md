@@ -18,7 +18,7 @@ globs: "src/engram_peft/**/*.py, docs/**/*.md, README.md, README_zh.md"
 - 修复了示例中的错误 → 同时更新文档中的对应部分
 
 ## 3. README 更新
-- 项目的核心功能或特性发生变化 → 更新 README.md 和 README_zh.md
+- 项目的核心功能或特性发生变化 → 更新 README.md（英文） 和 README_zh.md（中文）
 - 性能基准更新 → 更新 README 中的性能对比表格
 - 安装步骤变更 → 更新 README 中的 Quick Start 部分
 

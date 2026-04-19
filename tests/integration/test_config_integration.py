@@ -2,6 +2,8 @@ import os
 import tempfile
 import unittest
 
+from transformers import PretrainedConfig
+
 from engram_peft.config import EngramConfig
 
 
@@ -71,6 +73,38 @@ class TestEngramConfig(unittest.TestCase):
         # Ensure unchanged items remain default
         self.assertEqual(config.embedding_dim, 1280)
         self.assertEqual(config.n_head_per_ngram, 8)
+
+    def test_transformers_compatibility(self) -> None:
+        """测试用例 4：验证与 transformers 的 PretrainedConfig 生态兼容"""
+        config = EngramConfig(
+            embedding_dim=512,
+            return_dict=False,
+            output_hidden_states=True,
+            use_cache=False,
+        )
+
+        # Check dataclass attribute
+        self.assertEqual(config.embedding_dim, 512)
+
+        # Check base PretrainedConfig attributes
+        self.assertEqual(config.return_dict, False)
+        self.assertEqual(config.output_hidden_states, True)
+        self.assertEqual(config.use_cache, False)
+
+        # Check serialization contains both
+        config_dict = config.to_dict()
+        self.assertEqual(config_dict["embedding_dim"], 512)
+        self.assertEqual(config_dict["return_dict"], False)
+        self.assertEqual(config_dict["output_hidden_states"], True)
+
+        # Check round-trip from dictionary via from_dict
+        loaded_config = EngramConfig.from_dict(config_dict)
+        self.assertEqual(loaded_config.embedding_dim, 512)
+        self.assertEqual(loaded_config.return_dict, False)
+        self.assertEqual(loaded_config.output_hidden_states, True)
+
+        # Check instance is of PretrainedConfig
+        self.assertIsInstance(loaded_config, PretrainedConfig)
 
 
 if __name__ == "__main__":

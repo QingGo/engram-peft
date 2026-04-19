@@ -157,3 +157,4 @@ docs/note.md
 scripts/
 wandb/
 .agent_memory.md
+t_*.py

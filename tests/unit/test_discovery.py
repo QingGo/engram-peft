@@ -3,7 +3,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 import torch.nn as nn
-from transformers import AutoConfig, AutoModel
 
 from engram_peft.config import EngramConfig
 from engram_peft.model import EngramModel, get_engram_model

@@ -1,0 +1,33 @@
+# Example configuration for engram-peft train CLI
+# Usage: engram-peft train --config examples/config.yaml
+
+model_name_or_path: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
+engram_config:
+  engram_vocab_size_per_ngram: [512000, 512000]
+  ngram_sizes: [2, 3]
+  target_layers: [2, 15]
+  embedding_dim: 1024
+  learning_rate_multiplier: 5.0
+  enable_telemetry: true
+
+training_args:
+  output_dir: "outputs/tinyllama-engram"
+  num_train_epochs: 1
+  max_steps: 100
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 4
+  learning_rate: 0.0002
+  weight_decay: 0.01
+  warmup_steps: 10
+  logging_steps: 10
+  save_steps: 50
+  eval_strategy: "no"
+  save_total_limit: 2
+  bf16: true
+  report_to: "none"
+
+data_args:
+  dataset_name: "tatsu-lab/alpaca"
+  text_column: "text"
+  max_length: 512

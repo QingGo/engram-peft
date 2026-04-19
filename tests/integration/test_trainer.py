@@ -127,6 +127,8 @@ def test_engram_trainer_compute_loss_fair_comparison(tmp_path: str) -> None:
         model.eval()
         eval_loss = trainer.compute_loss(model, inputs)
         # 评估损耗应等于纯 CE 损耗 (2.0)
+        if isinstance(eval_loss, tuple):
+            eval_loss = eval_loss[0]
         assert torch.allclose(eval_loss, mock_ce_loss)
         assert trainer._last_ce_loss == 2.0
         assert trainer._last_entropy_loss > 0  # 即使不返回，内部也应计算了惩罚
@@ -135,6 +137,8 @@ def test_engram_trainer_compute_loss_fair_comparison(tmp_path: str) -> None:
         model.train()
         train_loss = trainer.compute_loss(model, inputs)
         # 训练损耗应大于纯 CE 损耗 (2.0 + penalty)
+        if isinstance(train_loss, tuple):
+            train_loss = train_loss[0]
         assert train_loss.item() > mock_ce_loss.item()
 
         assert train_loss.item() == approx(

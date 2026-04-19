@@ -56,6 +56,18 @@ model.print_trainable_parameters()
 # trainable params: ... (backbone: 0, engram: ...) || all params: ... || trainable%: ...
 ```
 
+### YAML 配置驱动训练 (CLI)
+
+除了 Python 脚本，您也可以直接通过 YAML 配置文件触发训练，无需编写任何代码：
+
+```bash
+# 1. 使用标准配置模板
+engram-peft train --config examples/config.yaml
+
+# 2. 在运行时动态覆盖特定参数
+engram-peft train --config examples/config.yaml --overrides "training_args.learning_rate=5e-5"
+```
+
 ---
 
 ## 📊 性能对比

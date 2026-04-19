@@ -79,7 +79,7 @@ def test_trainer_telemetry_collection(tmp_path: Any) -> None:
         "engram_sparse": [model.sparse_param],
     }
 
-    def mock_init(self, *args: Any, **kwargs: Any) -> None:
+    def mock_init(self: Any, *args: Any, **kwargs: Any) -> None:
         self.model = kwargs.get("model") or (args[0] if len(args) > 0 else None)
         self.args = kwargs.get("args") or (args[1] if len(args) > 1 else None)
         self._initial_weights = {}
