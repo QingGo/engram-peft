@@ -52,7 +52,7 @@ lora_config:
 
 training_args:
   # Directory where checkpoints and the final adapter will be saved.
-  output_dir: ./outputs
+  output_dir: "./outputs/tinyllama-lora-engram"
 
   # Base learning rate for the entire model (scaled by multipliers internally).
   learning_rate: 0.0002

@@ -1,28 +1,39 @@
+from pathlib import Path
+from typing import Any, cast
+
 import torch
+from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from engram_peft.model import EngramModel
 
 # 1. Setup paths
 model_id = "{{MODEL_NAME}}"
-adapter_path = "."  # Current directory where this script is located
+# Automatically find the adapter directory where this script is located
+adapter_path = Path(__file__).parent
 
-print(f"[*] Loading model and Engram adapter from {adapter_path}...")
+print(f"[*] Loading model and adapters from {adapter_path}...")
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 # Standard practice for Llama/TinyLlama models which don't have a pad token
 if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
+# 2. Load Base Model and PEFT (LoRA) if exists
 base_model = AutoModelForCausalLM.from_pretrained(
     model_id, torch_dtype="auto", device_map="auto"
 )
 
-# 2. Load Engram-augmented model
-model = EngramModel.from_pretrained(base_model, adapter_path, tokenizer=tokenizer)
+# Check if there is a LoRA adapter (PeftModel) in the same directory
+if (adapter_path / "adapter_config.json").exists():
+    print("[*] Detected LoRA adapter. Loading PEFT model...")
+    base_model = cast("Any", PeftModel.from_pretrained(base_model, str(adapter_path)))
+
+# 3. Load Engram-augmented model
+model = EngramModel.from_pretrained(base_model, str(adapter_path), tokenizer=tokenizer)
 model.eval()
 
-# 3. Quick test
+# 4. Quick test
 prompt = "What is the secret of life?"
 inputs = tokenizer(prompt, return_tensors="pt").to(model.base_model.device)
 

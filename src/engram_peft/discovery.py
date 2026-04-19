@@ -256,15 +256,30 @@ class ArchitectureResolver:
 
     @staticmethod
     def get_submodule_by_path(model: nn.Module, path: str) -> nn.Module:
-        """Returns the submodule at the given dot-separated path."""
+        """
+        Returns the submodule at the given dot-separated path.
+        Automatically traverses through common wrappers like PeftModel or EngramModel
+        if an attribute is missing on the wrapper but present in the base_model.
+        """
         if not path:
             return model
         segments = path.split(".")
         curr = model
         for seg in segments:
             if not hasattr(curr, seg):
+                # Check for PEFT/Engram wrappers
+                if hasattr(curr, "base_model") and isinstance(
+                    getattr(curr, "base_model", None), nn.Module
+                ):
+                    base = curr.base_model
+                    if hasattr(base, seg):
+                        curr = getattr(base, seg)
+                        continue
+
                 raise AttributeError(
-                    f"Module {type(curr).__name__} has no attribute {seg}"
+                    f"Module {type(curr).__name__} has no attribute {seg}. "
+                    "Traversal failed at this segment. If this is a wrapped model, "
+                    "ensure the path reflects the wrapped structure or update ArchitectureResolver."
                 )
             curr = getattr(curr, seg)
         return curr

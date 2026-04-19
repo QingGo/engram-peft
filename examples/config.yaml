@@ -13,7 +13,7 @@ lora_config:
   target_modules: ["q_proj", "v_proj"]
 
 training_args:
-  output_dir: "./outputs/tinyllama-engram"
+  output_dir: "./outputs/tinyllama-lora-engram"
   max_steps: 100
   save_strategy: "no"
   learning_rate: 0.0002
