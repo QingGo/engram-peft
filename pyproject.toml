@@ -49,6 +49,8 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 exclude = ["\\.venv", "build", "dist"]
+# 1. 开启 SQLite 缓存（加速本地冷启动）
+sqlite_cache = true
 
 [[tool.mypy.overrides]]
 module = [

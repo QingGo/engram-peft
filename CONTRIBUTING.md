@@ -20,13 +20,13 @@ All contributors (including AI Agents) should follow these layers of verificatio
 
 ### L3: Deep Verification (Deep Logic)
 - **Tools**: Mypy & sprintest (Unit)
-- **Command**: `uv run sprintest tests/unit && uv run mypy src/ tests/ examples/`
+- **Command**: `make type-check && make test-unit`
 - **Goal**: Ensure 100% type safety in `src/` and verify core logic in <2 seconds.
 - **Philosophy**: Use the `tiny_tokenizer` and `tiny_compressor` fixtures for fast unit testing.
 
 ### L4: Integration & Regression (Full Fidelity)
 - **Tool**: sprintest (Integration)
-- **Command**: `uv run sprintest tests/integration`
+- **Command**: `make test-integ`
 - **Goal**: Verify algorithmic correctness using real-world models (GPT2, DeepSeek) and 32-layer weight migrations.
 - **Frequency**: Run before submitting a PR or releasing a version.
 
@@ -55,8 +55,21 @@ Before using `sprintest` to run tests, you **MUST** start the Daemon in the back
 
 ```bash
 # Start the test acceleration server
-SPRINTEST_TARGET_PKG=engram-peft sprintest-daemon
+make test-daemon
 ```
+
+### Makefile Shortcuts
+
+For a better development experience, use the provided `Makefile` targets:
+
+| Command | Action |
+| :--- | :--- |
+| `make lint` | Check style |
+| `make format` | Fix and format code |
+| `make type-check` | Incremental type checking |
+| `make test-unit` | Run fast unit tests |
+| `make test-integ` | Run slow integration tests |
+| `make all` | Run everything before PR |
 
 ### Core Advantages
 
