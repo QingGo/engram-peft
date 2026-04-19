@@ -9,6 +9,7 @@ from transformers import PretrainedConfig, PreTrainedModel
 
 from engram_peft.config import EngramConfig
 from engram_peft.model import EngramModel, get_engram_model
+from engram_peft.saving import ADAPTER_SAFE_NAME
 
 if TYPE_CHECKING:
     from engram_peft.layer import EngramLayer
@@ -195,7 +196,7 @@ def test_save_load_consistency() -> None:
 
         # Check raw files exist
         assert os.path.exists(os.path.join(temp_dir, "config.json"))
-        assert os.path.exists(os.path.join(temp_dir, "engram_weights.pt"))
+        assert os.path.exists(os.path.join(temp_dir, ADAPTER_SAFE_NAME))
 
         # Load into new model
         base_model_new = MockPreTrainedModel(MockModelConfig(), hidden_size=32)

@@ -100,6 +100,7 @@ A declarative way to define training experiments. This allows you to run the sta
 
 ### Running the Example
 ```bash
+# source .venv/bin/activate
 # Start training with the provided configuration template
 engram-peft train --config examples/config.yaml
 

@@ -19,14 +19,14 @@ All contributors (including AI Agents) should follow these layers of verificatio
   - **Ruff (Lint)**: Auto-sorts imports and fixes simple logic errors (unused variables, etc.).
 
 ### L3: Deep Verification (Deep Logic)
-- **Tools**: Mypy & Pytest (Unit)
-- **Command**: `uv run pytest tests/unit && uv run mypy src/ tests/ examples/`
+- **Tools**: Mypy & sprintest (Unit)
+- **Command**: `uv run sprintest tests/unit && uv run mypy src/ tests/ examples/`
 - **Goal**: Ensure 100% type safety in `src/` and verify core logic in <2 seconds.
 - **Philosophy**: Use the `tiny_tokenizer` and `tiny_compressor` fixtures for fast unit testing.
 
 ### L4: Integration & Regression (Full Fidelity)
-- **Tool**: Pytest (Integration)
-- **Command**: `uv run pytest tests/integration`
+- **Tool**: sprintest (Integration)
+- **Command**: `uv run sprintest tests/integration`
 - **Goal**: Verify algorithmic correctness using real-world models (GPT2, DeepSeek) and 32-layer weight migrations.
 - **Frequency**: Run before submitting a PR or releasing a version.
 
@@ -42,6 +42,27 @@ All contributors (including AI Agents) should follow these layers of verificatio
 - Follow PEP 8 (handled by Ruff).
 - Docstrings are encouraged for all public APIs.
 - Type hints are **mandatory** for all code in `src/`. For `tests/`, return types are optional but recommended for clarity.
+
+---
+
+## ⚡ Sprintest (Test Acceleration)
+
+Sprintest is a C/S (Client/Server) architecture test runner specifically designed for heavy AI projects. By keeping large models and datasets in memory, it eliminates the test startup latency caused by slow loading.
+
+### Usage
+
+Before using `sprintest` to run tests, you **MUST** start the Daemon in the background or in a new terminal:
+
+```bash
+# Start the test acceleration server
+SPRINTEST_TARGET_PKG=engram-peft sprintest-daemon
+```
+
+### Core Advantages
+
+- **Pre-loading**: Loads heavy dependencies (e.g., PyTorch, Transformers, or large datasets) into the daemon process, reducing test startup time from minutes to seconds.
+- **Powerful Hot-reloading**: Automatically detects and clears modified modules in the current directory, ensuring tests run on the latest code without restarting the daemon.
+- **Agent Friendly**: Designed for AI coding assistants—providing fast feedback loops, clean output (no ANSI characters), and stable communication.
 
 ---
 

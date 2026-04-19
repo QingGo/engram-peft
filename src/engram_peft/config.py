@@ -152,6 +152,10 @@ class EngramConfig(PretrainedConfig):
             "help": "Number of initial steps to freeze the backbone for 'Adapter-First' pre-training."
         },
     )
+    engram_version: str = field(
+        default="1.2.1",
+        metadata={"help": "The version of the Engram state file format."},
+    )
 
     def __init__(
         self,
@@ -178,6 +182,7 @@ class EngramConfig(PretrainedConfig):
         enable_telemetry: bool = False,
         entropy_loss_weight: float = 0.0,
         backbone_freeze_steps: int = 0,
+        engram_version: str = "1.2.1",
         **kwargs: Any,
     ):
         """Constructs EngramConfig.
@@ -256,6 +261,7 @@ class EngramConfig(PretrainedConfig):
         self.enable_telemetry = enable_telemetry
         self.entropy_loss_weight = entropy_loss_weight
         self.backbone_freeze_steps = backbone_freeze_steps
+        self.engram_version = engram_version
 
         super().__init__(**kwargs)
         # Ensure extra kwargs are set, as PretrainedConfig might miss them in some environments

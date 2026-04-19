@@ -448,8 +448,8 @@ def apply_group_wise_clipping(
 
 def compute_telemetry_stats(
     groups: dict[str, list[torch.nn.Parameter]],
-    initial_weights: dict[int, torch.Tensor] = None,
-    model_telemetry_stats: dict[str, float] = None,
+    initial_weights: dict[int, torch.Tensor] | None = None,
+    model_telemetry_stats: dict[str, float] | None = None,
     last_ce_loss: float = 0.0,
     last_entropy_loss: float = 0.0,
 ) -> dict[str, float]:

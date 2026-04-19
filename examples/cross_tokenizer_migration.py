@@ -90,10 +90,9 @@ def main() -> None:
         )
 
         # Use raw text corpus to bridge the two tokenizers
+        # 3. Perform Cross-Tokenizer Remapping
         corpus_text = ["Machine Learning"]
-        target_model.remap_from_corpus(
-            corpus_text, os.path.join(save_dir, "engram_weights.pt")
-        )
+        target_model.remap_from_corpus(corpus_text, save_dir)
 
     # 4. Verification
     target_emb = target_model.engram_layers[

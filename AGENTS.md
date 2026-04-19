@@ -36,7 +36,7 @@
 ---
 
 ## 4. 目录结构与包管理
-- **包管理**：本项目严格由 `uv` 进行环境和包管理。执行任何 Python 相关命令时，请优先使用 `uv run`。绝对禁止使用 `pip` 或直接修改 `uv.lock`。
+- **包管理**：本项目严格由 `uv` 进行环境和包管理。执行任何 Python 相关命令时，请优先使用 `uv run`。绝对禁止使用 `pip` 或直接修改 `uv.lock`。可以通过 `source .venv/bin/activate` 激活虚拟环境。
 - **代码组织**：
   - 核心源代码：`src/engram_peft/`
   - 示例代码：`examples/`
@@ -74,7 +74,7 @@
 **5.5 强制验证与安全终端输出**
 完成代码修改后，你必须主动运行命令验证测试是否修复、静态检测是否通过。**注意保护上下文窗口**：为防止 PyTorch 长报错撑爆上下文，执行测试时必须限制输出行数：
 ```bash
-uv run pytest tests/unit --cov=src/engram_peft --cov-report=term-missing --durations=5 | tail -n 500 && uv run mypy src/ tests/ examples/
+uv run sprintest tests/unit --cov=src/engram_peft --cov-report=term-missing --durations=5 | tail -n 500 && uv run mypy src/ tests/ examples/
 ```
 
 ---

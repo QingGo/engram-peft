@@ -9,6 +9,7 @@ import torch.nn as nn
 
 from engram_peft.config import EngramConfig
 from engram_peft.model import EngramModel, get_engram_model
+from engram_peft.saving import ADAPTER_SAFE_NAME
 
 
 class MockTransformerBlock(nn.Module):
@@ -111,7 +112,7 @@ def test_save_load_consistency() -> None:
     try:
         engram_model.save_pretrained(temp_dir)
         assert os.path.exists(os.path.join(temp_dir, "config.json"))
-        assert os.path.exists(os.path.join(temp_dir, "engram_weights.pt"))
+        assert os.path.exists(os.path.join(temp_dir, ADAPTER_SAFE_NAME))
 
         base_model_new = MockModel(hidden_size=32)
         loaded_model = EngramModel.from_pretrained(base_model_new, temp_dir)

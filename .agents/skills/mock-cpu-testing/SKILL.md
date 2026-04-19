@@ -40,7 +40,7 @@ dummy_input = torch.randn(batch_size, seq_len, hidden_size)
 ## 4. 覆盖率与回归验证
 - 运行测试时必须附带覆盖率检查：
   ```bash
-  uv run pytest tests/unit --cov=src/engram_peft --cov-report=term-missing
+  uv run sprintest tests/unit --cov=src/engram_peft --cov-report=term-missing
   ```
 - 所有新增代码必须被测试覆盖
 - 修复Bug前必须先写一个失败的测试用例复现问题

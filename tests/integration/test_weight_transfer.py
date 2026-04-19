@@ -84,9 +84,7 @@ def test_weight_transfer_full_integration(heavy_tmp_dir: Path) -> None:
     )
     target_model = get_engram_model(base_model, target_config)
 
-    target_model.load_weights_flexible(
-        str(src_path / "engram_weights.pt"), layer_mapping={0: 31}
-    )
+    target_model.load_weights_flexible(str(src_path), layer_mapping={0: 31})
 
     assert "31" in target_model.engram_layers
     target_emb = target_model.engram_layers[
@@ -123,9 +121,7 @@ def test_corpus_remapping_integration(heavy_tmp_dir: Path, tokenizer_gpt2: Any) 
     target_model = get_engram_model(base_model, target_config, tokenizer=tokenizer_gpt2)
 
     text = "The quick brown fox jumps over the lazy dog."
-    target_model.remap_from_corpus(
-        [text], str(src_path / "engram_weights.pt"), tokenizer=tokenizer_gpt2
-    )
+    target_model.remap_from_corpus([text], str(src_path), tokenizer=tokenizer_gpt2)
 
     target_emb = target_model.engram_layers[
         "0"

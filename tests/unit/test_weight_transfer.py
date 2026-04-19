@@ -77,9 +77,7 @@ def test_layer_and_capacity_mapping(tmp_dir: Path, base_model: DummyModel) -> No
         enable_tokenizer_compression=False,
     )
     target_model = get_engram_model(base_model, target_config)
-    target_model.load_weights_flexible(
-        str(src_path / "engram_weights.pt"), layer_mapping={0: 1}
-    )
+    target_model.load_weights_flexible(str(src_path), layer_mapping={0: 1})
 
     src_emb = src_model.engram_layers["0"].multi_head_embedding.embedding.weight.data
     target_emb = target_model.engram_layers[
@@ -117,7 +115,7 @@ def test_ngram_subset_mapping(tmp_dir: Path, base_model: DummyModel) -> None:
         enable_tokenizer_compression=False,
     )
     target_model = get_engram_model(base_model, target_config)
-    target_model.load_weights_flexible(str(src_path / "engram_weights.pt"))
+    target_model.load_weights_flexible(str(src_path))
 
     src_emb = src_model.engram_layers["0"].multi_head_embedding.embedding.weight.data
     target_emb = target_model.engram_layers[
@@ -154,7 +152,7 @@ def test_corpus_remapping(tmp_dir: Path, base_model: DummyModel) -> None:
     target_model = get_engram_model(base_model, target_config)
 
     tokens = torch.randint(0, 100, (10,))
-    target_model.remap_from_corpus(tokens, str(src_path / "engram_weights.pt"))
+    target_model.remap_from_corpus(tokens, str(src_path))
 
     target_emb = target_model.engram_layers[
         "0"
@@ -208,7 +206,7 @@ def test_cross_tokenizer_remapping(tmp_dir: Path, base_model: DummyModel) -> Non
         mock_from_pretrained.side_effect = lambda name, **kwargs: (
             src_mock_tokenizer if "source" in name else target_mock_tokenizer
         )
-        target_model.remap_from_corpus(["Apple"], str(src_path / "engram_weights.pt"))
+        target_model.remap_from_corpus(["Apple"], str(src_path))
 
     target_emb = target_model.engram_layers[
         "0"

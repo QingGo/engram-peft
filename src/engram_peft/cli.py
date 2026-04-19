@@ -14,6 +14,15 @@ from engram_peft.trainer import EngramTrainer
 
 app = typer.Typer(help="Engram-PEFT Command Line Interface")
 
+
+@app.callback()
+def callback() -> None:
+    """
+    Engram-PEFT: Sparse Memory Injection for Parameter-Efficient Fine-Tuning.
+    """
+    pass
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -168,6 +177,12 @@ def train(
     assert out_dir is not None, "training_args.output_dir must be specified"
     model.save_pretrained(out_dir)
     typer.secho("Success: Training complete.", fg=typer.colors.GREEN, bold=True)
+
+
+@app.command()
+def evaluate() -> None:
+    """[Placeholder] Evaluates an Engram-augmented model on a test set."""
+    typer.echo("Evaluate functionality coming soon...")
 
 
 if __name__ == "__main__":

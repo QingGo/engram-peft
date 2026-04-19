@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
+from engram_peft import saving
 from engram_peft.compression import CompressedTokenizer
 from engram_peft.config import EngramConfig
 from engram_peft.discovery import ArchitectureResolver
@@ -383,12 +384,7 @@ class EngramModel(nn.Module):
         self.unload_engram()
 
         if engram_path is not None:
-            weights_path = os.path.join(engram_path, "engram_weights.pt")
-            if os.path.exists(weights_path):
-                state_dict = torch.load(
-                    weights_path, map_location="cpu", weights_only=True
-                )
-                self.engram_layers.load_state_dict(state_dict)
+            saving.load_engram_weights(self, engram_path)
 
         layers = self._find_transformer_layers()
 
@@ -507,20 +503,31 @@ class EngramModel(nn.Module):
             optimizer, num_training_steps=num_training_steps, warmup_steps=warmup_steps
         )
 
-    def save_pretrained(self, save_directory: str) -> None:
+    def save_pretrained_engram(
+        self, save_directory: str, safe_serialization: bool = True
+    ) -> None:
         """
         Saves only the Engram configurations and explicitly the Engram layers' weights.
         """
-        os.makedirs(save_directory, exist_ok=True)
-        self.config.save_pretrained(save_directory)
+        saving.save_pretrained_engram(
+            self, save_directory, safe_serialization=safe_serialization
+        )
 
-        weights_path = os.path.join(save_directory, "engram_weights.pt")
-        torch.save(self.engram_layers.state_dict(), weights_path)
+    def save_pretrained(
+        self, save_directory: str, safe_serialization: bool = True, **kwargs: Any
+    ) -> None:
+        """
+        Saves the Engram configurations and weights. If the base model is a PeftModel,
+        this will also save the base model's adapters.
+        """
+        saving.save_pretrained_unified(
+            self, save_directory, safe_serialization=safe_serialization, **kwargs
+        )
 
     @classmethod
     def from_pretrained(
         cls,
-        base_model: PreTrainedModel,
+        base_model: PreTrainedModel | torch.nn.Module,
         engram_path: str,
         tokenizer: PreTrainedTokenizerBase | None = None,
     ) -> "EngramModel":
@@ -545,7 +552,11 @@ class EngramModel(nn.Module):
         best-effort alignment.
         """
         if source_config_path is None:
-            source_config_dir = os.path.dirname(checkpoint_path)
+            source_config_dir = (
+                checkpoint_path
+                if os.path.isdir(checkpoint_path)
+                else os.path.dirname(checkpoint_path)
+            )
             source_config_path = os.path.join(source_config_dir, "config.json")
 
         if not os.path.exists(source_config_path):
@@ -569,9 +580,7 @@ class EngramModel(nn.Module):
         )
         target_mapper = self.hash_mapping
 
-        src_state_dict = torch.load(
-            checkpoint_path, map_location="cpu", weights_only=True
-        )
+        src_state_dict = saving.load_engram_state_dict(checkpoint_path)
         mapping = get_layer_mapping(
             src_config.target_layers, self.config.target_layers, layer_mapping
         )
@@ -638,13 +647,15 @@ class EngramModel(nn.Module):
         If corpus is List[str], it performs cross-tokenizer alignment.
         """
         if source_config_path is None:
-            source_config_dir = os.path.dirname(checkpoint_path)
+            source_config_dir = (
+                checkpoint_path
+                if os.path.isdir(checkpoint_path)
+                else os.path.dirname(checkpoint_path)
+            )
             source_config_path = os.path.join(source_config_dir, "config.json")
 
         src_config = EngramConfig.from_pretrained(os.path.dirname(source_config_path))
-        src_state_dict = torch.load(
-            checkpoint_path, map_location="cpu", weights_only=True
-        )
+        src_state_dict = saving.load_engram_state_dict(checkpoint_path)
 
         new_emb_weights = remap_weights_from_corpus(
             self,

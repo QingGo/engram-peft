@@ -72,10 +72,9 @@ def main() -> None:
         "Target model (Layers 5, 6) initialized with larger buckets and more branches."
     )
 
-    # 3. Perform Flexible Loading
-    checkpoint_path = os.path.join(save_dir, "engram_weights.pt")
+    # 3. Perform Flexible Loading (into model with different config)
     target_model.load_weights_flexible(
-        checkpoint_path,
+        save_dir,
         layer_mapping={0: 5, 1: 6},
         reuse_structural=False,  # Gating/Conv will be zero-initialized
     )
