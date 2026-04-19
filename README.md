@@ -63,11 +63,25 @@ You can also trigger training through a YAML configuration file without writing 
 ```bash
 # 1. Generate a full, documented configuration template
 engram-peft config-template --output training_config.yaml
+```
+
+The generated YAML is structured into five main sections:
+- `model_name_or_path`: Base model identifier.
+- `engram_config`: Core hyperparameters for Engram layers.
+- `lora_config`: (Optional) PEFT LoRA settings for hybrid adaptation.
+- `training_args`: Standard `transformers.TrainingArguments`.
+- `data_args`: Dataset settings and tokenization logic.
 
 # 2. Launch training using the YAML file (or our minimal examples/config.yaml)
 engram-peft train --config training_config.yaml
 
-# 3. Override specific arguments on the fly
+# 3. Post-Training Inference
+The CLI automatically generates a ready-to-run `inference.py` script in your `output_dir`.
+```bash
+uv run python outputs/tinyllama-lora-engram/inference.py
+```
+
+# 4. Override specific arguments on the fly
 engram-peft train --config training_config.yaml --overrides "training_args.learning_rate=5e-5"
 ```
 
@@ -105,7 +119,10 @@ engram-peft train --config training_config.yaml --overrides "training_args.learn
 - **Layered Optimizer Control**: Configure separate optimizers for backbone, Engram dense layers, and Engram sparse embeddings.
 - **Named Adapters**: Industry-standard named adapter management (add/set/unload) for modular knowledge packs.
 - **Automated Training**: Native `EngramTrainer` with built-in sparse Adam support and automatic sync of optimizer hyperparameters.
+- **YAML-Driven CLI**: Fully declarative training workflow via YAML configurations with dynamic parameter overrides.
+- **Automated Inference Generation**: Progress-tracking CLI that automatically creates ready-to-run `inference.py` scripts for immediate verification.
 - **Flexible Layer Discovery**: Recursive logic to find transformer layers regardless of PEFT wrapper nesting.
+- **Mainstream Model Templates**: Out-of-the-box scripts for **Qwen 3.5-4B**, **Ministral-3-3B**, and **Gemma-4-E2B** with quantization support.
 
 ---
 

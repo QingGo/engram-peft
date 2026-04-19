@@ -63,11 +63,25 @@ model.print_trainable_parameters()
 ```bash
 # 1. 生成包含完整注释的配置模板
 engram-peft config-template --output training_config.yaml
+```
+
+生成的 YAML 文件包含五个核心区块：
+- `model_name_or_path`: 基础模型路径或 ID。
+- `engram_config`: Engram 层的核心超参数。
+- `lora_config`: (可选) PEFT LoRA 设置，用于混合适配。
+- `training_args`: 标准的 `transformers.TrainingArguments` 训练参数。
+- `data_args`: 数据集设置与分词逻辑。
 
 # 2. 使用配置文件（或极简的 examples/config.yaml）启动训练
 engram-peft train --config training_config.yaml
 
-# 3. 在运行时动态覆盖特定参数
+# 3. 训练后推理
+CLI 会在您的 `output_dir` 中自动生成一个随时可用的 `inference.py` 脚本：
+```bash
+uv run python outputs/tinyllama-lora-engram/inference.py
+```
+
+# 4. 在运行时动态覆盖特定参数
 engram-peft train --config training_config.yaml --overrides "training_args.learning_rate=5e-5"
 ```
 
@@ -105,7 +119,10 @@ engram-peft train --config training_config.yaml --overrides "training_args.learn
 - **分层优化器控制**：可分别为 backbone、Engram dense 层和 Engram sparse embedding 配置不同优化器。
 - **命名适配器 (Named Adapters)**：完全兼容 PEFT 风格的 Adapter 管理（add/set/unload），支持多领域知识包并行管理。
 - **自动化训练流程**：内置 `EngramTrainer`，自动处理稀疏 Adam 优化、梯度管理与学习率倍率同步。
+- **YAML 驱动的 CLI**：完全声明式的训练工作流，支持 YAML 配置与动态参数覆盖。
+- **自动化推理脚本生成**：CLI 会在训练完成后自动生成可立即运行的 `inference.py` 脚本，方便快速验证。
 - **灵活的层发现 (Flexible Layer Discovery)**：采用递归逻辑定位 Transformer 层，无视 PEFT 包装嵌套深度。
+- **主流模型开箱即用模板**：提供 **Qwen 3.5-4B**、**Ministral-3-3B** 和 **Gemma-4-E2B** 的训练与推理脚本，内置量化支持。
 
 ---
 

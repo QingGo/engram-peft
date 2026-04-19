@@ -100,7 +100,9 @@ A declarative way to define training experiments. This allows you to run the sta
 
 ### Running the Example
 ```bash
-# source .venv/bin/activate
+# Recommended: Generate a fresh template to see all options
+engram-peft config-template --output my_experiment.yaml
+
 # Start training with the provided configuration template
 engram-peft train --config examples/config.yaml
 
@@ -110,9 +112,38 @@ engram-peft train --config examples/config.yaml --overrides "training_args.learn
 
 ---
 
+## 7. Mainstream Model Templates (Training + Inference)
+
+These scripts provide ready-to-use templates for the latest mainstream models in the ecosystem. They demonstrate combined **LoRA + Engram** fine-tuning on the Alpaca instruction dataset.
+
+### Models Covered
+- **Qwen 3.5-4B**: `examples/qwen3_engram_lora.py`
+- **Ministral-3-3B**: `examples/mistral3_engram_lora.py`
+- **Gemma-4-E2B**: `examples/gemma4_engram_lora.py`
+
+### Key Features
+- **Bitsandbytes Support**: Built-in `--load_in_4bit` and `--load_in_8bit` flags for consumer GPU compatibility.
+- **Instruct Formatting**: Uses model-specific chat templates (e.g., `[INST]` for Mistral, `<start_of_turn>` for Gemma).
+- **Combined Training**: Jointly optimizes LoRA adapters (for task style) and Engram layers (for factual memory).
+- **Inference Demo**: Includes a post-training generation hook to verify adapter functionality.
+
+### Running Examples
+```bash
+# Run Qwen 3.5 with 4-bit quantization and 300 steps
+uv run python examples/qwen3_engram_lora.py --load_in_4bit --max_steps 300
+
+# Run Ministral 3 with 8-bit quantization
+uv run python examples/mistral3_engram_lora.py --load_in_8bit
+
+# Run Gemma 4 with custom learning rate
+uv run python examples/gemma4_engram_lora.py --lr 1e-4
+```
+
+---
+
 ## 🛠 Prerequisites
 
-The examples require additional libraries (`matplotlib`, `seaborn`, `pandas`, `peft`, `datasets`) which are included in the project's dev dependencies.
+The examples require additional libraries (`matplotlib`, `seaborn`, `pandas`, `peft`, `datasets`, `bitsandbytes`, `accelerate`) which are included in the project's dev dependencies.
 
 Ensure your environment is synchronized:
 ```bash

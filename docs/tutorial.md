@@ -74,6 +74,7 @@ engram-peft config-template --output my_config.yaml
 The generated file is divided into four main sections with detailed comments:
 - `model_name_or_path`: The base model identifier.
 - `engram_config`: Core hyperparameters for Engram layers.
+- `lora_config`: (Optional) PEFT LoRA settings for hybrid adaptation.
 - `training_args`: All standard `transformers.TrainingArguments`.
 - `data_args`: Dataset name and tokenization settings.
 
@@ -83,7 +84,15 @@ Trigger the training pipeline using your configuration file:
 engram-peft train --config my_config.yaml
 ```
 
-### 3. Quick Overrides
+### 3. Automated Inference Script
+Once training is complete, the CLI automatically generates a ready-to-run `inference.py` script inside your `output_dir`. You can immediately test your trained model:
+
+```bash
+# Assuming output_dir is ./outputs/tinyllama-engram
+uv run python outputs/tinyllama-engram/inference.py
+```
+
+### 4. Quick Overrides
 You can override any nested configuration value using dot notation without editing the YAML file:
 ```bash
 engram-peft train --config my_config.yaml \
@@ -319,9 +328,20 @@ You can also run specific methods or perform hyperparameter sweeps (e.g., compar
 uv run python examples/compare_engram_lora.py --methods engram:target_layers=[2,11] engram:target_layers=[11,21] 
 ```
 
-### 3. Visualizing Results
-After the run is complete, the script automatically generates a comparison plot in `outputs/benchmarks/loss_curve.png`. To re-plot historical data, use:
+---
 
+## Tutorial 9: Production-Ready Mainstream Model Examples
+
+For users looking to deploy Engram-PEFT with state-of-the-art models, we provide comprehensive templates for **Qwen 3.5**, **Ministral 3**, and **Gemma 4**. These scripts are located in the `examples/` directory and feature out-of-the-box support for:
+
+1.  **Instruction Tuning**: Ready-made prompt templates for common chat formats.
+2.  **Quantized Training**: Integration with `bitsandbytes` for 4-bit and 8-bit fine-tuning, enabling training on consumer GPUs.
+3.  **Hybrid Adapters**: Demonstrates how to use LoRA for task-specific behavior while using Engram for massive knowledge storage.
+
+### Running a Template
 ```bash
-uv run python examples/compare_engram_lora.py --plot_only
+# Example: Training Qwen 3.5-4B using 4-bit quantization
+uv run python examples/qwen3_engram_lora.py --load_in_4bit --max_steps 300
 ```
+
+Refer to the [Examples README](file:///app/examples/README.md) for more details on each template.

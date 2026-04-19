@@ -32,7 +32,12 @@ Configuration class for Engram PEFT module. Inherits from `transformers.Pretrain
 - `hidden_size` (`Optional[int]`, default: `None`): The hidden dimension of the base model. Auto-detected if not provided.
 - `pad_id` (`Optional[int]`, default: `None`): The padding token ID. Auto-detected if not provided.
 - `compressed_vocab_size` (`Optional[int]`, default: `None`): Resolved size of the hashing vocabulary. Automatically set and saved after first initialization.
-- `layer_container_path` (`Optional[str]`, default: `None`): Explicit dot-separated path to the `nn.ModuleList` containing transformer layers (e.g., `"model.layers"`). If provided, it bypasses the automatic architecture discovery.
+- `layer_container_path` (`Optional[str]`, default: `None`): Explicit dot-separated path to the transformer layers.
+- `max_ngram_size` (`int`, default: `3`): Maximum N-gram size, derived from `ngram_sizes`.
+- `clip_grad_per_group` (`bool`, default: `False`): Whether to use group-wise gradient clipping.
+- `enable_telemetry` (`bool`, default: `False`): Enables detailed metric logging (norms, drift, max values).
+- `entropy_loss_weight` (`float`, default: `0.0`): Weight for the gating entropy penalty loss.
+- `backbone_freeze_steps` (`int`, default: `0`): Initial steps where backbone is frozen (Adapter-First warm-up).
 
 **Example Usage:**
 ```python
@@ -90,8 +95,11 @@ The wrapper class for the base model. Handles dynamic hook management and weight
 - `add_adapter(adapter_name: str, config: EngramConfig)`: Adds a new set of Engram weights with its own configuration.
 - `set_adapter(adapter_name: str)`: Switches the active knowledge pack to the specified adapter.
 - `create_optimizer(base_learning_rate: float, **optimizer_kwargs)`: Returns a `MixedOptimizer` with configurable backbone/Engram optimizer groups.
-- `create_scheduler(optimizer, num_steps, warmup_steps)`: Returns the paper-aligned Step Decay scheduler.
-- `save_pretrained(save_directory: str)`: Saves ONLY the active Engram weights and configuration.
+- `create_scheduler(optimizer, num_training_steps, warmup_steps)`: Returns the paper-aligned Step Decay scheduler.
+- `get_telemetry_stats()`: Collects activation statistics and diagnostics from active layers.
+- `get_total_gating_entropy()`: Aggregates gating entropy tensors for regularization.
+- `save_pretrained(save_directory: str)`: Saves Engram configurations and weights (unified).
+- `save_pretrained_engram(save_directory: str)`: Saves ONLY Engram layers' weights and config.
 - `from_pretrained(base_model, engram_path)`: Loads Engram weights onto a base model.
 - `unload_engram()`: Dynamically removes all PEFT hooks (reverts to base model).
 - `load_engram(engram_path=None)`: Re-installs hooks and optionally loads weights.
@@ -143,6 +151,11 @@ trainer = EngramTrainer(
     },
 )
 ```
+
+### `evaluate_model_loss`
+`engram_peft.utils.evaluate_model_loss(model, tokenizer, dataset, batch_size=8, max_length=128)`
+
+Standardizes the calculation of Zero-shot loss for language models. Uses `DataCollatorForLanguageModeling` to ensure correct label shifting.
 
 ---
 
