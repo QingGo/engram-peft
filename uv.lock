@@ -599,7 +599,7 @@ dev = [
     { name = "scipy", specifier = ">=1.15.3" },
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "setuptools", specifier = ">=82.0.1" },
-    { name = "sprintest", specifier = "==0.1.2" },
+    { name = "sprintest", specifier = "==1.0.2" },
     { name = "sympy", specifier = ">=1.14.0" },
     { name = "torchinfo", specifier = ">=1.8.0" },
     { name = "torchview", specifier = ">=0.2.7" },
@@ -2678,17 +2678,19 @@ wheels = [
 
 [[package]]
 name = "sprintest"
-version = "0.1.2"
+version = "1.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
+    { name = "httpx" },
+    { name = "psutil" },
     { name = "pytest" },
-    { name = "requests" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "uvicorn" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5e/01/9119bb1e53ee7287ac6abdc7e759190fe8105cb40ccf9d616d86a948e164/sprintest-0.1.2.tar.gz", hash = "sha256:20353c4ec8c57c559fb1dbe753502453c6c6bd39270511d0cda30e254daa20ea", size = 13190, upload-time = "2026-04-19T11:05:25.354Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/0c/66324915fa85d99c72feee109d2b40554d4132b470fad5f7df147f6e7bfb/sprintest-1.0.2.tar.gz", hash = "sha256:a5d2a519cc484000de6b0ba0f908c50665e878da26efc3a92b5b2690abc8b9bf", size = 24056, upload-time = "2026-04-20T04:13:26.864Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5f/38/8a1c5c666e55ad546e23cc2cf5b93ab61c39b78eb91947a4ed7261f5cfbb/sprintest-0.1.2-py3-none-any.whl", hash = "sha256:4b255db5a06b6d7eee64a3703b55c467fdcd72d69234ed4df33e7e633b5b44ad", size = 8248, upload-time = "2026-04-19T11:05:23.981Z" },
+    { url = "https://files.pythonhosted.org/packages/85/2b/50eb980f47aab4c94d6147f63bb222b93f82c024d5cb553af360c2abc78d/sprintest-1.0.2-py3-none-any.whl", hash = "sha256:73810742dfaa5f708ef6f9483c0f97d18eb7983251d7bddf694a1f082f64bd23", size = 18100, upload-time = "2026-04-20T04:13:25.167Z" },
 ]
 
 [[package]]

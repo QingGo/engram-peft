@@ -74,7 +74,7 @@
 **5.5 强制验证与安全终端输出**
 完成代码修改后，你必须主动运行命令验证测试是否修复、静态检测是否通过。**注意保护上下文窗口**：为防止 PyTorch 长报错撑爆上下文，执行测试时必须限制输出行数：
 ```bash
-uv run sprintest tests/unit --cov=src/engram_peft --cov-report=term-missing --durations=5 | tail -n 500 && uv run dmypy src/ tests/ examples/
+uv run env SPRINTEST_TARGET_PKG=engram_peft stest tests/unit --cov=src/engram_peft --cov-report=term-missing --durations=5 | tail -n 500 && uv run dmypy src/ tests/ examples/
 ```
 
 ---

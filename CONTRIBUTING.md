@@ -49,15 +49,6 @@ All contributors (including AI Agents) should follow these layers of verificatio
 
 Sprintest is a C/S (Client/Server) architecture test runner specifically designed for heavy AI projects. By keeping large models and datasets in memory, it eliminates the test startup latency caused by slow loading.
 
-### Usage
-
-Before using `sprintest` to run tests, you **MUST** start the Daemon in the background or in a new terminal:
-
-```bash
-# Start the test acceleration server
-make test-daemon
-```
-
 ### Makefile Shortcuts
 
 For a better development experience, use the provided `Makefile` targets:

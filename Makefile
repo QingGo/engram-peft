@@ -47,16 +47,11 @@ test: test-unit
 
 test-unit:
 	@echo "[*] Running lightweight unit tests..."
-	uv run sprintest tests/unit --cov=$(SRC_DIR) --cov-report=term-missing --durations=5
+	uv run env SPRINTEST_TARGET_PKG=engram_peft stest tests/unit --cov=$(SRC_DIR) --cov-report=term-missing --durations=5
 
 test-integ:
 	@echo "[*] Running integration tests..."
-	uv run sprintest tests/integration --durations=5
-
-# Start the sprintest daemon for test acceleration.
-# This keeps the model and weights in memory to eliminate startup latency.
-test-daemon:
-	SPRINTEST_TARGET_PKG=engram_peft uv run sprintest-daemon
+	uv run env SPRINTEST_TARGET_PKG=engram_peft stest tests/integration --durations=5
 
 # Stop the type-check daemon and delete all tool-generated cache directories
 clean: daemon-stop

@@ -159,3 +159,4 @@ wandb/
 .agent_memory.md
 t_*.py
 test_out/
+.sprintest/

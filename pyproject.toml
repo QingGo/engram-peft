@@ -125,5 +125,15 @@ dev = [
     "types-pyyaml>=6.0.12.20260408",
     "ipython>=8.39.0",
     "ipytest>=0.14.2",
-    "sprintest==0.1.2",
+    "sprintest==1.0.2",
+]
+
+[tool.sprintest]
+ignore = [
+    "torch.*",
+    "transformers.*",
+    "peft.*",
+    "accelerate.*",
+    "datasets.*",
+    "tokenizers.*"
 ]
