@@ -132,8 +132,8 @@ These scripts provide ready-to-use templates for the latest mainstream models in
 # Run Qwen 3.5 with 4-bit quantization and 300 steps
 uv run python examples/qwen3_engram_lora.py --load_in_4bit --max_steps 300
 
-# Run Ministral 3 with 8-bit quantization
-uv run python examples/mistral3_engram_lora.py --load_in_8bit
+# Run Ministral 3 (multimodal) with BF16 to avoid FP8 errors
+uv run python examples/mistral3_engram_lora.py --load_in_bf16
 
 # Run Gemma 4 with custom learning rate
 uv run python examples/gemma4_engram_lora.py --lr 1e-4

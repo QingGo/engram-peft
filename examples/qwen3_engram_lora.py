@@ -38,7 +38,27 @@ if not hasattr(nn.Module, "set_submodule"):
         setattr(parent, name, module)
 
     nn.Module.set_submodule = set_submodule  # type: ignore
-from transformers import (
+
+
+# CRITICAL COMPATIBILITY HACK:
+# Latest transformers (for Qwen3.5) expects torch.distributed.tensor.DTensor.
+class DummyDTensor:
+    pass
+
+
+try:
+    import torch.distributed.tensor as _dt
+
+    if not hasattr(_dt, "DTensor"):
+        _dt.DTensor = DummyDTensor  # type: ignore
+except ImportError:
+    import sys
+    from types import ModuleType
+
+    mock_dt = ModuleType("torch.distributed.tensor")
+    mock_dt.DTensor = DummyDTensor  # type: ignore
+    sys.modules["torch.distributed.tensor"] = mock_dt
+from transformers import (  # noqa: E402
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -48,14 +68,14 @@ from transformers import (
     set_seed,
 )
 
-from engram_peft import (
+from engram_peft import (  # noqa: E402
     EngramConfig,
     EngramDataCollator,
     EngramModel,
     EngramTrainer,
     get_engram_model,
 )
-from engram_peft.utils import apply_peft_patches
+from engram_peft.utils import apply_peft_patches  # noqa: E402
 
 # Ensure benchmarks are importable
 sys.path.append(os.getcwd())
@@ -352,8 +372,13 @@ def run_example(args: argparse.Namespace) -> None:
 
     print(f"Prompt: {prompt}")
     with torch.no_grad():
-        output = model.generate(
-            **inputs, max_new_tokens=50, do_sample=True, temperature=0.7
+        output = base_model.generate(  # type: ignore
+            **inputs,
+            max_new_tokens=200,
+            do_sample=True,
+            temperature=0.7,
+            stop_strings=["</think>"],
+            tokenizer=tokenizer,
         )
     original_resp = tokenizer.decode(output[0], skip_special_tokens=True)
     print(f"Response: {original_resp}")
@@ -374,8 +399,13 @@ def run_example(args: argparse.Namespace) -> None:
 
         print("Inference with Fully Reloaded Model (LoRA + Engram):")
         with torch.no_grad():
-            reloaded_output = reloaded_model.generate(
-                **inputs, max_new_tokens=50, do_sample=True, temperature=0.7
+            reloaded_output = reloaded_model.generate(  # type: ignore
+                **inputs,
+                max_new_tokens=200,
+                do_sample=True,
+                temperature=0.7,
+                stop_strings=["</think>", "\n\n"],
+                tokenizer=tokenizer,
             )
         reloaded_resp = tokenizer.decode(reloaded_output[0], skip_special_tokens=True)
         print(f"Response: {reloaded_resp}")

@@ -28,6 +28,12 @@ ARCH_LAYER_MAPPING = {
     "gpt_neox": ["gpt_neox.layers", "layers"],
     "phi": ["model.layers", "layers"],
     "phi3": ["model.layers", "layers"],
+    # Multimodal variants (e.g. Pixtral, Mistral-VL, Qwen-VL)
+    "mistral_vl": ["language_model.model.layers", "language_model.layers"],
+    "qwen2_vl": ["visual.blocks", "model.layers"],
+    "qwen3": ["model.layers", "layers"],
+    "qwen3_vl": ["model.layers", "language_model.model.layers"],
+    "llava": ["language_model.model.layers", "model.layers"],
 }
 
 
@@ -118,6 +124,7 @@ class ArchitectureResolver:
         # 2. model config
         base_config = getattr(model, "config", None)
         if base_config is not None:
+            # Check top level first
             for attr in [
                 "hidden_size",
                 "d_model",
@@ -128,6 +135,14 @@ class ArchitectureResolver:
                 val = getattr(base_config, attr, None)
                 if val is not None:
                     return int(val), f"model.config.{attr}"
+
+            # Check nested text_config (common in multimodal models)
+            text_config = getattr(base_config, "text_config", None)
+            if text_config is not None:
+                for attr in ["hidden_size", "d_model", "dim", "n_embd"]:
+                    val = getattr(text_config, attr, None)
+                    if val is not None:
+                        return int(val), f"model.config.text_config.{attr}"
 
         # 3. Direct attribute
         for attr in ["hidden_size", "d_model"]:
@@ -158,9 +173,17 @@ class ArchitectureResolver:
         # 3. model config
         base_config = getattr(model, "config", None)
         if base_config is not None:
+            # Check top level
             val = getattr(base_config, "vocab_size", None)
             if val is not None:
                 return int(val), "model.config.vocab_size"
+
+            # Check nested text_config
+            text_config = getattr(base_config, "text_config", None)
+            if text_config is not None:
+                val = getattr(text_config, "vocab_size", None)
+                if val is not None:
+                    return int(val), "model.config.text_config.vocab_size"
 
         raise ValueError(
             "Could not detect original vocab_size. Please provide a tokenizer or set original_vocab_size in EngramConfig."
@@ -186,9 +209,17 @@ class ArchitectureResolver:
         # 3. model config
         base_config = getattr(model, "config", None)
         if base_config is not None:
+            # Check top level
             val = getattr(base_config, "pad_token_id", None)
             if val is not None:
                 return int(val), "model.config.pad_token_id"
+
+            # Check nested text_config
+            text_config = getattr(base_config, "text_config", None)
+            if text_config is not None:
+                val = getattr(text_config, "pad_token_id", None)
+                if val is not None:
+                    return int(val), "model.config.text_config.pad_token_id"
 
         # 4. Absolute fallback for common models if everything fails
         logger.warning("[Engram-PEFT] Could not detect pad_id. Using default 2.")

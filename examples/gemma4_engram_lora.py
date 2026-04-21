@@ -25,8 +25,8 @@ import torch.nn as nn
 from datasets import Dataset, load_dataset
 from peft import LoraConfig, PeftModel, TaskType, get_peft_model
 from transformers import (
-    AutoConfig,
     AutoModelForCausalLM,
+    AutoProcessor,
     AutoTokenizer,
     BitsAndBytesConfig,
     PreTrainedTokenizerBase,
@@ -56,6 +56,25 @@ if not hasattr(nn.Module, "set_submodule"):
         setattr(parent, name, module)
 
     nn.Module.set_submodule = set_submodule  # type: ignore
+
+
+# Latest transformers (for Gemma-4/Mistral-3) expects torch.distributed.tensor.DTensor.
+class DummyDTensor:
+    pass
+
+
+try:
+    import torch.distributed.tensor as _dt
+
+    if not hasattr(_dt, "DTensor"):
+        _dt.DTensor = DummyDTensor  # type: ignore
+except ImportError:
+    import sys
+    from types import ModuleType
+
+    mock_dt = ModuleType("torch.distributed.tensor")
+    mock_dt.DTensor = DummyDTensor  # type: ignore
+    sys.modules["torch.distributed.tensor"] = mock_dt
 
 # Try to import optional visualization components
 try:
@@ -142,22 +161,38 @@ def run_example(args: argparse.Namespace) -> None:
 
     print(f"\n>>> Initializing Gemma-4 Example with model: {args.model_id}")
 
-    # 1. Load Tokenizer & Model
-    tokenizer = AutoTokenizer.from_pretrained(args.model_id, trust_remote_code=True)
+    # 1. Load Processor & Model using official Transformers recommended way
+    print(f"Loading base model: {args.model_id}")
+
+    # Gemma-4 might use AutoProcessor for multimodal support
+    try:
+        processor = AutoProcessor.from_pretrained(args.model_id, trust_remote_code=True)
+        tokenizer = processor.tokenizer
+    except Exception:
+        print("AutoProcessor failed, falling back to AutoTokenizer.")
+        tokenizer = AutoTokenizer.from_pretrained(args.model_id, trust_remote_code=True)
+
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    print(
-        f"Loading base model (quantization: 4bit={args.load_in_4bit}, 8bit={args.load_in_8bit})..."
-    )
+    load_kwargs: dict[str, Any] = {
+        "device_map": "auto",
+        "trust_remote_code": True,
+        "torch_dtype": "auto",
+    }
 
-    # Pre-load config to check for existing quantization
-    config = AutoConfig.from_pretrained(args.model_id, trust_remote_code=True)
+    if args.load_in_4bit:
+        load_kwargs["load_in_4bit"] = True
+    elif args.load_in_8bit:
+        load_kwargs["load_in_8bit"] = True
+
+    base_model = AutoModelForCausalLM.from_pretrained(args.model_id, **load_kwargs)
 
     # Defensive fix: ensure required attributes exist for Gemma4Model
     # Handle nested text_config which is common in new multimodal or complex architectures
     # CRITICAL: We DO NOT unpack text_config here to avoid losing top-level metadata.
     # Instead, we sync ALL attributes from text_config to the top-level config.
+    config = base_model.config
     if hasattr(config, "text_config"):
         print(
             "Detected nested text_config, synchronizing ALL attributes to top-level..."
@@ -362,8 +397,13 @@ def run_example(args: argparse.Namespace) -> None:
     inputs = tokenizer(prompt, return_tensors="pt").to(model.base_model.device)
 
     print(f"Prompt: {prompt}")
-    output = model.generate(
-        **inputs, max_new_tokens=50, do_sample=True, temperature=0.7
+    output = base_model.generate(  # type: ignore
+        **inputs,
+        max_new_tokens=100,
+        do_sample=True,
+        temperature=0.7,
+        stop_strings=["<end_of_turn>"],
+        tokenizer=tokenizer,
     )
     print(f"Response: {tokenizer.decode(output[0], skip_special_tokens=True)}")
 
@@ -383,8 +423,13 @@ def run_example(args: argparse.Namespace) -> None:
 
         print("Inference with Fully Reloaded Model (LoRA + Engram):")
         with torch.no_grad():
-            reloaded_output = reloaded_model.generate(
-                **inputs, max_new_tokens=50, do_sample=True, temperature=0.7
+            reloaded_output = reloaded_model.generate(  # type: ignore
+                **inputs,
+                max_new_tokens=100,
+                do_sample=True,
+                temperature=0.7,
+                stop_strings=["<end_of_turn>"],
+                tokenizer=tokenizer,
             )
         reloaded_resp = tokenizer.decode(reloaded_output[0], skip_special_tokens=True)
         print(f"Response: {reloaded_resp}")

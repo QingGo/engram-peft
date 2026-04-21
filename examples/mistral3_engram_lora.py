@@ -13,32 +13,64 @@ import logging
 import os
 import sys
 import traceback
+from typing import Any, cast
 
 # Add the project root to sys.path to allow absolute imports from the 'examples' package
 # when running the script directly.
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from typing import Any, cast
-
 import torch
 import torch.nn as nn
-from datasets import Dataset, load_dataset
-from huggingface_hub import hf_hub_download
-from peft import LoraConfig, PeftModel, TaskType, get_peft_model
-from transformers import (
-    AutoConfig,
-    AutoModelForCausalLM,
+
+
+# CRITICAL COMPATIBILITY HACK:
+# Latest transformers (for Mistral-3) expects torch.distributed.tensor.DTensor.
+# In PyTorch < 2.5, this path might not exist or be empty.
+class DummyDTensor:
+    pass
+
+
+try:
+    import torch.distributed.tensor as _dt
+
+    if not hasattr(_dt, "DTensor"):
+        _dt.DTensor = DummyDTensor  # type: ignore
+except ImportError:
+    # If the module doesn't exist at all, we create it in sys.modules
+    import sys
+    from types import ModuleType
+
+    mock_dt = ModuleType("torch.distributed.tensor")
+    mock_dt.DTensor = DummyDTensor  # type: ignore
+    sys.modules["torch.distributed.tensor"] = mock_dt
+
+from datasets import Dataset, load_dataset  # noqa: E402
+from peft import (  # type: ignore # noqa: E402
+    LoraConfig,
+    PeftModel,
+    TaskType,
+    get_peft_model,
+)
+from transformers import (  # noqa: E402
     AutoTokenizer,
-    BitsAndBytesConfig,
+    Mistral3ForConditionalGeneration,
     PreTrainedTokenizerBase,
     TrainingArguments,
     set_seed,
 )
-from transformers.models.auto.modeling_auto import (
+
+from engram_peft import EngramConfig, get_engram_model  # noqa: E402
+
+# Check for latest transformers features
+try:
+    from transformers import FineGrainedFP8Config
+except ImportError:
+    FineGrainedFP8Config = None  # type: ignore
+from transformers.models.auto.modeling_auto import (  # noqa: E402
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
 )
 
-from examples.benchmarks.data_utils import get_dataset_template
+from examples.benchmarks.data_utils import get_dataset_template  # noqa: E402
 
 # Try to import safetensors
 try:
@@ -46,14 +78,12 @@ try:
 except ImportError:
     safe_load_file = None  # type: ignore
 
-from engram_peft import (
-    EngramConfig,
+from engram_peft import (  # noqa: E402
     EngramDataCollator,
     EngramModel,
     EngramTrainer,
-    get_engram_model,
 )
-from engram_peft.utils import apply_peft_patches
+from engram_peft.utils import apply_peft_patches  # noqa: E402
 
 # Polyfill for set_submodule which is missing in some PyTorch versions
 if not hasattr(nn.Module, "set_submodule"):
@@ -169,153 +199,30 @@ def run_example(args: argparse.Namespace) -> None:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    print(f"Loading base model (load_in_4bit={args.load_in_4bit})...")
+    # 1. Load model using official Transformers Mistral3 class
+    print(f"Loading base model: {args.model_id}")
 
-    # Pre-load config to check for existing quantization (e.g., FP8 models)
-    config = AutoConfig.from_pretrained(args.model_id, trust_remote_code=True)
-
-    # Defensive fix: ensure required attributes exist for Ministral3Model
-    # Handle nested text_config which is common in new multimodal or complex architectures.
-    # CRITICAL: We DO NOT unpack text_config here because that would lose the
-    # 'quantization_config' which is essential for FP8 models.
-    # Instead, we sync all attributes from text_config to the top-level config.
-    if hasattr(config, "text_config"):
-        print(
-            "Detected nested text_config, synchronizing ALL attributes to top-level..."
-        )
-        text_config_dict = config.text_config.to_dict()
-        for attr, value in text_config_dict.items():
-            if not hasattr(config, attr) or getattr(config, attr) is None:
-                setattr(config, attr, value)
-
-        # CRITICAL MONKEY PATCH: PEFT's save_pretrained creates a fresh config instance
-        # using model.config.__class__.from_pretrained(). We must ensure that NEW
-        # instances also have vocab_size available on the top level.
-        config_class = config.__class__
-        if not hasattr(config_class, "vocab_size"):
-            print(
-                f"Monkey patching {config_class.__name__} to include vocab_size property..."
-            )
-
-            def get_vocab_size(self: Any) -> int | None:
-                return (
-                    self.text_config.vocab_size
-                    if hasattr(self, "text_config")
-                    else None
-                )
-
-            config_class.vocab_size = property(get_vocab_size)  # type: ignore
-
-    if not hasattr(config, "pad_token_id") or config.pad_token_id is None:
-        config.pad_token_id = (
-            tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0
-        )
-
-    if not hasattr(config, "vocab_size") or config.vocab_size is None:
-        config.vocab_size = len(tokenizer)
-
-    has_existing_quant = getattr(config, "quantization_config", None) is not None
-
-    # Initialize bnb config for quantization if requested AND not already quantized
-    quantization_config = None
-    if has_existing_quant:
-        print(
-            f"Notice: Model {args.model_id} is already quantized ({config.quantization_config.get('quant_method')})."
-        )
-        print(
-            "Ignoring bitsandbytes flags (--load_in_4bit/--load_in_8bit) to avoid conflicts."
-        )
-    else:
-        if args.load_in_4bit:
-            quantization_config = BitsAndBytesConfig(load_in_4bit=True)
-        elif args.load_in_8bit:
-            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-
-    model_kwargs: dict[str, Any] = {
-        "trust_remote_code": True,
+    load_kwargs = {
         "device_map": "auto",
+        "trust_remote_code": True,
     }
-    if quantization_config is not None:
-        model_kwargs["quantization_config"] = quantization_config
 
-    if not quantization_config:
-        model_kwargs["torch_dtype"] = (
-            torch.bfloat16
-            if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
-            else torch.float16
-        )
+    # Handle BF16 dequantization if requested
+    if args.load_in_bf16:
+        print("Forcing model to BF16 precision to bypass FP8 kernel issues...")
+        load_kwargs["torch_dtype"] = torch.bfloat16
+        # If FineGrainedFP8Config is available, we use it, otherwise we rely on torch_dtype
+        if FineGrainedFP8Config is not None:
+            load_kwargs["quantization_config"] = FineGrainedFP8Config(dequantize=True)
+    elif not args.load_in_4bit and not args.load_in_8bit:
+        # Default to FP8 as per official docs
+        print("Loading in native FP8 precision...")
 
-    print(f"Loading base model (load_in_4bit={args.load_in_4bit})...")
+    base_model = cast("Any", Mistral3ForConditionalGeneration).from_pretrained(
+        args.model_id, **load_kwargs
+    )
 
-    # 1.1 Custom weight remapping for Mistral-3 prefix issue
-    # The checkpoint has 'language_model.' prefix, but model class expects 'model.'
-    state_dict = None
-    if "Ministral-3-3B" in args.model_id and safe_load_file is not None:
-        try:
-            print("Downloading and remapping weights for Mistral-3 architecture...")
-            st_path = hf_hub_download(
-                repo_id=args.model_id, filename="model.safetensors"
-            )
-            raw_state_dict = safe_load_file(st_path)
-            state_dict = {}
-            for k, v in raw_state_dict.items():
-                # Correct remapping: language_model. -> model.
-                new_k = k
-                if k.startswith("language_model."):
-                    new_k = k.replace("language_model.", "model.")
-
-                # Special case: 'model.model.' -> 'model.'
-                if new_k.startswith("model.model."):
-                    new_k = new_k.replace("model.model.", "model.")
-
-                # Special case: embed_tokens and norm at root of language_model
-                # language_model.embed_tokens -> model.embed_tokens
-                # (Handled by the general replacement above)
-
-                state_dict[new_k] = v
-
-            # Handle lm_head: if missing, often tied to embed_tokens
-            if (
-                "lm_head.weight" not in state_dict
-                and "model.embed_tokens.weight" in state_dict
-            ):
-                print("Note: lm_head.weight not found, will rely on weight tying.")
-
-            print(f"Successfully remapped {len(state_dict)} tensors.")
-        except Exception as e:
-            print(f"Weight remapping failed: {e}")
-
-    # 3. Load Base Model
-    print("Loading base model structure on CPU to avoid initialization errors...")
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    # We load structure on CPU first because normal_kernel_cuda is missing for FP8.
-    # We remove device_map="auto" to force CPU initialization.
-    cpu_kwargs = model_kwargs.copy()
-    cpu_kwargs["device_map"] = None
-    cpu_kwargs["torch_dtype"] = torch.bfloat16  # Safer for structural creation
-
-    try:
-        base_model = AutoModelForCausalLM.from_pretrained(
-            args.model_id, config=config, **cpu_kwargs
-        )
-        if state_dict:
-            print("Injecting remapped state_dict on CPU...")
-            base_model.load_state_dict(state_dict, strict=False)
-
-        print(f"Moving model to {device}...")
-        cast("Any", base_model).to(device)
-        print("Model loaded successfully via CPU-to-GPU transition.")
-    except Exception as e:
-        print(
-            f"Standard loading failed ({e}), falling back to manual weight injection..."
-        )
-        with torch.device("cpu"):
-            base_model = AutoModelForCausalLM.from_config(config)
-        base_model.load_state_dict(state_dict, strict=False)
-        cast("Any", base_model).to(device)
-
-        # Tie weights after loading to ensure lm_head is correct
+    # Tie weights after loading to ensure lm_head is correct
     base_model.tie_weights()
 
     # 2. Apply LoRA
@@ -446,7 +353,7 @@ def run_example(args: argparse.Namespace) -> None:
     )
 
     print(f"Prompt: {prompt}")
-    output = model.generate(
+    output = base_model.generate(  # type: ignore
         **inputs, max_new_tokens=50, do_sample=True, temperature=0.7
     )
     print(f"Response: {tokenizer.decode(output[0], skip_special_tokens=True)}")
@@ -467,7 +374,7 @@ def run_example(args: argparse.Namespace) -> None:
 
         print("Inference with Fully Reloaded Model (LoRA + Engram):")
         with torch.no_grad():
-            reloaded_output = reloaded_model.generate(
+            reloaded_output = reloaded_model.generate(  # type: ignore
                 **inputs, max_new_tokens=50, do_sample=True, temperature=0.7
             )
         reloaded_resp = tokenizer.decode(reloaded_output[0], skip_special_tokens=True)
@@ -494,11 +401,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--engram_dim", type=int, default=1024, help="Engram embedding dimension"
     )
+    parser.add_argument("--load_in_4bit", action="store_true")
+    parser.add_argument("--load_in_8bit", action="store_true")
     parser.add_argument(
-        "--load_in_4bit", action="store_true", help="Load base model in 4-bit precision"
-    )
-    parser.add_argument(
-        "--load_in_8bit", action="store_true", help="Load base model in 8-bit precision"
+        "--load_in_bf16", action="store_true", help="Dequantize FP8 to BF16"
     )
     parser.add_argument(
         "--eval_steps", type=int, default=100, help="Evaluation frequency"
