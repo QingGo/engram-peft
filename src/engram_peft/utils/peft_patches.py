@@ -45,10 +45,10 @@ def apply_peft_patches() -> None:
 
         # In PEFT, _create_new_module is a staticmethod, but we can replace it
         # with our function and wrap it back in staticmethod()
-        lora_model.LoraModel._create_new_module = staticmethod(
+        lora_model.LoraModel._create_new_module = staticmethod(  # type: ignore
             patched_create_new_module
         )
-        lora_model.LoraModel._is_engram_patched = True
+        lora_model.LoraModel._is_engram_patched = True  # type: ignore
         logger.info("Successfully applied PEFT deep patches for custom layers.")
 
     except ImportError:

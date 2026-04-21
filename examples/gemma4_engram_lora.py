@@ -11,6 +11,12 @@ Usage:
 import argparse
 import logging
 import os
+import sys
+
+# Add the project root to sys.path to allow absolute imports from the 'examples' package
+# when running the script directly.
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import traceback
 from typing import Any, cast
 
@@ -35,6 +41,7 @@ from engram_peft import (
     EngramTrainer,
     get_engram_model,
 )
+from engram_peft.utils import apply_peft_patches
 from examples.benchmarks.data_utils import get_dataset_template
 
 # Polyfill for set_submodule which is missing in some PyTorch versions
@@ -92,10 +99,10 @@ def prepare_alpaca_dataset(
             padding="max_length",
         )
 
-        labels = list(tokenized["input_ids"])
+        labels = list(cast("Any", tokenized)["input_ids"])
         # Mask the prompt part in labels (Padding masking will be handled by SmartDataCollator)
         prompt_tokenized = tokenizer(prompt, max_length=max_length, truncation=True)
-        prompt_len = len(prompt_tokenized["input_ids"])
+        prompt_len = len(cast("Any", prompt_tokenized)["input_ids"])
         for i in range(min(prompt_len, max_length)):
             labels[i] = -100
 
@@ -129,6 +136,9 @@ def run_example(args: argparse.Namespace) -> None:
     root_logger.addHandler(file_handler)
 
     logging.info(f"Starting Gemma-4 Engram+LoRA example with model: {args.model_id}")
+
+    # 0. Apply PEFT deep patches to support Gemma-4 custom layers
+    apply_peft_patches()
 
     print(f"\n>>> Initializing Gemma-4 Example with model: {args.model_id}")
 
@@ -169,7 +179,7 @@ def run_example(args: argparse.Namespace) -> None:
                     else None
                 )
 
-            config_class.vocab_size = property(get_vocab_size)
+            config_class.vocab_size = property(get_vocab_size)  # type: ignore
 
     if not hasattr(config, "pad_token_id") or config.pad_token_id is None:
         config.pad_token_id = (
@@ -250,7 +260,7 @@ def run_example(args: argparse.Namespace) -> None:
     )
 
     model = cast(
-        Any,
+        "Any",
         get_engram_model(
             model, engram_config, tokenizer=tokenizer, train_mode="preserve_trainable"
         ),

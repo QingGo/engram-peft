@@ -14,6 +14,11 @@ import logging
 import os
 import sys
 import traceback
+
+# Add the project root to sys.path to allow absolute imports from the 'examples' package
+# when running the script directly.
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from typing import Any, cast
 
 import torch
@@ -50,6 +55,7 @@ from engram_peft import (
     EngramTrainer,
     get_engram_model,
 )
+from engram_peft.utils import apply_peft_patches
 
 # Ensure benchmarks are importable
 sys.path.append(os.getcwd())
@@ -84,7 +90,7 @@ def prepare_alpaca_dataset(
             prompt = f"Instruction: {example['instruction']}\nResponse: "
 
         response = str(example["output"])
-        full_text = prompt + response + (tokenizer.eos_token or "")
+        full_text = str(prompt) + response + str(tokenizer.eos_token or "")
         tokenized = tokenizer(
             full_text,
             truncation=True,
@@ -92,7 +98,7 @@ def prepare_alpaca_dataset(
             padding="max_length",
         )
 
-        labels = list(tokenized["input_ids"])
+        labels = list(cast("Any", tokenized)["input_ids"])
 
         # Mask padding tokens in labels so they don't contribute to loss
         if tokenizer.pad_token_id is not None:
@@ -102,7 +108,7 @@ def prepare_alpaca_dataset(
 
         # Mask the prompt part in labels
         prompt_tokenized = tokenizer(prompt, max_length=max_length, truncation=True)
-        prompt_len = len(prompt_tokenized["input_ids"])
+        prompt_len = len(cast("Any", prompt_tokenized)["input_ids"])
         for i in range(min(prompt_len, max_length)):
             labels[i] = -100
 
@@ -118,6 +124,9 @@ def prepare_alpaca_dataset(
 
 
 def run_example(args: argparse.Namespace) -> None:
+    # 0. Apply PEFT deep patches
+    apply_peft_patches()
+
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     # Setup file logging
@@ -133,7 +142,7 @@ def run_example(args: argparse.Namespace) -> None:
 
     logging.info(f"Starting Qwen3.5 Engram+LoRA example with model: {args.model_id}")
 
-    print(f"\n>>> Initializing Qwen3.5 Example with model: {args.model_id}")
+    print(f"\n>>> Initializing Qwen-3.5 Example with model: {args.model_id}")
 
     # 1. Load Tokenizer & Model
     tokenizer = AutoTokenizer.from_pretrained(args.model_id, trust_remote_code=True)
@@ -171,7 +180,7 @@ def run_example(args: argparse.Namespace) -> None:
                     else None
                 )
 
-            config_class.vocab_size = property(get_vocab_size)
+            config_class.vocab_size = property(get_vocab_size)  # type: ignore
 
     if not hasattr(config, "pad_token_id") or config.pad_token_id is None:
         config.pad_token_id = (
@@ -251,7 +260,7 @@ def run_example(args: argparse.Namespace) -> None:
         backbone_freeze_steps=0,
     )
     # get_engram_model handles text_config and vocab_size automatically!
-    model = cast(Any, get_engram_model(model, engram_config, tokenizer=tokenizer))
+    model = cast("Any", get_engram_model(model, engram_config, tokenizer=tokenizer))
 
     # 4. Prepare Dataset
     print("Preparing Alpaca subsets (train + eval)...")

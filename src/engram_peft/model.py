@@ -1,7 +1,10 @@
 import logging
 import os
 from collections.abc import Callable
-from typing import Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
+
+if TYPE_CHECKING:
+    from torch.utils.hooks import RemovableHandle
 
 import numpy as np
 import torch
@@ -113,7 +116,7 @@ class EngramModel(nn.Module):
             )
         self.adapters["default"] = default_layers
 
-        self._hook_handles: list[torch.utils.hooks.RemovableHandle] = []
+        self._hook_handles: list[RemovableHandle] = []
         self._current_hash_indices: dict[int, np.ndarray] | torch.Tensor | None = None
         self._inference_token_buffer: torch.Tensor | None = None
         self._engram_enabled: bool = True
@@ -379,7 +382,10 @@ class EngramModel(nn.Module):
                     # We keep at least 1024 tokens to avoid frequent truncation
                     max_n = self.hash_mapping.max_ngram_size
                     limit = max(max_n * 2, 1024)
-                    if self._inference_token_buffer.size(1) > limit:
+                    if (
+                        self._inference_token_buffer is not None
+                        and self._inference_token_buffer.size(1) > limit
+                    ):
                         self._inference_token_buffer = self._inference_token_buffer[
                             :, -limit:
                         ]
@@ -399,22 +405,26 @@ class EngramModel(nn.Module):
                     return None
 
                 # 3. Precompute global hash indices
-                if self.compressor:
-                    c_ids = self.compressor.compress(input_ids_to_hash)
-                    if isinstance(c_ids, torch.Tensor):
-                        c_ids = c_ids.cpu().numpy()
-                    self._current_hash_indices = self.hash_mapping.hash(c_ids)
-                else:
-                    input_ids_np = (
-                        input_ids_to_hash.cpu().numpy()
-                        if isinstance(input_ids_to_hash, torch.Tensor)
-                        else input_ids_to_hash
-                    )
-                    self._current_hash_indices = self.hash_mapping.hash(input_ids_np)
+                if input_ids_to_hash is not None:
+                    if self.compressor:
+                        c_ids = self.compressor.compress(input_ids_to_hash)
+                        if isinstance(c_ids, torch.Tensor):
+                            c_ids = c_ids.cpu().numpy()
+                        self._current_hash_indices = self.hash_mapping.hash(c_ids)
+                    else:
+                        input_ids_np = (
+                            input_ids_to_hash.cpu().numpy()
+                            if isinstance(input_ids_to_hash, torch.Tensor)
+                            else input_ids_to_hash
+                        )
+                        self._current_hash_indices = self.hash_mapping.hash(
+                            input_ids_np
+                        )
 
                 # 4. If using a buffer during inference, slice indices to match current tokens
                 if (
                     not self.base_model.training
+                    and input_ids_to_hash is not None
                     and input_ids_to_hash.shape[1] != input_ids.shape[1]
                 ):
                     new_seq_len = input_ids.shape[1]
@@ -472,6 +482,7 @@ class EngramModel(nn.Module):
                 module_class = type(target_module).__name__
 
                 # Determine target device and dtype (from transformer block)
+                target_device = None
                 try:
                     example_param = next(target_module.parameters())
                     target_device = example_param.device
@@ -489,7 +500,7 @@ class EngramModel(nn.Module):
                 self._hook_handles.append(hook_handle)
                 logger.info(
                     f"  - [Injected] Layer {layer_id} -> {module_class} "
-                    f"(device: {target_device})"
+                    f"(device: {target_device if target_device is not None else 'unknown'})"
                 )
 
         self._engram_enabled = True
@@ -556,7 +567,11 @@ class EngramModel(nn.Module):
         # Robust input handling: if first arg or 'input_ids' kwarg is a dict-like object,
         # extract its contents to ensure base_model.generate handles it correctly.
         if len(args) > 0 and (isinstance(args[0], dict) or hasattr(args[0], "to_dict")):
-            input_dict = args[0].to_dict() if hasattr(args[0], "to_dict") else args[0]
+            input_dict = (
+                cast("Any", args[0]).to_dict()
+                if hasattr(args[0], "to_dict")
+                else args[0]
+            )
             args = args[1:]
             # Only update kwargs if not already set
             for k, v in input_dict.items():
@@ -567,7 +582,7 @@ class EngramModel(nn.Module):
             or hasattr(kwargs["input_ids"], "to_dict")
         ):
             input_dict = (
-                kwargs["input_ids"].to_dict()
+                cast("Any", kwargs["input_ids"]).to_dict()
                 if hasattr(kwargs["input_ids"], "to_dict")
                 else kwargs["input_ids"]
             )

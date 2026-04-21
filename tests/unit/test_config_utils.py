@@ -38,6 +38,8 @@ def test_patch_config_class_property_injection():
     """Test that the vocab_size property is injected into the class."""
 
     class DummyConfig:
+        vocab_size: int
+
         def __init__(self):
             self.text_config = MagicMock()
             self.text_config.vocab_size = 32000

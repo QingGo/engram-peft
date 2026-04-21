@@ -11,7 +11,13 @@ Usage:
 import argparse
 import logging
 import os
+import sys
 import traceback
+
+# Add the project root to sys.path to allow absolute imports from the 'examples' package
+# when running the script directly.
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from typing import Any, cast
 
 import torch
@@ -47,6 +53,7 @@ from engram_peft import (
     EngramTrainer,
     get_engram_model,
 )
+from engram_peft.utils import apply_peft_patches
 
 # Polyfill for set_submodule which is missing in some PyTorch versions
 if not hasattr(nn.Module, "set_submodule"):
@@ -104,10 +111,10 @@ def prepare_alpaca_dataset(
             padding="max_length",
         )
 
-        labels = list(tokenized["input_ids"])
+        labels = list(cast("Any", tokenized)["input_ids"])
 
         # Mask the prompt part in labels (Padding masking handled by Collator)
-        prompt_tokenized = cast(Any, tokenizer)(
+        prompt_tokenized = cast("Any", tokenizer)(
             prompt, max_length=max_length, truncation=True
         )
         prompt_len = len(prompt_tokenized["input_ids"])
@@ -130,6 +137,9 @@ def prepare_alpaca_dataset(
 
 
 def run_example(args: argparse.Namespace) -> None:
+    # 0. Apply PEFT deep patches
+    apply_peft_patches()
+
     # Defensive patch for Ministral-3 naming inconsistency in some transformers versions
     try:
         if "mistral3" not in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES:
@@ -194,7 +204,7 @@ def run_example(args: argparse.Namespace) -> None:
                     else None
                 )
 
-            config_class.vocab_size = property(get_vocab_size)
+            config_class.vocab_size = property(get_vocab_size)  # type: ignore
 
     if not hasattr(config, "pad_token_id") or config.pad_token_id is None:
         config.pad_token_id = (
@@ -294,7 +304,7 @@ def run_example(args: argparse.Namespace) -> None:
             base_model.load_state_dict(state_dict, strict=False)
 
         print(f"Moving model to {device}...")
-        cast(Any, base_model).to(device)
+        cast("Any", base_model).to(device)
         print("Model loaded successfully via CPU-to-GPU transition.")
     except Exception as e:
         print(
@@ -303,7 +313,7 @@ def run_example(args: argparse.Namespace) -> None:
         with torch.device("cpu"):
             base_model = AutoModelForCausalLM.from_config(config)
         base_model.load_state_dict(state_dict, strict=False)
-        cast(Any, base_model).to(device)
+        cast("Any", base_model).to(device)
 
         # Tie weights after loading to ensure lm_head is correct
     base_model.tie_weights()
@@ -343,7 +353,7 @@ def run_example(args: argparse.Namespace) -> None:
         backbone_freeze_steps=0,
     )
     # get_engram_model handles architecture-specific patching automatically!
-    model = cast(Any, get_engram_model(model, engram_config, tokenizer=tokenizer))
+    model = cast("Any", get_engram_model(model, engram_config, tokenizer=tokenizer))
 
     # 4. Prepare Dataset
     print("Preparing Alpaca subsets (train + eval)...")
@@ -431,7 +441,7 @@ def run_example(args: argparse.Namespace) -> None:
     # 7. Inference Demo (Original Model)
     print("\n>>> Inference Demo (Original Model)")
     prompt = "<s>[INST] List three benefits of using parameter-efficient fine-tuning for edge models. [/INST]"
-    inputs = cast(Any, tokenizer)(prompt, return_tensors="pt").to(
+    inputs = cast("Any", tokenizer)(prompt, return_tensors="pt").to(
         model.base_model.device
     )
 

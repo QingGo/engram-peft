@@ -20,7 +20,7 @@ class SmartDataCollator(DataCollatorForLanguageModeling):
             # Mask padding
             batch["labels"][batch["input_ids"] == self.tokenizer.pad_token_id] = -100
 
-        return cast(dict[str, torch.Tensor], batch)
+        return cast("dict[str, torch.Tensor]", batch)
 
 
 def get_dataset_template(model_type: str) -> str:
