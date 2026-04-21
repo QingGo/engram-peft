@@ -48,6 +48,8 @@
 
 ## 5. 测试与验证规范 (Testing Constraints)
 
+** 使用 sprintest 框架运行所有测试 **
+
 **5.1 轻量级单元测试 (Unit Tests)**
 - **位置**：`tests/unit/`
 - **定义**：所有运行时间 `< 1s` 的测试都必须归类为单元测试。

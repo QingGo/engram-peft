@@ -21,8 +21,10 @@ help:
 	@echo "  daemon-status  Check if the dmypy daemon is currently running"
 	@echo "  daemon-stop    Gracefully stop the dmypy daemon"
 
-# Configuration: Paths to be analyzed by linting and type checking tools
+# Configuration: Paths to be analyzed by linting and formatting
 PATHS = src/ tests/ examples/
+# Configuration: Paths for type checking (excludes tests as configured in pyproject.toml)
+TYPE_PATHS = src/ examples/
 # Configuration: Core source directory for coverage reporting
 SRC_DIR = src/engram_peft
 
@@ -39,7 +41,7 @@ format:
 # Run static type checking. 'dmypy run' will start the daemon if it's not running
 # and perform an incremental check, which is significantly faster for subsequent runs.
 type-check:
-	uv run dmypy run -- $(PATHS)
+	uv run dmypy run -- $(TYPE_PATHS)
 
 # Run unit tests using sprintest, which provides optimized test execution.
 # Includes coverage calculation and identifies the slowest test cases.

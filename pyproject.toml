@@ -52,7 +52,7 @@ python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
-exclude = ["\\.venv", "build", "dist"]
+exclude = ["\\.venv", "build", "dist", "tests"]
 # 1. 开启 SQLite 缓存（加速本地冷启动）
 sqlite_cache = true
 
@@ -125,7 +125,8 @@ dev = [
     "types-pyyaml>=6.0.12.20260408",
     "ipython>=8.39.0",
     "ipytest>=0.14.2",
-    "sprintest==1.0.2",
+    "sprintest==1.0.5",
+    "bitsandbytes>=0.49.2",
 ]
 
 [tool.sprintest]

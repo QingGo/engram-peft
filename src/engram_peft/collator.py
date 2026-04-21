@@ -80,6 +80,10 @@ class EngramDataCollator(DataCollatorForLanguageModeling):
         )
         input_ids = batch["input_ids"]
 
+        # Step 1.5: Explicitly mask padding in labels (critical for training stability)
+        if "labels" in batch and self.tokenizer.pad_token_id is not None:
+            batch["labels"][batch["input_ids"] == self.tokenizer.pad_token_id] = -100
+
         # Step 2: Handle tokenizer compression if enabled and compressor is provided
         # If config says compression is enabled but no compressor is provided,
         # we fallback to raw IDs but warning might be useful. The prompt suggests:

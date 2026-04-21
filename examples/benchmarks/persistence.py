@@ -36,6 +36,15 @@ class BenchmarkResult:
             timestamp=str(data.get("timestamp", "N/A")),
         )
 
+    def save(self, base_dir: str = "outputs/benchmarks") -> str:
+        """Convenience method to save the result."""
+        os.makedirs(base_dir, exist_ok=True)
+        filename = f"{self.method}_{self.timestamp}.json"
+        path = os.path.join(base_dir, filename)
+        with open(path, "w") as f:
+            json.dump(self.to_dict(), f, indent=2)
+        return path
+
 
 class ResultManager:
     def __init__(self, base_dir: str = "outputs/benchmarks"):

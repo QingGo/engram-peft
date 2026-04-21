@@ -121,11 +121,11 @@ def plot_benchmark_comparison(
                     x="step",
                     y="eval_loss",
                     color=color,
+                    label=f"{label} (Eval)",
                     s=100,
                     marker="o",
                     edgecolor="white",
                     zorder=5,
-                    legend=False,
                 )
 
     # 3. Create Differential Footnote
