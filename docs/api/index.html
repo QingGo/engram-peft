@@ -647,6 +647,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#evaluate_model_loss" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        evaluate_model_loss
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -946,6 +957,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#evaluate_model_loss" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        evaluate_model_loss
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1077,7 +1099,12 @@
 - <code>hidden_size</code> (<code>Optional[int]</code>, default: <code>None</code>): The hidden dimension of the base model. Auto-detected if not provided.
 - <code>pad_id</code> (<code>Optional[int]</code>, default: <code>None</code>): The padding token ID. Auto-detected if not provided.
 - <code>compressed_vocab_size</code> (<code>Optional[int]</code>, default: <code>None</code>): Resolved size of the hashing vocabulary. Automatically set and saved after first initialization.
-- <code>layer_container_path</code> (<code>Optional[str]</code>, default: <code>None</code>): Explicit dot-separated path to the <code>nn.ModuleList</code> containing transformer layers (e.g., <code>"model.layers"</code>). If provided, it bypasses the automatic architecture discovery.</p>
+- <code>layer_container_path</code> (<code>Optional[str]</code>, default: <code>None</code>): Explicit dot-separated path to the transformer layers.
+- <code>max_ngram_size</code> (<code>int</code>, default: <code>3</code>): Maximum N-gram size, derived from <code>ngram_sizes</code>.
+- <code>clip_grad_per_group</code> (<code>bool</code>, default: <code>False</code>): Whether to use group-wise gradient clipping.
+- <code>enable_telemetry</code> (<code>bool</code>, default: <code>False</code>): Enables detailed metric logging (norms, drift, max values).
+- <code>entropy_loss_weight</code> (<code>float</code>, default: <code>0.0</code>): Weight for the gating entropy penalty loss.
+- <code>backbone_freeze_steps</code> (<code>int</code>, default: <code>0</code>): Initial steps where backbone is frozen (Adapter-First warm-up).</p>
 <p><strong>Example Usage:</strong>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">engram_peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">EngramConfig</span>
 
@@ -1122,8 +1149,11 @@ parameters remain trainable.</p>
 - <code>add_adapter(adapter_name: str, config: EngramConfig)</code>: Adds a new set of Engram weights with its own configuration.
 - <code>set_adapter(adapter_name: str)</code>: Switches the active knowledge pack to the specified adapter.
 - <code>create_optimizer(base_learning_rate: float, **optimizer_kwargs)</code>: Returns a <code>MixedOptimizer</code> with configurable backbone/Engram optimizer groups.
-- <code>create_scheduler(optimizer, num_steps, warmup_steps)</code>: Returns the paper-aligned Step Decay scheduler.
-- <code>save_pretrained(save_directory: str)</code>: Saves ONLY the active Engram weights and configuration.
+- <code>create_scheduler(optimizer, num_training_steps, warmup_steps)</code>: Returns the paper-aligned Step Decay scheduler.
+- <code>get_telemetry_stats()</code>: Collects activation statistics and diagnostics from active layers.
+- <code>get_total_gating_entropy()</code>: Aggregates gating entropy tensors for regularization.
+- <code>save_pretrained(save_directory: str)</code>: Saves Engram configurations and weights (unified).
+- <code>save_pretrained_engram(save_directory: str)</code>: Saves ONLY Engram layers' weights and config.
 - <code>from_pretrained(base_model, engram_path)</code>: Loads Engram weights onto a base model.
 - <code>unload_engram()</code>: Dynamically removes all PEFT hooks (reverts to base model).
 - <code>load_engram(engram_path=None)</code>: Re-installs hooks and optionally loads weights.
@@ -1163,6 +1193,9 @@ mixed optimizer automatically.</p>
     <span class="p">},</span>
 <span class="p">)</span>
 </code></pre></div></p>
+<h3 id="evaluate_model_loss"><code>evaluate_model_loss</code></h3>
+<p><code>engram_peft.utils.evaluate_model_loss(model, tokenizer, dataset, batch_size=8, max_length=128)</code></p>
+<p>Standardizes the calculation of Zero-shot loss for language models. Uses <code>DataCollatorForLanguageModeling</code> to ensure correct label shifting.</p>
 <hr />
 <h2 id="optimization">Optimization</h2>
 <h3 id="get_optimizer"><code>get_optimizer</code></h3>

@@ -692,6 +692,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#sprintest-test-acceleration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ⚡ Sprintest (Test Acceleration)
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="⚡ Sprintest (Test Acceleration)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#makefile-shortcuts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Makefile Shortcuts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#core-advantages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Core Advantages
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#environment-setup" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -742,15 +781,15 @@
 </ul>
 <h3 id="l3-deep-verification-deep-logic">L3: Deep Verification (Deep Logic)</h3>
 <ul>
-<li><strong>Tools</strong>: Mypy &amp; Pytest (Unit)</li>
-<li><strong>Command</strong>: <code>uv run pytest tests/unit &amp;&amp; uv run mypy src/ tests/ examples/</code></li>
+<li><strong>Tools</strong>: Mypy &amp; sprintest (Unit)</li>
+<li><strong>Command</strong>: <code>make type-check &amp;&amp; make test-unit</code></li>
 <li><strong>Goal</strong>: Ensure 100% type safety in <code>src/</code> and verify core logic in &lt;2 seconds.</li>
 <li><strong>Philosophy</strong>: Use the <code>tiny_tokenizer</code> and <code>tiny_compressor</code> fixtures for fast unit testing.</li>
 </ul>
 <h3 id="l4-integration-regression-full-fidelity">L4: Integration &amp; Regression (Full Fidelity)</h3>
 <ul>
-<li><strong>Tool</strong>: Pytest (Integration)</li>
-<li><strong>Command</strong>: <code>uv run pytest tests/integration</code></li>
+<li><strong>Tool</strong>: sprintest (Integration)</li>
+<li><strong>Command</strong>: <code>make test-integ</code></li>
 <li><strong>Goal</strong>: Verify algorithmic correctness using real-world models (GPT2, DeepSeek) and 32-layer weight migrations.</li>
 <li><strong>Frequency</strong>: Run before submitting a PR or releasing a version.</li>
 </ul>
@@ -766,6 +805,51 @@
 <li>Follow PEP 8 (handled by Ruff).</li>
 <li>Docstrings are encouraged for all public APIs.</li>
 <li>Type hints are <strong>mandatory</strong> for all code in <code>src/</code>. For <code>tests/</code>, return types are optional but recommended for clarity.</li>
+</ul>
+<hr />
+<h2 id="sprintest-test-acceleration">⚡ Sprintest (Test Acceleration)</h2>
+<p>Sprintest is a C/S (Client/Server) architecture test runner specifically designed for heavy AI projects. By keeping large models and datasets in memory, it eliminates the test startup latency caused by slow loading.</p>
+<h3 id="makefile-shortcuts">Makefile Shortcuts</h3>
+<p>For a better development experience, use the provided <code>Makefile</code> targets:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Command</th>
+<th style="text-align: left;">Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>make lint</code></td>
+<td style="text-align: left;">Check style</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>make format</code></td>
+<td style="text-align: left;">Fix and format code</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>make type-check</code></td>
+<td style="text-align: left;">Incremental type checking</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>make test-unit</code></td>
+<td style="text-align: left;">Run fast unit tests</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>make test-integ</code></td>
+<td style="text-align: left;">Run slow integration tests</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>make all</code></td>
+<td style="text-align: left;">Run everything before PR</td>
+</tr>
+</tbody>
+</table>
+<h3 id="core-advantages">Core Advantages</h3>
+<ul>
+<li><strong>Pre-loading</strong>: Loads heavy dependencies (e.g., PyTorch, Transformers, or large datasets) into the daemon process, reducing test startup time from minutes to seconds.</li>
+<li><strong>Powerful Hot-reloading</strong>: Automatically detects and clears modified modules in the current directory, ensuring tests run on the latest code without restarting the daemon.</li>
+<li><strong>Agent Friendly</strong>: Designed for AI coding assistants—providing fast feedback loops, clean output (no ANSI characters), and stable communication.</li>
 </ul>
 <hr />
 <h2 id="environment-setup">🚀 Environment Setup</h2>

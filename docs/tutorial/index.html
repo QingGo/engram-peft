@@ -531,6 +531,67 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#tutorial-15-simplified-training-via-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tutorial 1.5: Simplified Training via CLI
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tutorial 1.5: Simplified Training via CLI">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-generating-a-configuration-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Generating a Configuration Template
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-launching-training" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Launching Training
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-automated-inference-script" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Automated Inference Script
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-quick-overrides" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Quick Overrides
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#tutorial-2-injecting-medical-knowledge-into-llama-3" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -704,10 +765,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#3-visualizing-results" class="md-nav__link">
+  <a href="#technical-highlights-of-our-implementations" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. Visualizing Results
+        Technical Highlights of our Implementations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#running-a-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running a Template
       
     </span>
   </a>
@@ -873,6 +945,67 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#tutorial-15-simplified-training-via-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tutorial 1.5: Simplified Training via CLI
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tutorial 1.5: Simplified Training via CLI">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#1-generating-a-configuration-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Generating a Configuration Template
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#2-launching-training" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Launching Training
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#3-automated-inference-script" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Automated Inference Script
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-quick-overrides" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Quick Overrides
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#tutorial-2-injecting-medical-knowledge-into-llama-3" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1046,10 +1179,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#3-visualizing-results" class="md-nav__link">
+  <a href="#technical-highlights-of-our-implementations" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. Visualizing Results
+        Technical Highlights of our Implementations
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#running-a-template" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running a Template
       
     </span>
   </a>
@@ -1134,6 +1278,34 @@
 <span class="c1"># 5. Save ONLY the knowledge pack</span>
 <span class="n">model</span><span class="o">.</span><span class="n">save_pretrained</span><span class="p">(</span><span class="s2">&quot;medical_knowledge_pack&quot;</span><span class="p">)</span>
 </code></pre></div>
+<hr />
+<h2 id="tutorial-15-simplified-training-via-cli">Tutorial 1.5: Simplified Training via CLI</h2>
+<p>For most standard use cases, you don't need to write a custom Python script. Engram-PEFT provides a high-level CLI powered by <code>typer</code>.</p>
+<h3 id="1-generating-a-configuration-template">1. Generating a Configuration Template</h3>
+<p>We provide a minimal example in <code>examples/config.yaml</code>, but we highly recommend generating a full, documented template using the CLI to see all available options:</p>
+<div class="highlight"><pre><span></span><code>engram-peft<span class="w"> </span>config-template<span class="w"> </span>--output<span class="w"> </span>my_config.yaml
+</code></pre></div>
+<p>The generated file is divided into four main sections with detailed comments:
+- <code>model_name_or_path</code>: The base model identifier.
+- <code>engram_config</code>: Core hyperparameters for Engram layers.
+- <code>lora_config</code>: (Optional) PEFT LoRA settings for hybrid adaptation.
+- <code>training_args</code>: All standard <code>transformers.TrainingArguments</code>.
+- <code>data_args</code>: Dataset name and tokenization settings.</p>
+<h3 id="2-launching-training">2. Launching Training</h3>
+<p>Trigger the training pipeline using your configuration file:
+<div class="highlight"><pre><span></span><code>engram-peft<span class="w"> </span>train<span class="w"> </span>--config<span class="w"> </span>my_config.yaml
+</code></pre></div></p>
+<h3 id="3-automated-inference-script">3. Automated Inference Script</h3>
+<p>Once training is complete, the CLI automatically generates a ready-to-run <code>inference.py</code> script inside your <code>output_dir</code>. You can immediately test your trained model:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Assuming output_dir is ./outputs/tinyllama-engram</span>
+uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>outputs/tinyllama-engram/inference.py
+</code></pre></div>
+<h3 id="4-quick-overrides">4. Quick Overrides</h3>
+<p>You can override any nested configuration value using dot notation without editing the YAML file:
+<div class="highlight"><pre><span></span><code>engram-peft<span class="w"> </span>train<span class="w"> </span>--config<span class="w"> </span>my_config.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--overrides<span class="w"> </span><span class="s2">&quot;training_args.learning_rate=1e-5&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--overrides<span class="w"> </span><span class="s2">&quot;engram_config.target_layers=[2,15,31]&quot;</span>
+</code></pre></div></p>
 <hr />
 <h2 id="tutorial-2-injecting-medical-knowledge-into-llama-3">Tutorial 2: Injecting Medical Knowledge into Llama-3</h2>
 <p>Engram is specifically designed to store vast amounts of static knowledge without interfering with the model's original reasoning capabilities.</p>
@@ -1316,10 +1488,20 @@ In <code>train_mode="full_finetune"</code>, <code>model.save_pretrained(...)</co
 <div class="highlight"><pre><span></span><code><span class="c1"># Compare different layer configurations for Engram</span>
 uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/compare_engram_lora.py<span class="w"> </span>--methods<span class="w"> </span>engram:target_layers<span class="o">=[</span><span class="m">2</span>,11<span class="o">]</span><span class="w"> </span>engram:target_layers<span class="o">=[</span><span class="m">11</span>,21<span class="o">]</span><span class="w"> </span>
 </code></pre></div>
-<h3 id="3-visualizing-results">3. Visualizing Results</h3>
-<p>After the run is complete, the script automatically generates a comparison plot in <code>outputs/benchmarks/loss_curve.png</code>. To re-plot historical data, use:</p>
-<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/compare_engram_lora.py<span class="w"> </span>--plot_only
+<hr />
+<h3 id="technical-highlights-of-our-implementations">Technical Highlights of our Implementations</h3>
+<p>Our templates are designed to handle the unique complexities of these next-generation architectures:</p>
+<ul>
+<li><strong>Recursive Layer Discovery</strong>: Automatically detects transformer layers even in complex multimodal wrappers (e.g., Qwen3.5's hybrid linear/standard attention blocks).</li>
+<li><strong>Multimodal Configuration Sync</strong>: Seamlessly handles nested <code>text_config</code> structures used in Mistral-3 and Gemma-4, ensuring correct dimensionality (e.g., 3072 vs 4096) for memory injection.</li>
+<li><strong>PLE-Aware Hooks</strong>: Designed to work alongside Gemma 4's <strong>Per-Layer Embeddings (PLE)</strong> by injecting hooks at the layer boundary, capturing the optimal representation for sparse lookup.</li>
+<li><strong>Thinking Mode Handling</strong>: Templates include optimized generation parameters (e.g., <code>stop_strings</code>) to manage reasoning outputs in Qwen and Gemma, providing clean responses after the <code>&lt;think&gt;</code> or <code>&lt;|think|&gt;</code> phase.</li>
+</ul>
+<h3 id="running-a-template">Running a Template</h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># Example: Training Qwen 3.5-4B using 4-bit quantization</span>
+uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/qwen3_engram_lora.py<span class="w"> </span>--load_in_4bit<span class="w"> </span>--max_steps<span class="w"> </span><span class="m">300</span>
 </code></pre></div>
+<p>Refer to the <a href="file:///app/examples/README.md">Examples README</a> for more details on each template.</p>
 
 
 

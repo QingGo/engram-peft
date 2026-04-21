@@ -716,55 +716,77 @@
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#11-circuit-breaker" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        11. 死循环熔断机制 (Circuit Breaker)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#12" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        12. 核心资产与破坏性变更管理
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#13-api-context-efficiency" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        13. 文件读取与 API 溯源策略 (Context Efficiency)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#14" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        14. 人机协同执行规范
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="14. 人机协同执行规范">
+    <nav class="md-nav" aria-label="10. 结构化状态与记忆管理 (Structured Memory)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#101" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.1 读机制
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#102" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.2 强制写入场景（短期+长期）
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#103-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.3 标准记忆Schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#104" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10.4 记忆修剪规则
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        执行环境
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        执行命令
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#_3" class="md-nav__link">
     <span class="md-ellipsis">
       
         需要收集的信息
@@ -810,7 +832,7 @@
 <h2 id="2-think-before-you-code">2. 核心工作流：Think Before You Code</h2>
 <p>在进行任何实质性的代码修改前，你<strong>必须</strong>在回复中先输出你的思考过程：
 1. <strong>分析</strong>：简述你对当前问题的理解。
-2. <strong>规划</strong>：列出你打算修改的文件清单和逻辑步骤。
+2. <strong>规划</strong>：列出你打算修改的文件清单和逻辑步骤。规划完成后，<strong>第一步先更新短期记忆</strong>，再执行代码修改。
 3. <strong>技能加载</strong>：根据任务类型，确认已加载所有必需的技能包（见第3节技能决策树）。
 4. <strong>求证与确认机制</strong>：如果你的规划涉及修改超过 3 个文件，或者更改核心数据结构（见第12节核心资产清单），你<strong>必须主动停止</strong>，先询问人类是否同意，得到明确确认后再开始编写代码。</p>
 <hr />
@@ -822,14 +844,15 @@
 ├─ 编写/修复权重保存/加载逻辑 → 强制加载：peft-checkpoint-handling
 ├─ 处理HF Trainer集成或generate()生成 → 强制加载：hf-ecosystem-integration
 ├─ 遇到不确定的第三方API或未知底层异常 → 强制加载：api-source-tracing
-├─ 修改公开API或新增功能 → 强制加载：docs-sync
+├─ 修改公开API/新增功能 → 强制加载：docs-sync
+├─ 更新agent记忆/会话收尾/记录踩坑/熔断排错 → 强制加载：memory-update
 └─ 复杂任务（如修复生成报错）→ 按依赖顺序加载多个技能
 </code></pre></div>
 <p><strong>执行原则</strong>：绝不允许凭借记忆猜测这些高风险操作的规范。先读 Skill，再规划，最后写代码。</p>
 <hr />
 <h2 id="4">4. 目录结构与包管理</h2>
 <ul>
-<li><strong>包管理</strong>：本项目严格由 <code>uv</code> 进行环境和包管理。执行任何 Python 相关命令时，请优先使用 <code>uv run</code>。绝对禁止使用 <code>pip</code> 或直接修改 <code>uv.lock</code>。</li>
+<li><strong>包管理</strong>：本项目严格由 <code>uv</code> 进行环境和包管理。执行任何 Python 相关命令时，请优先使用 <code>uv run</code>。绝对禁止使用 <code>pip</code> 或直接修改 <code>uv.lock</code>。可以通过 <code>source .venv/bin/activate</code> 激活虚拟环境。</li>
 <li><strong>代码组织</strong>：</li>
 <li>核心源代码：<code>src/engram_peft/</code></li>
 <li>示例代码：<code>examples/</code></li>
@@ -839,11 +862,12 @@
 </ul>
 <hr />
 <h2 id="5-testing-constraints">5. 测试与验证规范 (Testing Constraints)</h2>
+<p>** 使用 sprintest 框架运行所有测试 **</p>
 <p><strong>5.1 轻量级单元测试 (Unit Tests)</strong>
 - <strong>位置</strong>：<code>tests/unit/</code>
 - <strong>定义</strong>：所有运行时间 <code>&lt; 1s</code> 的测试都必须归类为单元测试。
 - <strong>行动要求</strong>：每次修复一个错误或新增一个功能时，你<strong>必须</strong>为其设计并编写对应的轻量级单元测试。单元测试运行时间必须 <code>&lt; 1s</code>。如果你在执行验证时，发现 <code>--durations</code> 列表中有耗时超过 1s 的单元测试，你必须重构该测试（例如引入更彻底的 Mock），直到其耗时达标为止。
-- <strong>覆盖率要求</strong>：核心模块（<code>src/engram_peft/model.py</code>, <code>src/engram_peft/saving.py</code>）的单元测试覆盖率必须 ≥ 90%。</p>
+- <strong>覆盖率要求</strong>：核心模块（<code>src/engram_peft/model.py</code>）的单元测试覆盖率必须 ≥ 90%。</p>
 <p><strong>5.2 集成测试 (Integration Tests)</strong>
 - <strong>位置</strong>：<code>tests/integration/</code>
 - <strong>定义</strong>：用于测试较重的逻辑，但每个测试用例的运行时间必须 <code>&lt; 1分钟</code>。
@@ -860,7 +884,7 @@
 由于当前执行环境<strong>没有 GPU</strong>，所有涉及模型推理或张量计算的测试严禁运行真实的大模型前向传播。关于具体的 Mock 拦截与 Dummy 数据构造规范，你<strong>必须</strong>严格遵循 <code>mock-cpu-testing</code> 技能包。</p>
 <p><strong>5.5 强制验证与安全终端输出</strong>
 完成代码修改后，你必须主动运行命令验证测试是否修复、静态检测是否通过。<strong>注意保护上下文窗口</strong>：为防止 PyTorch 长报错撑爆上下文，执行测试时必须限制输出行数：
-<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/unit<span class="w"> </span>--cov<span class="o">=</span>src/engram_peft<span class="w"> </span>--cov-report<span class="o">=</span>term-missing<span class="w"> </span>--durations<span class="o">=</span><span class="m">5</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-n<span class="w"> </span><span class="m">500</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>mypy<span class="w"> </span>src/<span class="w"> </span>tests/<span class="w"> </span>examples/
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>env<span class="w"> </span><span class="nv">SPRINTEST_TARGET_PKG</span><span class="o">=</span>engram_peft<span class="w"> </span>stest<span class="w"> </span>tests/unit<span class="w"> </span>--cov<span class="o">=</span>src/engram_peft<span class="w"> </span>--cov-report<span class="o">=</span>term-missing<span class="w"> </span>--durations<span class="o">=</span><span class="m">5</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-n<span class="w"> </span><span class="m">500</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>dmypy<span class="w"> </span>src/<span class="w"> </span>tests/<span class="w"> </span>examples/
 </code></pre></div></p>
 <hr />
 <h2 id="6-coding-standards">6. 代码风格与质量规约 (Coding Standards)</h2>
@@ -899,76 +923,97 @@
 - <code>chore:</code> 构建过程或辅助工具的变动</p>
 <hr />
 <h2 id="10-structured-memory">10. 结构化状态与记忆管理 (Structured Memory)</h2>
-<p>为了防止在长对话中丢失上下文，本项目采用外挂记忆机制：
-- 在根目录下维护一个 <code>.agent_memory.md</code> 文件（该文件已加入 <code>.gitignore</code>，纯本地使用）。
-- 如果该文件不存在，你<strong>必须</strong>基于 <code>.agent_memory.template.md</code> 的结构在本地自动创建它。
-- <strong>读机制</strong>：在每次开启新的复杂任务或跨文件重构前，你<strong>必须主动读取</strong>此文件以恢复上下文（不要依赖全局索引）。
-- <strong>强制写入场景</strong>：以下情况必须更新 <code>.agent_memory.md</code>：
-  1. 任何涉及"架构决策"的讨论及其背后的原因
-  2. 任何"踩坑记录"（如特定transformers版本的Bug、API特殊用法）
-  3. 任何"被人类否决的方案"（防止AI下次重提）
-  4. 解决了复杂的架构问题或当前会话即将结束时
-- <strong>写机制与 Schema</strong>：更新时，<strong>必须严格遵循以下结构</strong>：
-  <div class="highlight"><pre><span></span><code><span class="gu">## 🎯 Current Milestone</span>
+<p>为了防止在长对话中丢失上下文，本项目采用<strong>短期会话记忆 + 长期架构记忆</strong>分离机制，统一维护 <code>.agent_memory.md</code>：
+- 短期记忆：当前会话临时任务、即时踩坑、未闭环问题、会话级上下文
+- 长期记忆：核心架构决策、人类最终决策、通用踩坑沉淀
+- 文件位置：根目录 <code>.agent_memory.md</code>（已加入 <code>.gitignore</code>，纯本地使用）
+- 模板依赖：不存在则自动基于 <code>.agent_memory.template.md</code> 创建</p>
+<h3 id="101">10.1 读机制</h3>
+<p>每次开启新复杂任务/跨文件重构前，<strong>必须先读取 <code>memory-update</code> 技能规范 + 主动读取 <code>.agent_memory.md</code></strong> 恢复上下文，不依赖全局索引。</p>
+<h3 id="102">10.2 强制写入场景（短期+长期）</h3>
+<p>以下情况<strong>必须执行记忆更新</strong>，且严格遵循 <code>memory-update</code> 技能规范：
+1. 短期：当前会话产生新临时TODO、即时踩坑、未解决问题
+2. 短期：会话即将结束，需归档当前上下文
+3. 长期：核心架构决策、人类否决/确认方案
+4. 长期：死循环熔断后，记录排错过程与猜想
+5. 长期：修复顽固性Bug，沉淀通用踩坑点</p>
+<h3 id="103-schema">10.3 标准记忆Schema</h3>
+<p>更新时<strong>禁止自由格式</strong>，必须严格使用以下结构：
+<div class="highlight"><pre><span></span><code><span class="gu">## 🎯 Current Milestone</span>
 <span class="k">- [ ]</span> 当前高优目标与进度
 
-<span class="gu">## 🏗️ Architecture Decisions</span>
-<span class="k">-</span><span class="w"> </span>核心架构决策及其背后的原因（防止后续推翻已有设计）
+<span class="gu">## 🏗️ Architecture Decisions（长期）</span>
+<span class="k">-</span><span class="w"> </span>核心架构决策及其原因（防止推翻已有设计）
 
-<span class="gu">## 🤝 Human Decisions</span>
-<span class="k">-</span><span class="w"> </span>人类明确给出的指令、否决项或最终决策
+<span class="gu">## 🤝 Human Decisions（长期）</span>
+<span class="k">-</span><span class="w"> </span>人类明确指令、否决项、最终确认项
 
-<span class="gu">## ⚠️ Gotchas &amp; Context</span>
-<span class="k">-</span><span class="w"> </span>踩过的坑（如特定的报错、环境限制、API 特殊用法）
+<span class="gu">## ⚠️ Gotchas &amp; Context（长期+短期）</span>
+<span class="k">-</span><span class="w"> </span>通用踩坑（长期）
+<span class="k">-</span><span class="w"> </span>当前会话临时踩坑（短期，会话后归档/清理）
 
-<span class="gu">## 📝 Active TODOs</span>
-<span class="k">-</span><span class="w"> </span>下一步具体的技术细节任务清单
-</code></pre></div>
-- <strong>记忆修剪 (Memory Pruning)</strong>：当 <code>.agent_memory.md</code> 超过 200 行，或者一个大 Milestone 结束时，你必须主动对其进行<strong>总结和压缩</strong>。保留高价值的架构决策和踩坑记录，清理掉已完成的日常琐碎 TODO，确保记忆文件精简且具有高信噪比。</p>
-<hr />
-<h2 id="11-circuit-breaker">11. 死循环熔断机制 (Circuit Breaker)</h2>
-<p>当系统性错误发生时，你必须主动阻断无效的试错。请严格遵守 <strong>3 次重试法则</strong>：
-- <strong>触发条件</strong>：如果你试图修复同一个 Bug，且连续 <strong>3 次</strong> 运行测试后依然报类似错误，你<strong>必须立即停止编写任何新代码</strong>。
-- <strong>必须执行的操作</strong>：停止后，向我输出一段《排错总结》，内容必须包括：当前报错信息、你已经尝试过的 3 种方法及其失败原因分析、以及对底层逻辑故障的猜想。
-- 等待我的进一步（人类）指令或架构指导后再继续行动。</p>
-<hr />
-<h2 id="12">12. 核心资产与破坏性变更管理</h2>
-<p><strong>🛑 核心资产清单（修改前必须人类确认）</strong>
-1. <code>src/engram_peft/model.py</code> 中的 <code>EngramLayer</code> 前向传播逻辑
-2. <code>src/engram_peft/saving.py</code> 中的 <code>save_pretrained</code>/<code>from_pretrained</code> 接口
-3. <code>src/engram_peft/config.py</code> 中的 <code>EngramConfig</code> 数据结构
-4. <code>pyproject.toml</code> 中的依赖版本约束
-5. <code>mkdocs.yml</code> 中的文档结构</p>
-<p><strong>⚠️ 破坏性变更检查清单</strong>
+<span class="gu">## 📝 Active TODOs（短期为主）</span>
+<span class="k">-</span><span class="w"> </span>下一步具体技术任务、未闭环事项
+</code></pre></div></p>
+<h3 id="104">10.4 记忆修剪规则</h3>
+<ul>
+<li>短期记忆：会话结束后<strong>自动清理已完成临时TODO、过期上下文</strong></li>
+<li>整体文件：超过200行或里程碑完成时，压缩精简，保留高价值长期内容
+<div class="highlight"><pre><span></span><code>---
+
+## 11. 死循环熔断机制 (Circuit Breaker)
+当系统性错误发生时，你必须主动阻断无效的试错。请严格遵守 **3 次重试法则**：
+- **触发条件**：修复同一个 Bug，连续 **3 次** 运行测试仍报同类错误，**立即停止编码**
+- **必做操作**：输出《排错总结》，包含：报错信息、3次尝试方案+失败原因、底层故障猜想
+- **强制记忆更新**：熔断后**必须通过 `memory-update` 技能**，将排错过程写入 `.agent_memory.md` 短期记忆
+- 等待人类指令/架构指导后再继续
+
+---
+
+## 12. 核心资产与破坏性变更管理
+
+**🛑 核心资产清单（修改前必须人类确认）**
+1. `src/engram_peft/model.py` 中的 `EngramLayer` 前向传播逻辑
+2. `src/engram_peft/saving.py` 中的 `save_pretrained`/`from_pretrained` 接口
+3. `src/engram_peft/config.py` 中的 `EngramConfig` 数据结构
+4. `pyproject.toml` 中的依赖版本约束
+5. `mkdocs.yml` 中的文档结构
+
+**⚠️ 破坏性变更检查清单**
 如果修改涉及以下内容，必须先询问人类：
 - 是否改变了公开API的参数或返回值？
 - 是否使旧版本的Checkpoint无法加载？
 - 是否需要用户修改他们的训练脚本？
-- 是否改变了项目的核心依赖？</p>
-<hr />
-<h2 id="13-api-context-efficiency">13. 文件读取与 API 溯源策略 (Context Efficiency)</h2>
-<ul>
-<li><strong>渐进式读取 (防上下文爆炸)</strong>：</li>
-<li>遇到未知代码，严禁直接读取整个长文件。</li>
-<li>必须优先使用 <code>grep</code> 搜索关键字，或读取文件头部（如 <code>head -n 50</code>）了解结构，精准定位后再读取特定代码块。</li>
-<li><strong>强制溯源 (防第三方库幻觉)</strong>：</li>
-<li><code>peft</code> 和 <code>transformers</code> 的底层 API 迭代极快。在调用不熟悉的算子时，禁止凭记忆生成代码。你<strong>必须</strong>查阅本地真实源码，具体溯源方法见 <code>api-source-tracing</code> 技能包。</li>
-</ul>
-<hr />
-<h2 id="14">14. 人机协同执行规范</h2>
-<p>当需要人类在GPU服务器上执行代码时，必须使用以下标准模板输出请求：</p>
-<div class="highlight"><pre><span></span><code>🖥️ 需要人类协助执行
+- 是否改变了项目的核心依赖？
 
-### 执行环境
-- 需要GPU：是/否
-- 预计耗时：X分钟
-- 最低显存要求：X GB（如适用）
+---
 
-### 执行命令
-```bash
-uv run python examples/train.py --model TinyLlama-1.1B --steps 100
+## 13. 文件读取与 API 溯源策略 (Context Efficiency)
+- **渐进式读取 (防上下文爆炸)**：
+  - 遇到未知代码，严禁直接读取整个长文件。
+  - 必须优先使用 `grep` 搜索关键字，或读取文件头部（如 `head -n 50`）了解结构，精准定位后再读取特定代码块。
+- **强制溯源 (防第三方库幻觉)**：
+  - `peft` 和 `transformers` 的底层 API 迭代极快。在调用不熟悉的算子时，禁止凭记忆生成代码。你**必须**查阅本地真实源码，具体溯源方法见 `api-source-tracing` 技能包。
+
+---
+
+## 14. 人机协同执行规范
+当需要人类在GPU服务器上执行代码时，必须使用以下标准模板输出请求：
 </code></pre></div>
-<h3 id="_1">需要收集的信息</h3>
+🖥️ 需要人类协助执行</li>
+</ul>
+<h3 id="_1">执行环境</h3>
+<ul>
+<li>需要GPU：是/否</li>
+<li>预计耗时：X分钟</li>
+<li>最低显存要求：X GB（如适用）</li>
+</ul>
+<h3 id="_2">执行命令</h3>
+<p><div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>examples/train.py<span class="w"> </span>--model<span class="w"> </span>TinyLlama-1.1B<span class="w"> </span>--steps<span class="w"> </span><span class="m">100</span>
+</code></pre></div>
+向人类请求执行前，将「待验证项」写入短期记忆；
+人类返回结果后，立即更新验证结论。</p>
+<h3 id="_3">需要收集的信息</h3>
 <ol>
 <li>完整的终端输出（如果太长，请截取最后500行）</li>
 <li>峰值显存占用（可通过 <code>nvidia-smi dmon -s p -d 1</code> 监控）</li>
