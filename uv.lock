@@ -544,6 +544,7 @@ source = { editable = "." }
 dependencies = [
     { name = "accelerate" },
     { name = "httpx", extra = ["socks"] },
+    { name = "huggingface-hub" },
     { name = "peft" },
     { name = "pyyaml" },
     { name = "safetensors" },
@@ -590,6 +591,7 @@ dev = [
 requires-dist = [
     { name = "accelerate", specifier = ">=1.13.0" },
     { name = "httpx", extras = ["socks"], specifier = ">=0.28.1" },
+    { name = "huggingface-hub", specifier = ">=0.25.0" },
     { name = "peft", specifier = ">=0.18.1" },
     { name = "pyyaml", specifier = ">=6.0.0" },
     { name = "safetensors", specifier = ">=0.4.0" },

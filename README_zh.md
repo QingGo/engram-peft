@@ -126,6 +126,7 @@ engram-peft train --config training_config.yaml --overrides "training_args.learn
 - **自动化推理脚本生成**：CLI 会在训练完成后自动生成可立即运行的 `inference.py` 脚本，方便快速验证。
 - **主流模型开箱即用模板**：提供 **Qwen 3.5-4B**、**Ministral-3-3B** 和 **Gemma-4-E2B** 的训练与推理脚本，内置量化支持。
 - **多模态与主流架构深度适配**：原生支持复杂封装架构下的递归层定位，兼容多模态模型特有的嵌套配置（text_config）同步，实现对 Qwen、Gemma 等新架构的无缝支持。
+- **Hugging Face Hub 集成**：支持通过 `push_to_hub` 上传适配器，并通过 `from_pretrained` 直接从 Hub ID 加载，与 PEFT 生态深度对齐。
 
 ---
 

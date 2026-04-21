@@ -126,6 +126,7 @@ engram-peft train --config training_config.yaml --overrides "training_args.learn
 - **Automated Inference Generation**: Progress-tracking CLI that automatically creates ready-to-run `inference.py` scripts for immediate verification.
 - **Mainstream Model Templates**: Out-of-the-box scripts for **Qwen 3.5-4B**, **Ministral-3-3B**, and **Gemma-4-E2B** with quantization support.
 - **Multimodal & Hybrid Architecture Support**: Native support for recursive layer discovery in complex wrappers and synchronization of nested `text_config` attributes for state-of-the-art models.
+- **Hugging Face Hub Integration**: Support for pushing adapters via `push_to_hub` and loading directly from Hub IDs via `from_pretrained`, fully aligned with the PEFT ecosystem.
 
 ---
 

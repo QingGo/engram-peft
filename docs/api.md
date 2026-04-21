@@ -98,9 +98,9 @@ The wrapper class for the base model. Handles dynamic hook management and weight
 - `create_scheduler(optimizer, num_training_steps, warmup_steps)`: Returns the paper-aligned Step Decay scheduler.
 - `get_telemetry_stats()`: Collects activation statistics and diagnostics from active layers.
 - `get_total_gating_entropy()`: Aggregates gating entropy tensors for regularization.
-- `save_pretrained(save_directory: str)`: Saves Engram configurations and weights (unified).
-- `save_pretrained_engram(save_directory: str)`: Saves ONLY Engram layers' weights and config.
-- `from_pretrained(base_model, engram_path)`: Loads Engram weights onto a base model.
+- `save_pretrained(save_directory: str, safe_serialization: bool = True, **kwargs)`: Saves Engram configurations and weights. Automatically saves base model adapters (e.g. LoRA) if present.
+- `push_to_hub(repo_id: str, use_temp_dir: bool | None = None, commit_message: str | None = None, private: bool | None = None, token: str | bool | None = None, **kwargs)`: Pushes the Engram adapter (and any base model adapters) to the Hugging Face Hub.
+- `from_pretrained(base_model, engram_path, tokenizer=None, **kwargs)`: Loads Engram weights onto a base model. `engram_path` can be a local directory or a Hugging Face Hub ID. Supports `token` and `revision` via `kwargs`.
 - `unload_engram()`: Dynamically removes all PEFT hooks (reverts to base model).
 - `load_engram(engram_path=None)`: Re-installs hooks and optionally loads weights.
 - `load_weights_flexible(checkpoint_path, source_config_path=None, layer_mapping=None, reuse_structural=False)`: Loads weights from a checkpoint even if configurations (layers, buckets, n-grams) differ.

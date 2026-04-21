@@ -1,5 +1,6 @@
 import logging
 import os
+import tempfile
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Literal, cast
 
@@ -9,6 +10,7 @@ if TYPE_CHECKING:
 import numpy as np
 import torch
 import torch.nn as nn
+from huggingface_hub import HfApi, snapshot_download
 from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
 from engram_peft import saving
@@ -645,17 +647,72 @@ class EngramModel(nn.Module):
             self, save_directory, safe_serialization=safe_serialization, **kwargs
         )
 
+    def push_to_hub(
+        self,
+        repo_id: str,
+        use_temp_dir: bool | None = None,
+        commit_message: str | None = None,
+        private: bool | None = None,
+        token: str | bool | None = None,
+        **kwargs: Any,
+    ) -> str:
+        """
+        Push the Engram adapter to the Hugging Face Hub.
+        """
+        api = HfApi(token=token)
+        api.create_repo(repo_id=repo_id, private=private, exist_ok=True)
+
+        if use_temp_dir is not False:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                self.save_pretrained(tmp_dir, **kwargs)
+                return api.upload_folder(
+                    repo_id=repo_id,
+                    folder_path=tmp_dir,
+                    commit_message=commit_message,
+                    **kwargs,
+                )
+        else:
+            # If use_temp_dir is False, save to a local directory named after the repo
+            working_dir = repo_id.rsplit("/", maxsplit=1)[-1]
+            self.save_pretrained(working_dir, **kwargs)
+            return api.upload_folder(
+                repo_id=repo_id,
+                folder_path=working_dir,
+                commit_message=commit_message,
+                **kwargs,
+            )
+
     @classmethod
     def from_pretrained(
         cls,
         base_model: PreTrainedModel | torch.nn.Module,
         engram_path: str,
         tokenizer: PreTrainedTokenizerBase | None = None,
+        **kwargs: Any,
     ) -> "EngramModel":
         """
-        Load an Engram model from a directory.
+        Load an Engram model from a directory or Hugging Face Hub.
         """
-        config = EngramConfig.from_pretrained(engram_path)
+        token = kwargs.get("token")
+        revision = kwargs.get("revision")
+
+        # 1. Check if path is local
+        if not os.path.exists(engram_path):
+            # Try to download from Hub
+            try:
+                resolved_path = snapshot_download(
+                    repo_id=engram_path,
+                    token=token,
+                    revision=revision,
+                    library_name="engram-peft",
+                )
+                engram_path = resolved_path
+            except Exception as e:
+                raise ValueError(
+                    f"Could not find local path or Hub ID: {engram_path}. Error: {e}"
+                ) from e
+
+        config = EngramConfig.from_pretrained(engram_path, **kwargs)
         model = cls(base_model, config, tokenizer=tokenizer)
         model.load_engram(engram_path)
         return model
