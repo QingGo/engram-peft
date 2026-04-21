@@ -665,21 +665,27 @@ class EngramModel(nn.Module):
         if use_temp_dir is not False:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 self.save_pretrained(tmp_dir, **kwargs)
-                return api.upload_folder(
-                    repo_id=repo_id,
-                    folder_path=tmp_dir,
-                    commit_message=commit_message,
-                    **kwargs,
+                return cast(
+                    "str",
+                    api.upload_folder(
+                        repo_id=repo_id,
+                        folder_path=tmp_dir,
+                        commit_message=commit_message,
+                        **kwargs,
+                    ),
                 )
         else:
             # If use_temp_dir is False, save to a local directory named after the repo
             working_dir = repo_id.rsplit("/", maxsplit=1)[-1]
             self.save_pretrained(working_dir, **kwargs)
-            return api.upload_folder(
-                repo_id=repo_id,
-                folder_path=working_dir,
-                commit_message=commit_message,
-                **kwargs,
+            return cast(
+                "str",
+                api.upload_folder(
+                    repo_id=repo_id,
+                    folder_path=working_dir,
+                    commit_message=commit_message,
+                    **kwargs,
+                ),
             )
 
     @classmethod

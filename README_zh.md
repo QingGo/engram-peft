@@ -66,7 +66,7 @@ engram-peft config-template --output training_config.yaml
 ```
 
 生成的 YAML 文件包含五个核心区块：
-- `model_name_or_path`: 基础模型路径或 ID。
+- `model_name_or_path`: 基础模型路径 or ID。
 - `engram_config`: Engram 层的核心超参数。
 - `lora_config`: (可选) PEFT LoRA 设置，用于混合适配。
 - `training_args`: 标准的 `transformers.TrainingArguments` 训练参数。
@@ -127,6 +127,7 @@ engram-peft train --config training_config.yaml --overrides "training_args.learn
 - **主流模型开箱即用模板**：提供 **Qwen 3.5-4B**、**Ministral-3-3B** 和 **Gemma-4-E2B** 的训练与推理脚本，内置量化支持。
 - **多模态与主流架构深度适配**：原生支持复杂封装架构下的递归层定位，兼容多模态模型特有的嵌套配置（text_config）同步，实现对 Qwen、Gemma 等新架构的无缝支持。
 - **Hugging Face Hub 集成**：支持通过 `push_to_hub` 上传适配器，并通过 `from_pretrained` 直接从 Hub ID 加载，与 PEFT 生态深度对齐。
+- **TRL & SFTTrainer 深度适配**：内置 `trl.SFTTrainer` 工厂函数，自动处理模型预处理与哈希预计算，实现无缝指令微调。
 
 ---
 

@@ -159,6 +159,20 @@ Standardizes the calculation of Zero-shot loss for language models. Uses `DataCo
 
 ---
 
+## TRL Integration
+
+### `create_engram_sft_trainer`
+`engram_peft.trl.create_engram_sft_trainer(model, tokenizer, train_dataset, eval_dataset=None, args=None, **kwargs)`
+
+A high-level factory function that creates a `trl.SFTTrainer` pre-configured for Engram models. It automatically handles model preparation (disabling cache, enabling gradient checkpointing) and sets up the `EngramDataCollator`.
+
+### `prepare_engram_for_sft`
+`engram_peft.trl.prepare_engram_for_sft(model, use_gradient_checkpointing=True)`
+
+Prepares an `EngramModel` for SFT by disabling `use_cache`, enabling gradient checkpointing, and ensuring the model is in training mode.
+
+---
+
 ## Optimization
 
 ### `get_optimizer`
