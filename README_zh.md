@@ -73,7 +73,9 @@ engram-peft config-template --output training_config.yaml
 - `data_args`: 数据集设置与分词逻辑。
 
 # 2. 使用配置文件（或极简的 examples/config.yaml）启动训练
+```bash
 engram-peft train --config training_config.yaml
+```
 
 # 3. 训练后推理
 CLI 会在您的 `output_dir` 中自动生成一个随时可用的 `inference.py` 脚本：
@@ -82,6 +84,7 @@ uv run python outputs/tinyllama-lora-engram/inference.py
 ```
 
 # 4. 在运行时动态覆盖特定参数
+```bash
 engram-peft train --config training_config.yaml --overrides "training_args.learning_rate=5e-5"
 ```
 

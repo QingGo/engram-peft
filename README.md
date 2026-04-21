@@ -73,7 +73,9 @@ The generated YAML is structured into five main sections:
 - `data_args`: Dataset settings and tokenization logic.
 
 # 2. Launch training using the YAML file (or our minimal examples/config.yaml)
+```bash
 engram-peft train --config training_config.yaml
+```
 
 # 3. Post-Training Inference
 The CLI automatically generates a ready-to-run `inference.py` script in your `output_dir`.
@@ -82,6 +84,7 @@ uv run python outputs/tinyllama-lora-engram/inference.py
 ```
 
 # 4. Override specific arguments on the fly
+```bash
 engram-peft train --config training_config.yaml --overrides "training_args.learning_rate=5e-5"
 ```
 
