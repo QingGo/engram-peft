@@ -153,7 +153,7 @@ class EngramConfig(PretrainedConfig):
         },
     )
     engram_version: str = field(
-        default="1.2.1",
+        default="1.2.2",
         metadata={"help": "The version of the Engram state file format."},
     )
 
@@ -182,7 +182,7 @@ class EngramConfig(PretrainedConfig):
         enable_telemetry: bool = False,
         entropy_loss_weight: float = 0.0,
         backbone_freeze_steps: int = 0,
-        engram_version: str = "1.2.1",
+        engram_version: str = "1.2.2",
         **kwargs: Any,
     ):
         """Constructs EngramConfig.
