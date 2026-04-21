@@ -125,7 +125,7 @@ dev = [
     "types-pyyaml>=6.0.12.20260408",
     "ipython>=8.39.0",
     "ipytest>=0.14.2",
-    "sprintest==1.0.5",
+    "sprintest==1.0.7",
     "bitsandbytes>=0.49.2",
 ]
 

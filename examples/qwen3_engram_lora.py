@@ -367,8 +367,18 @@ def run_example(args: argparse.Namespace) -> None:
 
     # 7. Inference Demo (Original Model)
     print("\n>>> Inference Demo (Original Model)")
-    prompt = "Instruction: Explain the concept of quantum entanglement.\nResponse: "
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {
+            "role": "user",
+            "content": "Explain the concept of quantum entanglement in one sentence.",
+        },
+    ]
+    prompt = tokenizer.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=True
+    )
     inputs = tokenizer(prompt, return_tensors="pt").to(model.base_model.device)
+    input_len = inputs["input_ids"].shape[-1]
 
     print(f"Prompt: {prompt}")
     with torch.no_grad():
@@ -377,10 +387,10 @@ def run_example(args: argparse.Namespace) -> None:
             max_new_tokens=200,
             do_sample=True,
             temperature=0.7,
-            stop_strings=["</think>"],
+            stop_strings=["<think>", "</think>", "<|im_end|>"],
             tokenizer=tokenizer,
         )
-    original_resp = tokenizer.decode(output[0], skip_special_tokens=True)
+    original_resp = tokenizer.decode(output[0][input_len:], skip_special_tokens=True)
     print(f"Response: {original_resp}")
 
     # 8. Reload and Verify
@@ -404,10 +414,12 @@ def run_example(args: argparse.Namespace) -> None:
                 max_new_tokens=200,
                 do_sample=True,
                 temperature=0.7,
-                stop_strings=["</think>", "\n\n"],
+                stop_strings=["<think>", "</think>", "<|im_end|>"],
                 tokenizer=tokenizer,
             )
-        reloaded_resp = tokenizer.decode(reloaded_output[0], skip_special_tokens=True)
+        reloaded_resp = tokenizer.decode(
+            reloaded_output[0][input_len:], skip_special_tokens=True
+        )
         print(f"Response: {reloaded_resp}")
     except Exception as e:
         print(f"Reloading failed: {e}")

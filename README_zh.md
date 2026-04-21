@@ -121,8 +121,8 @@ engram-peft train --config training_config.yaml --overrides "training_args.learn
 - **自动化训练流程**：内置 `EngramTrainer`，自动处理稀疏 Adam 优化、梯度管理与学习率倍率同步。
 - **YAML 驱动的 CLI**：完全声明式的训练工作流，支持 YAML 配置与动态参数覆盖。
 - **自动化推理脚本生成**：CLI 会在训练完成后自动生成可立即运行的 `inference.py` 脚本，方便快速验证。
-- **灵活的层发现 (Flexible Layer Discovery)**：采用递归逻辑定位 Transformer 层，无视 PEFT 包装嵌套深度。
 - **主流模型开箱即用模板**：提供 **Qwen 3.5-4B**、**Ministral-3-3B** 和 **Gemma-4-E2B** 的训练与推理脚本，内置量化支持。
+- **多模态与主流架构深度适配**：原生支持复杂封装架构下的递归层定位，兼容多模态模型特有的嵌套配置（text_config）同步，实现对 Qwen、Gemma 等新架构的无缝支持。
 
 ---
 

@@ -330,13 +330,14 @@ uv run python examples/compare_engram_lora.py --methods engram:target_layers=[2,
 
 ---
 
-## Tutorial 9: Production-Ready Mainstream Model Examples
+### Technical Highlights of our Implementations
 
-For users looking to deploy Engram-PEFT with state-of-the-art models, we provide comprehensive templates for **Qwen 3.5**, **Ministral 3**, and **Gemma 4**. These scripts are located in the `examples/` directory and feature out-of-the-box support for:
+Our templates are designed to handle the unique complexities of these next-generation architectures:
 
-1.  **Instruction Tuning**: Ready-made prompt templates for common chat formats.
-2.  **Quantized Training**: Integration with `bitsandbytes` for 4-bit and 8-bit fine-tuning, enabling training on consumer GPUs.
-3.  **Hybrid Adapters**: Demonstrates how to use LoRA for task-specific behavior while using Engram for massive knowledge storage.
+*   **Recursive Layer Discovery**: Automatically detects transformer layers even in complex multimodal wrappers (e.g., Qwen3.5's hybrid linear/standard attention blocks).
+*   **Multimodal Configuration Sync**: Seamlessly handles nested `text_config` structures used in Mistral-3 and Gemma-4, ensuring correct dimensionality (e.g., 3072 vs 4096) for memory injection.
+*   **PLE-Aware Hooks**: Designed to work alongside Gemma 4's **Per-Layer Embeddings (PLE)** by injecting hooks at the layer boundary, capturing the optimal representation for sparse lookup.
+*   **Thinking Mode Handling**: Templates include optimized generation parameters (e.g., `stop_strings`) to manage reasoning outputs in Qwen and Gemma, providing clean responses after the `<think>` or `<|think|>` phase.
 
 ### Running a Template
 ```bash

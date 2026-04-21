@@ -121,8 +121,8 @@ engram-peft train --config training_config.yaml --overrides "training_args.learn
 - **Automated Training**: Native `EngramTrainer` with built-in sparse Adam support and automatic sync of optimizer hyperparameters.
 - **YAML-Driven CLI**: Fully declarative training workflow via YAML configurations with dynamic parameter overrides.
 - **Automated Inference Generation**: Progress-tracking CLI that automatically creates ready-to-run `inference.py` scripts for immediate verification.
-- **Flexible Layer Discovery**: Recursive logic to find transformer layers regardless of PEFT wrapper nesting.
 - **Mainstream Model Templates**: Out-of-the-box scripts for **Qwen 3.5-4B**, **Ministral-3-3B**, and **Gemma-4-E2B** with quantization support.
+- **Multimodal & Hybrid Architecture Support**: Native support for recursive layer discovery in complex wrappers and synchronization of nested `text_config` attributes for state-of-the-art models.
 
 ---
 
