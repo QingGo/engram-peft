@@ -1,8 +1,7 @@
-from typing import cast
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from jaxtyping import Float, Int64
 
 from engram_peft.compression import CompressedTokenizer
 from engram_peft.config import EngramConfig
@@ -64,7 +63,9 @@ class ShortConv(nn.Module):
             if self.conv.bias is not None:
                 nn.init.zeros_(self.conv.bias)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x: Float[torch.Tensor, "batch seq hc_mult hidden_dim"]
+    ) -> Float[torch.Tensor, "batch seq hc_mult hidden_dim"]:
         """
         Forward pass for ShortConv.
 
@@ -111,8 +112,7 @@ class ShortConv(nn.Module):
         )
 
         # Matches the formula: Y = SiLU(Conv(Norm(V))) + V
-        # cast required because some torch ops return Any in current stubs
-        return cast("torch.Tensor", (out + x).to(x.dtype))
+        return (out + x).to(x.dtype)
 
 
 class ContextAwareGating(nn.Module):
@@ -157,8 +157,10 @@ class ContextAwareGating(nn.Module):
         self.last_entropy: float = 0.0  # Default to zero
 
     def forward(
-        self, embeddings: torch.Tensor, hidden_states: torch.Tensor
-    ) -> torch.Tensor:
+        self,
+        embeddings: Float[torch.Tensor, "batch seq engram_hidden"],
+        hidden_states: Float[torch.Tensor, "batch seq hc_mult hidden_dim"],
+    ) -> Float[torch.Tensor, "batch seq hc_mult hidden_dim"]:
         """
         Forward pass of the ContextAwareGating module.
 
@@ -208,7 +210,7 @@ class ContextAwareGating(nn.Module):
             2
         )  # [B, L, M, 1] * [B, L, 1, D] -> [B, L, M, D]
 
-        return cast("torch.Tensor", gated_value)
+        return gated_value
 
 
 class MultiHeadEmbedding(nn.Module):
@@ -232,7 +234,9 @@ class MultiHeadEmbedding(nn.Module):
         )
         nn.init.normal_(self.embedding.weight, mean=0.0, std=0.02)
 
-    def forward(self, hash_indices: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hash_indices: Int64[torch.Tensor, "batch seq total_heads"]
+    ) -> Float[torch.Tensor, "batch seq total_heads dim_per_head"]:
         """
         Retrieves embedding vectors for pre-computed hash indices.
         Args:
@@ -242,7 +246,7 @@ class MultiHeadEmbedding(nn.Module):
         """
         assert isinstance(self.offsets, torch.Tensor)
         shifted_indices = hash_indices.to(self.offsets.device) + self.offsets
-        return cast("torch.Tensor", self.embedding(shifted_indices))
+        return self.embedding(shifted_indices)
 
 
 class EngramLayer(nn.Module):
@@ -360,11 +364,16 @@ class EngramLayer(nn.Module):
 
     def forward(
         self,
-        input_ids: torch.Tensor | None = None,
-        compressed_ids: torch.Tensor | None = None,
-        hidden_states: torch.Tensor | None = None,
-        engram_hash_indices: torch.Tensor | None = None,
-    ) -> torch.Tensor:
+        input_ids: Int64[torch.Tensor, "batch seq"] | None = None,
+        compressed_ids: Int64[torch.Tensor, "batch seq"] | None = None,
+        hidden_states: Float[torch.Tensor, "batch seq hidden_dim"]
+        | Float[torch.Tensor, "batch seq hc_mult hidden_dim"]
+        | None = None,
+        engram_hash_indices: Int64[torch.Tensor, "batch seq total_heads"] | None = None,
+    ) -> (
+        Float[torch.Tensor, "batch seq hidden_dim"]
+        | Float[torch.Tensor, "batch seq hc_mult hidden_dim"]
+    ):
         """
         Forward pass of the EngramLayer.
 
@@ -425,12 +434,13 @@ class EngramLayer(nn.Module):
 
         if self.config.enable_telemetry:
             with torch.no_grad():
-                y_norm = torch.norm(y.float(), 2)
+                y_norm = torch.linalg.vector_norm(y.float(), ord=2)
                 h_norm = (
-                    torch.norm(hidden_states.float(), 2)
+                    torch.linalg.vector_norm(hidden_states.float(), ord=2)
                     if is_3d
-                    else torch.norm(hidden_states_m.float(), 2)
+                    else torch.linalg.vector_norm(hidden_states_m.float(), ord=2)
                 )
                 self.last_norm_ratio = (y_norm / (h_norm + 1e-8)).item()
 
-        return cast("torch.Tensor", (hidden_states + y).to(hidden_states.dtype))
+        # Final result matches the input hidden_states shape
+        return (hidden_states + y).to(hidden_states.dtype)

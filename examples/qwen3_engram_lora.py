@@ -110,9 +110,10 @@ def prepare_alpaca_dataset(
 
         # Mask padding tokens in labels so they don't contribute to loss
         if tokenizer.pad_token_id is not None:
-            for i in range(len(labels)):
-                if labels[i] == tokenizer.pad_token_id:
-                    labels[i] = -100
+            if isinstance(labels, list):
+                for i in range(len(labels)):
+                    if labels[i] == tokenizer.pad_token_id:
+                        labels[i] = -100
 
         # Mask the prompt part in labels
         prompt_tokenized = tokenizer(prompt, max_length=max_length, truncation=True)
@@ -120,10 +121,12 @@ def prepare_alpaca_dataset(
             prompt_tokenized = BatchEncoding(prompt_tokenized)
         # Use isinstance for narrowing to avoid cast (Zero-Cast Principle)
         prompt_ids = prompt_tokenized["input_ids"]
-        if not isinstance(prompt_ids, SizedEncoding):
-            prompt_len = len(prompt_ids) if hasattr(prompt_ids, "__len__") else 0
+        if isinstance(prompt_ids, SizedEncoding):
+            sized_prompt_ids: SizedEncoding = prompt_ids
+            prompt_len = len(sized_prompt_ids)
         else:
-            prompt_len = len(prompt_ids)
+            # Fallback for unexpected types
+            prompt_len = 0
         for i in range(min(prompt_len, max_length)):
             labels[i] = -100
 
@@ -400,14 +403,22 @@ def run_example(args: argparse.Namespace) -> None:
     if not isinstance(tokenizer, PreTrainedTokenizerBase):
         raise TypeError("tokenizer must be a PreTrainedTokenizerBase")
 
-    device = model.base_model.device if hasattr(model.base_model, "device") else "cuda"
-    inputs = tokenizer(prompt, return_tensors="pt").to(device)
+    # Use the Protocol to get the device cleanly
+    target_device: torch.device | str
+    if isinstance(model.base_model, HFModelProtocol):
+        target_device = model.base_model.device
+    else:
+        target_device = "cuda"
+    inputs = tokenizer(prompt, return_tensors="pt").to(target_device)
     input_ids_val = inputs["input_ids"]
     if isinstance(input_ids_val, torch.Tensor):
         input_len = input_ids_val.shape[-1]
+    elif isinstance(input_ids_val, SizedEncoding):
+        sized_ids: SizedEncoding = input_ids_val
+        input_len = len(sized_ids)
     else:
-        # Fallback for when it's still an Encoding or other type
-        input_len = len(input_ids_val) if hasattr(input_ids_val, "__len__") else 0
+        # Fallback
+        input_len = 0
 
     print(f"Prompt: {prompt}")
     with torch.no_grad():

@@ -76,14 +76,14 @@
 **5.5 强制验证与安全终端输出**
 完成代码修改后，你必须主动运行命令验证测试是否修复、静态检测是否通过。**注意保护上下文窗口**：为防止 PyTorch 长报错撑爆上下文，执行测试时必须限制输出行数：
 ```bash
-uv run env SPRINTEST_TARGET_PKG=engram_peft stest tests/unit --cov=src/engram_peft --cov-report=term-missing --durations=5 | tail -n 500 && uv run dmypy src/ tests/ examples/
+uv run env SPRINTEST_TARGET_PKG=engram_peft stest tests/unit --cov=src/engram_peft --cov-report=term-missing --durations=5 | tail -n 500 && uv run basedpyright src/ examples/
 ```
 
 ---
 
-### 6.1 类型安全与“三零”原则 (Type Safety & Zero-Cast/Getattr/Ignore)
+### 6.1 类型安全与维度校验 (Type & Shape Safety: Zero-Cast/Getattr/Ignore)
 
-本项目追求极高的静态类型检查准确率，严禁通过逃生舱规避类型错误。在处理复杂模型接口时，应遵循以下优先级：
+本项目使用 **Basedpyright** 作为核心检查引擎，追求极高的静态类型检查准确率，严禁通过逃生舱规避类型错误。同时引入 **jaxtyping** 实现张量维度的静态与运行时双重校验。在处理复杂模型接口时，应遵循以下优先级：
 
 1.  **名义与结构双重保障 (Nominal-Structural Hybrid)**：
     - **Mixin 继承优先**：对于核心类（如 `EngramModel`），应优先继承官方 Mixin（如 `GenerationMixin`）而非仅在 Protocol 中描述其方法。这能确保在调用 `generate` 等复杂方法时满足 `self` 的名义绑定要求。
@@ -100,9 +100,12 @@ uv run env SPRINTEST_TARGET_PKG=engram_peft stest tests/unit --cov=src/engram_pe
 5.  **TypedDict 与配置管理**：
     - 对于复杂的字典参数，应定义 `TypedDict`，避免 `dict[str, Any]` 导致的类型信息丢失。
 6.  **强制溯源与 Stubs 补全**：
-    - 严禁凭记忆猜测。若发现上游库定义有误（如 `tokenizers.Encoding` 缺失 `__len__`），应在本项目内定义修正后的 Protocol。
+    - 严禁凭记忆猜测。若发现上游库定义有误（如 `tokenizers.Encoding` 缺失 `__len__`），应在本项目内定义修正后的 Protocol。可以通过 .venv 内的代码寻找对应定义。
 7.  **`cast` 的熔断与注释机制**：
     - 仅在静态分析器已知 Bug 或 Stub 严重错误且无法通过重绑定解决时使用。使用时必须附带 `# type: ignore` 或 `cast` 原因注释。
+8.  **张量维度强制标注 (Jaxtyping Enforcement)**：
+    - 对于核心算子（如 `EngramLayer`）和权重转换逻辑，**必须**使用 `jaxtyping` 标注张量的维度（Shape）和数据类型（Dtype）。
+    - 示例：`def forward(self, x: Float[Tensor, "batch seq_len dim"]) -> Float[Tensor, "batch dim"]:`
 
 
 ---

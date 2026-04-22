@@ -21,6 +21,8 @@ dependencies = [
     "huggingface-hub>=0.25.0",
     "trl>=1.2.0",
     "bitsandbytes>=0.49.2",
+    "jaxtyping",
+    "typeguard",
 ]
 
 [project.scripts]
@@ -88,7 +90,8 @@ line-length = 88
 # UP: pyupgrade
 select = ["E", "F", "I", "B", "TCH", "PLC", "UP"]
 # E501: Line too long
-ignore = ["E501"]
+# F722: Syntax error in forward annotation (caused by jaxtyping)
+ignore = ["E501", "F722"]
 
 [tool.ruff.lint.per-file-ignores]
 # F811: Redefinition of unused name
@@ -97,10 +100,21 @@ ignore = ["E501"]
 # PLC0415: import should be at the top-level (allowed for lazy loading in tests)
 "tests/*" = ["F811", "F401", "B011", "PLC0415"]
 
-[tool.pyright]
+[tool.basedpyright]
 include = ["src"]
 exclude = ["tests"]
-reportMissingTypeStubs = false
+typeCheckingMode = "standard"
+
+# Use Basedpyright-specific rules with string-based severity levels
+reportImplicitAny = "error"
+reportAny = "none"  # Transformers/PEFT stubs are too dynamic for reportAny: all
+reportUnusedImport = "error"
+reportUnusedParameter = "warning"
+reportUnnecessaryTypeIgnoreComment = "warning"
+reportUnreachableCode = "warning"
+reportMissingTypeStubs = "none"
+reportPrivateImportUsage = "none"
+
 executionEnvironments = [
   { root = "tests", reportArgumentType = "none" }
 ]
@@ -131,7 +145,7 @@ dev = [
     "ipytest>=0.14.2",
     "sprintest==1.0.7",
     "bitsandbytes>=0.49.2",
-    "pyright>=1.1.408",
+    "basedpyright",
 ]
 
 [tool.sprintest]

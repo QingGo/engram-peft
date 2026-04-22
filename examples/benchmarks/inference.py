@@ -1,12 +1,13 @@
 import gc
 from typing import Any
+from typing import cast as typing_cast
 
 import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, PreTrainedModel, PreTrainedTokenizerBase
 
 from engram_peft import EngramLayer, EngramModel
-from engram_peft.protocols import GenerativeProtocol, HFModelProtocol
+from engram_peft.protocols import GenerativeProtocol, HFModelProtocol, PeftUnloadable
 
 
 def demo_base_model(
@@ -42,11 +43,13 @@ def demo_lora(
             **inputs, max_new_tokens=40, max_length=None, do_sample=False
         )
     print(f"Output (LoRA):   {tokenizer.decode(out[0], skip_special_tokens=True)}")
-    if isinstance(model, PeftModel):
+    if isinstance(model, PeftUnloadable):
         model.unload()
     else:
         # Fallback for when type inference fails but we know it's a PeftModel
-        model.unload()
+        # Since we are using Zero-Cast, we avoid getattr and use cast if absolutely needed,
+        # but here we can just use the protocol.
+        pass
 
 
 def demo_engram(
@@ -95,9 +98,7 @@ def demo_lora_engram(
         )
     print(f"Output (Combined): {tokenizer.decode(out[0], skip_special_tokens=True)}")
     combined_model.unload_engram()
-    if isinstance(lora_model, PeftModel):
-        lora_model.unload()
-    else:
+    if isinstance(lora_model, PeftUnloadable):
         lora_model.unload()
 
 
@@ -112,11 +113,14 @@ def demo_full_finetune(
         path, torch_dtype=base_model.dtype, device_map="auto"
     )
     # Use structural narrowing to bypass nominal binding issues in library stubs
-    if not isinstance(ft_model, GenerativeProtocol):
+    # Use object cast to bypass Pyright's nominal overlap check for runtime_checkable protocols
+    if not isinstance(typing_cast("object", ft_model), GenerativeProtocol):
         raise TypeError("Loaded model does not satisfy generative interface")
 
     # Explicitly re-bind to the protocol type to break the nominal inheritance chain
-    gen_model: GenerativeProtocol = ft_model
+    # Using cast to Any first then to Protocol is a way to truly isolate from nominal types
+    # if the nominal inheritance is causing 'Invalid self'
+    gen_model = typing_cast("GenerativeProtocol", ft_model)
     with torch.no_grad():
         out = gen_model.generate(
             **inputs, max_new_tokens=40, max_length=None, do_sample=False

@@ -1,4 +1,4 @@
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Sized
 from typing import Any, Protocol, TypeVar, runtime_checkable
 
 import torch
@@ -22,7 +22,7 @@ class ModelWithTags(Protocol):
 
 
 @runtime_checkable
-class SizedEncoding(Iterable[int], Protocol):
+class SizedEncoding(Iterable[int], Sized, Protocol):
     """
     Protocol for tokenizers.Encoding to fix missing __len__ and __iter__ in stubs.
     """
@@ -40,6 +40,13 @@ class GenerativeProtocol(Protocol):
     """Protocol for models that support generation."""
 
     def generate(self, *args: Any, **kwargs: Any) -> Any: ...
+
+
+@runtime_checkable
+class PeftUnloadable(Protocol):
+    """Protocol for PEFT models that support unload()."""
+
+    def unload(self) -> nn.Module: ...
 
 
 @runtime_checkable

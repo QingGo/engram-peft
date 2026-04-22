@@ -110,10 +110,12 @@ def prepare_alpaca_dataset(
 
         # Use isinstance for narrowing to avoid cast (Zero-Cast Principle)
         prompt_ids = prompt_tokenized["input_ids"]
-        if not isinstance(prompt_ids, SizedEncoding):
-            prompt_len = len(prompt_ids) if hasattr(prompt_ids, "__len__") else 0
+        if isinstance(prompt_ids, SizedEncoding):
+            sized_prompt_ids: SizedEncoding = prompt_ids
+            prompt_len = len(sized_prompt_ids)
         else:
-            prompt_len = len(prompt_ids)
+            # Fallback for unexpected types
+            prompt_len = 0
         for i in range(min(prompt_len, max_length)):
             labels[i] = -100
 

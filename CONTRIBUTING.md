@@ -7,9 +7,9 @@ Thank you for contributing! To maintain high code quality and performance alignm
 All contributors (including AI Agents) should follow these layers of verification:
 
 ### L1: Real-time Feedback (IDE)
-- **Tool**: Pyright / Pylance
-- **Goal**: Catch obvious type errors and syntax bugs while typing.
-- **Config**: Tests are excluded from strict checking; focus your strict energy on `src/`.
+- **Tool**: Basedpyright
+- **Goal**: Catch hidden Any types and syntax bugs while typing.
+- **Config**: Enabled `reportImplicitAny` for zero-leakage type safety.
 
 ### L2: Automated Pre-commit (Standardization)
 - **Tool**: Git Hooks (via `pre-commit`)
@@ -19,10 +19,10 @@ All contributors (including AI Agents) should follow these layers of verificatio
   - **Ruff (Lint)**: Auto-sorts imports and fixes simple logic errors (unused variables, etc.).
 
 ### L3: Deep Verification (Deep Logic)
-- **Tools**: Mypy & sprintest (Unit)
+- **Tools**: Basedpyright & sprintest (Unit)
 - **Command**: `make type-check && make test-unit`
-- **Goal**: Ensure 100% type safety in `src/` and verify core logic in <2 seconds.
-- **Philosophy**: Use the `tiny_tokenizer` and `tiny_compressor` fixtures for fast unit testing.
+- **Goal**: Ensure 100% type and shape safety in `src/` and verify core logic in <2 seconds.
+- **Philosophy**: Use `jaxtyping` for tensor shape validation to prevent dimension mismatches.
 
 ### L4: Integration & Regression (Full Fidelity)
 - **Tool**: sprintest (Integration)
@@ -41,7 +41,8 @@ All contributors (including AI Agents) should follow these layers of verificatio
 ## 📏 Coding Style
 - Follow PEP 8 (handled by Ruff).
 - Docstrings are encouraged for all public APIs.
-- Type hints are **mandatory** for all code in `src/`. For `tests/`, return types are optional but recommended for clarity.
+- Type hints and **jaxtyping** annotations are **mandatory** for all code in `src/`. 
+- Core layers and tensor operations must specify dimensions (e.g., `Float[Tensor, "batch seq_len dim"]`).
 
 ---
 
