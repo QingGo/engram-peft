@@ -2,7 +2,7 @@ import logging
 from typing import Any, cast
 
 from transformers import PreTrainedTokenizerBase, TrainingArguments
-from trl.trainer.sft_trainer import SFTTrainer
+from trl import SFTConfig, SFTTrainer
 
 from engram_peft.collator import EngramDataCollator
 from engram_peft.model import EngramModel
@@ -79,7 +79,7 @@ def create_engram_sft_trainer(
     tokenizer: PreTrainedTokenizerBase,
     train_dataset: Any,
     eval_dataset: Any | None = None,
-    args: TrainingArguments | None = None,
+    args: TrainingArguments | SFTConfig | None = None,
     **kwargs: Any,
 ) -> SFTTrainer:
     """
@@ -95,7 +95,7 @@ def create_engram_sft_trainer(
         tokenizer: The tokenizer instance.
         train_dataset: The training dataset.
         eval_dataset: Optional evaluation dataset.
-        args: TrainingArguments for the trainer.
+        args: TrainingArguments or SFTConfig for the trainer.
         **kwargs: Additional arguments passed directly to SFTTrainer.
 
     Returns:
@@ -111,7 +111,22 @@ def create_engram_sft_trainer(
         data_collator = EngramDataCollator(tokenizer=tokenizer, config=model.config)
         logger.info("Using default EngramDataCollator for SFT integration.")
 
-    # 3. Instantiate SFTTrainer
+    # 3. Handle trl>=1.2.0 SFTConfig migration
+    # max_seq_length was renamed to max_length and moved to SFTConfig
+    max_seq_length = kwargs.pop("max_seq_length", None)
+    if max_seq_length is not None:
+        if isinstance(args, SFTConfig):
+            args.max_length = max_seq_length
+        elif isinstance(args, TrainingArguments):
+            # Convert TrainingArguments to SFTConfig to support max_length
+            args_dict = args.to_dict()
+            args_dict["max_length"] = max_seq_length
+            args = SFTConfig(**args_dict)
+        else:
+            # Create a default SFTConfig
+            args = SFTConfig(output_dir="./sft_output", max_length=max_seq_length)
+
+    # 4. Instantiate SFTTrainer
     # We cast model to Any to avoid type-checking errors since EngramModel
     # doesn't directly inherit from PreTrainedModel, but is compatible at runtime.
     return SFTTrainer(

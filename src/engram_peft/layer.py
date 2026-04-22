@@ -321,7 +321,9 @@ class EngramLayer(nn.Module):
 
         # 1. MultiHeadEmbedding
         self.multi_head_embedding = MultiHeadEmbedding(
-            primes=primes, embedding_dim_per_head=self.embedding_dim_per_head
+            primes=primes,
+            embedding_dim_per_head=self.embedding_dim_per_head,
+            sparse=config.use_sparse_embeddings,
         )
 
         # 2. Context-Aware Gating

@@ -159,6 +159,12 @@ class EngramConfig(PretrainedConfig):
             "If None, it will be automatically detected from the backbone's compute_dtype."
         },
     )
+    use_sparse_embeddings: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to use sparse embeddings for Engram layers. Recommended for GPU, but may cause issues on CPU."
+        },
+    )
     engram_version: str = field(
         default="1.2.2",
         metadata={"help": "The version of the Engram state file format."},
@@ -190,6 +196,7 @@ class EngramConfig(PretrainedConfig):
         entropy_loss_weight: float = 0.0,
         backbone_freeze_steps: int = 0,
         engram_dtype: str | None = None,
+        use_sparse_embeddings: bool = True,
         engram_version: str = "1.2.2",
         **kwargs: Any,
     ):
@@ -270,6 +277,7 @@ class EngramConfig(PretrainedConfig):
         self.entropy_loss_weight = entropy_loss_weight
         self.backbone_freeze_steps = backbone_freeze_steps
         self.engram_dtype = engram_dtype
+        self.use_sparse_embeddings = use_sparse_embeddings
         self.engram_version = engram_version
 
         super().__init__(**kwargs)

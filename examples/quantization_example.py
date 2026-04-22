@@ -11,7 +11,7 @@ Usage:
 import argparse
 
 import torch
-from datasets import Dataset
+from datasets import load_dataset
 from peft import prepare_model_for_kbit_training
 from transformers import (
     AutoModelForCausalLM,
@@ -67,6 +67,9 @@ def run_quantization_example(model_id: str) -> None:
         target_layers=target_layers,
         embedding_dim=128,  # Small for example
         n_head_per_ngram=4,
+        learning_rate_multiplier=1.0,
+        enable_telemetry=True,
+        gating_zero_init=False,  # Start with some contribution
     )
 
     # get_engram_model will automatically detect bnb.compute_dtype
@@ -79,28 +82,75 @@ def run_quantization_example(model_id: str) -> None:
     print(f"Backbone Compute Dtype: {bnb_config.bnb_4bit_compute_dtype}")
     print(f"Engram Layer Dtype: {next(engram_layer.parameters()).dtype}")
 
-    # 5. Training Step (New)
-    print("\nStarting minimal training (5 steps) to calibrate Engram...")
-    # Prepare dummy data
-    train_data = [
-        {"text": "The capital of France is Paris. It is a beautiful city."},
-        {"text": "Engram-PEFT allows for efficient memory injection in LLMs."},
-        {"text": "Quantization reduces the memory footprint of large models."},
-    ]
+    # 5. Training Step
+    print("\nLoading real Alpaca dataset for calibration...")
+    raw_dataset = load_dataset("tatsu-lab/alpaca", split="train")
+    # Take a subset for demonstration
+    dataset_subset = raw_dataset.select(range(min(500, len(raw_dataset))))
 
-    def tokenize_fn(examples):
-        return tokenizer(
-            examples["text"], truncation=True, max_length=64, padding="max_length"
+    def tokenize_function(examples):
+        # Implementation of prompt masking for SFT
+        prompts = []
+        for i, instr in enumerate(examples["instruction"]):
+            if examples["input"][i]:
+                p = f"Instruction: {instr}\nInput: {examples['input'][i]}\nResponse: "
+            else:
+                p = f"Instruction: {instr}\nResponse: "
+            prompts.append(p)
+
+        full_texts = [
+            p + out + tokenizer.eos_token
+            for p, out in zip(prompts, examples["output"], strict=False)
+        ]
+        # Use fixed-length padding to avoid downstream collator issues
+        tokenized = tokenizer(
+            full_texts, truncation=True, max_length=128, padding="max_length"
         )
 
-    train_dataset = Dataset.from_list(train_data).map(tokenize_fn, batched=True)
+        # Create labels and mask the prompt part
+        labels = []
+        for i, input_ids in enumerate(tokenized["input_ids"]):
+            # Get prompt length without padding
+            prompt_ids = tokenizer(
+                prompts[i],
+                truncation=True,
+                max_length=128,
+                add_special_tokens=True,
+                padding=False,
+            )["input_ids"]
+            prompt_len = len(prompt_ids)
+
+            # Create labels: start with all -100 (masked)
+            label = [-100] * 128
+
+            # Only copy the non-prompt, non-pad tokens from input_ids
+            # mask_limit is where the response starts
+            mask_limit = min(prompt_len, 128)
+
+            for j in range(mask_limit, 128):
+                token_id = input_ids[j]
+                if token_id != tokenizer.pad_token_id:
+                    label[j] = token_id
+                else:
+                    # Keep as -100 for padding
+                    label[j] = -100
+
+            labels.append(label)
+
+        tokenized["labels"] = labels
+        return tokenized
+
+    train_dataset = dataset_subset.map(
+        tokenize_function, batched=True, remove_columns=raw_dataset.column_names
+    )
 
     training_args = TrainingArguments(
         output_dir="outputs/quant_test",
-        max_steps=5,
+        max_steps=50,
         per_device_train_batch_size=2,
         logging_steps=1,
-        learning_rate=5e-4,
+        learning_rate=2e-5,  # Very conservative for 4-bit
+        warmup_steps=2,
         save_strategy="no",
         report_to="none",
         remove_unused_columns=True,
@@ -119,13 +169,31 @@ def run_quantization_example(model_id: str) -> None:
 
     # 6. Simple Inference Test
     print("\nRunning post-training inference test...")
-    prompt = "What is the capital of France?"
+    model.eval()
+    # Explicitly disable gradient checkpointing for inference stability
+    model.gradient_checkpointing_disable()
+
+    # Use the same format as training
+    prompt = "Instruction: What is the capital of France?\nResponse: "
     inputs = tokenizer(prompt, return_tensors="pt").to(base_model.device)
 
+    print(f"Prompt: {prompt}")
     with torch.no_grad():
-        outputs = model.generate(**inputs, max_new_tokens=20, max_length=None)
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=40,
+            max_length=None,
+            do_sample=True,
+            temperature=0.1,  # Lower for stability
+            top_p=0.9,  # Add top_p for better quality
+        )
 
-    print(f"Response: {tokenizer.decode(outputs[0], skip_special_tokens=True)}")
+    # Decode only the NEW tokens
+    input_len = inputs["input_ids"].shape[-1]
+    generated_tokens = outputs[0][input_len:]
+    print(f"Generated {len(generated_tokens)} new tokens.")
+    response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+    print(f"Response: {response}")
 
 
 if __name__ == "__main__":

@@ -143,6 +143,13 @@ class EngramModel(nn.Module):
         # Attach hooks immediately
         self.load_engram()
 
+    def add_model_tags(self, tags: list[str]) -> None:
+        """
+        Add model tags for Hugging Face integration (e.g., TRL).
+        """
+        if hasattr(self.base_model, "add_model_tags"):
+            cast(Any, self.base_model).add_model_tags(tags)
+
     def print_trainable_parameters(self) -> None:
         """
         Prints the number of trainable parameters in the model.

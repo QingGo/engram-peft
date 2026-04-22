@@ -2,13 +2,26 @@
 Example script demonstrating how to use Engram-PEFT with trl's SFTTrainer.
 """
 
-from datasets import Dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
+from typing import Any
 
-from engram_peft import EngramConfig, create_engram_sft_trainer, get_engram_model
+from datasets import Dataset
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from trl import SFTConfig
+
+from engram_peft import create_engram_sft_trainer, get_engram_model
 
 
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Engram-PEFT SFT Example with TRL")
+    parser.add_argument(
+        "--cpu",
+        action="store_true",
+        help="Enable CPU compatibility mode (dense embeddings, no bf16)",
+    )
+    args_cli = parser.parse_args()
+
     # 1. Setup a dummy dataset for SFT
     data = {
         "instruction": [
@@ -24,13 +37,9 @@ def main() -> None:
     }
     dataset = Dataset.from_dict(data)
 
-    def formatting_prompts_func(example: dict[str, list[str]]) -> list[str]:
+    def formatting_prompts_func(example: dict[str, Any]) -> str:
         """Format the dataset into the expected prompt template."""
-        output_texts = []
-        for i in range(len(example["instruction"])):
-            text = f"### Instruction: {example['instruction'][i]}\n### Response: {example['response'][i]}"
-            output_texts.append(text)
-        return output_texts
+        return f"### Instruction: {example['instruction']}\n### Response: {example['response']}"
 
     # 2. Setup model and tokenizer
     model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
@@ -41,19 +50,23 @@ def main() -> None:
     base_model = AutoModelForCausalLM.from_pretrained(model_id)
 
     # 3. Define Engram Configuration
+    from engram_peft import EngramConfig
+
     config = EngramConfig(
         target_layers=[0, 1],
         engram_vocab_size_per_ngram=[1000, 1000],
         ngram_sizes=[2, 3],
         n_head_per_ngram=2,
+        use_sparse_embeddings=not args_cli.cpu,  # GPU uses sparse, CPU uses dense
     )
 
     # 4. Initialize Engram Model
-    print("Injecting Engram layers into the model...")
+    print(f"Injecting Engram layers into the model (CPU mode: {args_cli.cpu})...")
     model = get_engram_model(base_model, config, tokenizer=tokenizer)
 
-    # 5. Define Training Arguments
-    training_args = TrainingArguments(
+    # 5. Define Training Arguments using SFTConfig
+    # SFTConfig inherits from TrainingArguments and includes SFT-specific fields
+    sft_config = SFTConfig(
         output_dir="./engram_sft_results",
         per_device_train_batch_size=1,
         gradient_accumulation_steps=1,
@@ -62,8 +75,11 @@ def main() -> None:
         logging_steps=1,
         save_steps=5,
         fp16=False,
+        bf16=not args_cli.cpu,  # Disable bf16 if on CPU
+        use_cpu=args_cli.cpu,
         push_to_hub=False,
         report_to="none",
+        max_length=128,  # Renamed from max_seq_length in trl>=1.2.0
     )
 
     # 6. Create SFTTrainer using the Engram compatibility layer
@@ -73,8 +89,7 @@ def main() -> None:
         tokenizer=tokenizer,
         train_dataset=dataset,
         formatting_func=formatting_prompts_func,
-        args=training_args,
-        max_seq_length=128,
+        args=sft_config,
     )
 
     # 7. Start Training
