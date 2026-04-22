@@ -59,11 +59,12 @@ else:
     input_ids = gen_inputs
 
 # Move to correct device
-input_ids = input_ids.to(model.base_model.device)
+device = getattr(model.base_model, "device", "cuda")
+input_ids = input_ids.to(device)
 # Capture other inputs (like attention_mask) if they exist
 gen_kwargs: dict[str, Any] = (
     {
-        k: v.to(model.base_model.device)
+        k: v.to(device)
         for k, v in gen_inputs.items()
         if k != "input_ids" and torch.is_tensor(v)
     }

@@ -19,12 +19,13 @@ from engram_peft.config import EngramConfig
 from engram_peft.discovery import ArchitectureResolver
 from engram_peft.hashing import NgramHashMapping
 from engram_peft.layer import EngramLayer
-from engram_peft.utils import get_optimizer, get_scheduler
-from engram_peft.utils.typing import (
+from engram_peft.protocols import (
+    GenerativeProtocol,
     HFModelProtocol,
     ModelWithTags,
     ToDictProtocol,
 )
+from engram_peft.utils import get_optimizer, get_scheduler
 from engram_peft.weight_transfer import (
     align_embedding_table,
     check_compatibility,
@@ -131,9 +132,13 @@ class EngramModel(nn.Module, GenerationMixin):
         # 4. Apply precision settings
         # By default, we keep Engram layers in float32 for training stability (Mixed Precision).
         # We perform an initial probe on the base_model to see if an explicit override is requested.
-        target_dtype, source = ArchitectureResolver.resolve_layer_dtype(
-            cast("nn.Module", self.base_model), config
-        )
+        target_dtype = torch.float32
+        source = "Default (float32)"
+
+        if isinstance(self.base_model, nn.Module):
+            target_dtype, source = ArchitectureResolver.resolve_layer_dtype(
+                self.base_model, config
+            )
 
         if config.engram_dtype is not None:
             self.adapters.to(target_dtype)
@@ -262,7 +267,12 @@ class EngramModel(nn.Module, GenerationMixin):
     @property
     def engram_layers(self) -> nn.ModuleDict:
         """Dynamic shortcut to the active adapter's Engram layers."""
-        return cast("nn.ModuleDict", self.adapters[self.active_adapter])
+        layers = self.adapters[self.active_adapter]
+        if not isinstance(layers, nn.ModuleDict):
+            raise TypeError(
+                f"Expected nn.ModuleDict for adapter layers, got {type(layers)}"
+            )
+        return layers
 
     def set_adapter(self, adapter_name: str) -> None:
         """
@@ -304,11 +314,16 @@ class EngramModel(nn.Module, GenerationMixin):
 
     def _find_transformer_layers(self) -> nn.ModuleList:
         """Find the main transformer layers module list using ArchitectureResolver."""
+        if not isinstance(self.base_model, nn.Module):
+            raise TypeError(
+                "base_model must be an nn.Module to find transformer layers."
+            )
+
         container_path = self.config.layer_container_path
         if container_path is None:
             # This should have been resolved by the factory function, but as fallback:
             container_path = ArchitectureResolver.find_largest_module_list(
-                cast("nn.Module", self.base_model)
+                self.base_model
             )
             if container_path is None:
                 raise ValueError(
@@ -316,7 +331,7 @@ class EngramModel(nn.Module, GenerationMixin):
                 )
 
         container = ArchitectureResolver.get_submodule_by_path(
-            cast("nn.Module", self.base_model), container_path
+            self.base_model, container_path
         )
         if not isinstance(container, nn.ModuleList):
             raise ValueError(f"Path '{container_path}' is not a nn.ModuleList.")
@@ -370,7 +385,10 @@ class EngramModel(nn.Module, GenerationMixin):
                 except (ValueError, IndexError, AttributeError):
                     return args
 
-            engram_layer = cast("EngramLayer", self.engram_layers[str(layer_id)])
+            engram_layer = self.engram_layers[str(layer_id)]
+            if not isinstance(engram_layer, EngramLayer):
+                return args
+
             modified_hidden_states = engram_layer(
                 hidden_states=hidden_states, engram_hash_indices=engram_hash_indices
             )
@@ -633,13 +651,8 @@ class EngramModel(nn.Module, GenerationMixin):
         if "max_new_tokens" in kwargs and "max_length" not in kwargs:
             kwargs["max_length"] = None
 
-        if isinstance(self.base_model, HFModelProtocol):
+        if isinstance(self.base_model, GenerativeProtocol):
             return self.base_model.generate(*args, **kwargs)
-
-        # Fallback for generic nn.Module
-        generate_func = getattr(self.base_model, "generate", None)
-        if generate_func is not None:
-            return generate_func(*args, **kwargs)
 
         raise AttributeError("Base model does not have a 'generate' method.")
 

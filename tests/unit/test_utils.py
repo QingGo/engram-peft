@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, cast
 
 import pytest
@@ -43,10 +44,17 @@ class DummyModel(nn.Module):
         batch_size, seq_len = input_ids.shape
         # Need a tensor that requires grad for backprop to work
         x = torch.randn(batch_size, seq_len, self.hidden_size).requires_grad_(True)
-        # mypy needs help since nn.Module doesn't have .layers
+        # Use a nominal check or structural check instead of Any cast
         model_part = self.model
-        for layer in model_part.layers:
-            x = cast("torch.Tensor", layer(x))
+        layers = getattr(model_part, "layers", None)
+        if not isinstance(layers, Iterable):
+            raise TypeError("model_part.layers is not iterable")
+        for layer in layers:
+            if isinstance(layer, nn.Module):
+                # We still need to ensure the result is a Tensor, but we avoid Any cast
+                res = layer(x)
+                if isinstance(res, torch.Tensor):
+                    x = res
         return x
 
     def requires_grad_(self, requires_grad: bool = True) -> "DummyModel":

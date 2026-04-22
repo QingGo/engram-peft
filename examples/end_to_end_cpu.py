@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 import torch
 import torch.nn as nn
@@ -41,9 +41,6 @@ from engram_peft import (
     get_optimizer,
     get_scheduler,
 )
-
-if TYPE_CHECKING:
-    from collections.abc import Iterable
 
 # 1. Constants & Device Detection
 MODEL_NAME = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
@@ -118,8 +115,8 @@ class SimpleAttention(nn.Module):
         v = v.view(B, T, self.n_head, self.head_dim).transpose(1, 2)
 
         att = (q @ k.transpose(-2, -1)) * (1.0 / (self.head_dim**0.5))
-        bias = cast("torch.Tensor", self.bias)
-        att = att.masked_fill(bias[:, :, :T, :T] == 0, float("-inf"))
+        assert isinstance(self.bias, torch.Tensor)
+        att = att.masked_fill(self.bias[:, :, :T, :T] == 0, float("-inf"))
         att = torch.softmax(att, dim=-1)
         y = att @ v
         y = y.transpose(1, 2).contiguous().view(B, T, C)
@@ -189,14 +186,19 @@ class SimpleTransformer(PreTrainedModel, GenerationMixin):
         b, t = input_ids.size()
         pos = torch.arange(0, t, dtype=torch.long, device=device).unsqueeze(0)
 
-        tok_emb = cast("nn.Embedding", self.transformer.wte)(input_ids)
-        pos_emb = cast("nn.Embedding", self.transformer.wpe)(pos)
+        assert isinstance(self.transformer.wte, nn.Embedding)
+        assert isinstance(self.transformer.wpe, nn.Embedding)
+        assert isinstance(self.transformer.ln_f, nn.LayerNorm)
+
+        tok_emb = self.transformer.wte(input_ids)
+        pos_emb = self.transformer.wpe(pos)
         x = tok_emb + pos_emb
 
-        for block in cast("Iterable[nn.Module]", self.transformer.h):
+        assert isinstance(self.transformer.h, nn.ModuleList)
+        for block in self.transformer.h:
             x = block(x)
 
-        x = cast("nn.LayerNorm", self.transformer.ln_f)(x)
+        x = self.transformer.ln_f(x)
         logits = self.lm_head(x)
 
         loss = None
@@ -234,7 +236,8 @@ def train_engram() -> tuple[EngramModel, PreTrainedTokenizer, EngramConfig]:
     print("\n>>> Stage 1: Initializing Tiny Model & Engram")
 
     # Load Tokenizer (using GPT2 as base)
-    tokenizer = cast("PreTrainedTokenizer", AutoTokenizer.from_pretrained(MODEL_NAME))
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    assert isinstance(tokenizer, PreTrainedTokenizer)
     tokenizer.pad_token = (
         tokenizer.eos_token if tokenizer.pad_token is None else tokenizer.pad_token
     )
@@ -249,7 +252,7 @@ def train_engram() -> tuple[EngramModel, PreTrainedTokenizer, EngramConfig]:
         max_position_embeddings=128,
     )
     base_model = SimpleTransformer(base_config)
-    base_model.to(DEVICE)  # type: ignore
+    base_model.to(DEVICE)  # type: ignore[arg-type]
     print(
         f"Base model created with {sum(p.numel() for p in base_model.parameters()) / 1e6:.2f}M parameters."
     )
@@ -281,12 +284,11 @@ def train_engram() -> tuple[EngramModel, PreTrainedTokenizer, EngramConfig]:
     dataset = load_dataset("roneneldan/TinyStories", split="train", streaming=True)
 
     def tokenize_fn(examples: dict[str, Any]) -> dict[str, Any]:
-        return cast(
-            "dict[str, Any]",
-            tokenizer(
-                examples["text"], truncation=True, max_length=128, padding="max_length"
-            ),
+        tokenized = tokenizer(
+            examples["text"], truncation=True, max_length=128, padding="max_length"
         )
+        assert isinstance(tokenized, dict)
+        return tokenized
 
     data_list = []
     for i, item in enumerate(dataset):
@@ -315,7 +317,7 @@ def train_engram() -> tuple[EngramModel, PreTrainedTokenizer, EngramConfig]:
     )
 
     trainer = EngramTrainer(
-        model=cast("EngramModel", model),
+        model=model,
         args=training_args,
         train_dataset=train_dataset,
         data_collator=collator,
@@ -346,7 +348,7 @@ def inference_demo(tokenizer: PreTrainedTokenizer, config: EngramConfig) -> None
         max_position_embeddings=128,
     )
     base_model = SimpleTransformer(base_config)
-    base_model.to(DEVICE)  # type: ignore
+    base_model.to(DEVICE)  # type: ignore[arg-type]
     model = EngramModel.from_pretrained(base_model, ENGRAM_WEIGHT_DIR)
     model.to(DEVICE)
 
@@ -358,22 +360,22 @@ def inference_demo(tokenizer: PreTrainedTokenizer, config: EngramConfig) -> None
     # Generate with Engram (Manual loop to ensure hooks trigger correctly)
     print("Generating with Engram ENABLED...")
     curr_ids = inputs["input_ids"]
+    assert isinstance(curr_ids, torch.Tensor)
     for _ in range(15):
         with torch.no_grad():
             outputs = model(input_ids=curr_ids)
             logits = outputs.logits[:, -1, :]
             # Simple greedy decoding
             next_token = torch.argmax(logits, dim=-1, keepdim=True)
-            curr_ids = torch.cat([cast("torch.Tensor", curr_ids), next_token], dim=-1)
+            curr_ids = torch.cat([curr_ids, next_token], dim=-1)
 
-    print(
-        f"Output: {tokenizer.decode(cast('torch.Tensor', curr_ids)[0], skip_special_tokens=True)}"
-    )
+    print(f"Output: {tokenizer.decode(curr_ids[0], skip_special_tokens=True)}")
 
     # Gating Visualization
     print("\n[Visualization] Context-Aware Gating activation:")
     for layer_id in config.target_layers:
-        engram_layer = cast("EngramLayer", model.engram_layers[str(layer_id)])
+        engram_layer = model.engram_layers[str(layer_id)]
+        assert isinstance(engram_layer, EngramLayer)
         gate = engram_layer.gating.last_gate
         if gate is not None:
             # Mean gate value per branch across batch and sequence
@@ -388,16 +390,15 @@ def inference_demo(tokenizer: PreTrainedTokenizer, config: EngramConfig) -> None
     print("Unloading Engram (Running base model)...")
     model.unload_engram()
     curr_ids_base = inputs["input_ids"]
+    assert isinstance(curr_ids_base, torch.Tensor)
     for _ in range(15):
         with torch.no_grad():
             outputs = model(input_ids=curr_ids_base)
             logits = outputs.logits[:, -1, :]
             next_token = torch.argmax(logits, dim=-1, keepdim=True)
-            curr_ids_base = torch.cat(
-                [cast("torch.Tensor", curr_ids_base), next_token], dim=-1
-            )
+            curr_ids_base = torch.cat([curr_ids_base, next_token], dim=-1)
     print(
-        f"Base Output: {tokenizer.decode(cast('torch.Tensor', curr_ids_base)[0], skip_special_tokens=True)}"
+        f"Base Output: {tokenizer.decode(curr_ids_base[0], skip_special_tokens=True)}"
     )
 
     print("\nReloading Engram...")

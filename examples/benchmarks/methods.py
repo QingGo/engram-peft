@@ -2,7 +2,7 @@ import logging
 from typing import Any
 
 import torch
-from peft import LoraConfig, TaskType, get_peft_model
+from peft import LoraConfig, PeftModel, TaskType, get_peft_model
 from torch.optim.adamw import AdamW
 from transformers import (
     DataCollatorForLanguageModeling,
@@ -18,7 +18,7 @@ from engram_peft import (
     EngramTrainer,
     get_engram_model,
 )
-from engram_peft.utils.typing import HFModelProtocol
+from engram_peft.protocols import HFModelProtocol
 
 # Configure logging to see Engram injection logs
 logging.basicConfig(level=logging.WARNING, format="%(message)s")
@@ -131,7 +131,13 @@ def train_lora(
 
     model.save_pretrained("outputs/benchmarks/lora_weights")
     # Clean up
-    model = model.unload()
+
+    if isinstance(model, PeftModel):
+        model = model.unload()
+    elif hasattr(model, "unload"):
+        # We can't easily Protocol-ize 'unload' without a new protocol,
+        # but we can at least avoid calling it blindly.
+        model = model.unload()
     return metrics
 
 

@@ -8,7 +8,7 @@ from safetensors.torch import load_file, save_file
 if TYPE_CHECKING:
     from engram_peft.model import EngramModel
 
-from engram_peft.utils.typing import HFModelProtocol
+from engram_peft.protocols import HFModelProtocol
 
 logger = logging.getLogger(__name__)
 

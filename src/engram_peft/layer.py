@@ -110,11 +110,8 @@ class ShortConv(nn.Module):
             .contiguous()
         )
 
-        # CRITICAL: Internal Residual Connection (ShortConv residual)
-        # This residual (+ x) is essential even though EngramLayer has a global residual.
-        # Without this, if the convolution is zero-initialized, the gradient is blocked
-        # (gradient becomes 0 * previous_grad), preventing Embedding and Gating from learning.
-        # This matches the formula: Y = SiLU(Conv(Norm(V))) + V
+        # Matches the formula: Y = SiLU(Conv(Norm(V))) + V
+        # cast required because some torch ops return Any in current stubs
         return cast("torch.Tensor", (out + x).to(x.dtype))
 
 
@@ -243,9 +240,8 @@ class MultiHeadEmbedding(nn.Module):
         Returns:
             torch.Tensor: [batch_size, seq_len, total_heads, embedding_dim_per_head]
         """
-        shifted_indices = hash_indices.to(
-            cast("torch.device", self.offsets.device)
-        ) + cast("torch.Tensor", self.offsets)
+        assert isinstance(self.offsets, torch.Tensor)
+        shifted_indices = hash_indices.to(self.offsets.device) + self.offsets
         return cast("torch.Tensor", self.embedding(shifted_indices))
 
 

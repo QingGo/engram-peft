@@ -6,6 +6,8 @@ import torch
 import torch.nn as nn
 from transformers import PreTrainedTokenizerBase
 
+from engram_peft.protocols import HFConfigProtocol, HFModelProtocol
+
 logger = logging.getLogger(__name__)
 
 # Map HF model_type to standard layer container paths
@@ -122,9 +124,17 @@ class ArchitectureResolver:
                 return int(val), "EngramConfig.hidden_size"
 
         # 2. model config
-        base_config = getattr(model, "config", None)
+        base_config = None
+        if isinstance(model, HFModelProtocol):
+            base_config = model.config
+        else:
+            base_config = getattr(model, "config", None)
+
         if base_config is not None:
-            # Check top level first
+            if isinstance(base_config, HFConfigProtocol):
+                return base_config.hidden_size, "model.config.hidden_size"
+
+            # Check top level first for non-standard configs
             for attr in [
                 "hidden_size",
                 "d_model",
@@ -139,6 +149,12 @@ class ArchitectureResolver:
             # Check nested text_config (common in multimodal models)
             text_config = getattr(base_config, "text_config", None)
             if text_config is not None:
+                if isinstance(text_config, HFConfigProtocol):
+                    return (
+                        text_config.hidden_size,
+                        "model.config.text_config.hidden_size",
+                    )
+
                 for attr in ["hidden_size", "d_model", "dim", "n_embd"]:
                     val = getattr(text_config, attr, None)
                     if val is not None:
@@ -171,8 +187,16 @@ class ArchitectureResolver:
             return len(tokenizer), "tokenizer.vocab_size"
 
         # 3. model config
-        base_config = getattr(model, "config", None)
+        base_config = None
+        if isinstance(model, HFModelProtocol):
+            base_config = model.config
+        else:
+            base_config = getattr(model, "config", None)
+
         if base_config is not None:
+            if isinstance(base_config, HFConfigProtocol):
+                return base_config.vocab_size, "model.config.vocab_size"
+
             # Check top level
             val = getattr(base_config, "vocab_size", None)
             if val is not None:
@@ -181,6 +205,9 @@ class ArchitectureResolver:
             # Check nested text_config
             text_config = getattr(base_config, "text_config", None)
             if text_config is not None:
+                if isinstance(text_config, HFConfigProtocol):
+                    return text_config.vocab_size, "model.config.text_config.vocab_size"
+
                 val = getattr(text_config, "vocab_size", None)
                 if val is not None:
                     return int(val), "model.config.text_config.vocab_size"
@@ -207,8 +234,17 @@ class ArchitectureResolver:
             return int(tokenizer.pad_token_id), "tokenizer.pad_token_id"
 
         # 3. model config
-        base_config = getattr(model, "config", None)
+        base_config = None
+        if isinstance(model, HFModelProtocol):
+            base_config = model.config
+        else:
+            base_config = getattr(model, "config", None)
+
         if base_config is not None:
+            if isinstance(base_config, HFConfigProtocol):
+                if base_config.pad_token_id is not None:
+                    return int(base_config.pad_token_id), "model.config.pad_token_id"
+
             # Check top level
             val = getattr(base_config, "pad_token_id", None)
             if val is not None:
@@ -217,6 +253,13 @@ class ArchitectureResolver:
             # Check nested text_config
             text_config = getattr(base_config, "text_config", None)
             if text_config is not None:
+                if isinstance(text_config, HFConfigProtocol):
+                    if text_config.pad_token_id is not None:
+                        return (
+                            int(text_config.pad_token_id),
+                            "model.config.text_config.pad_token_id",
+                        )
+
                 val = getattr(text_config, "pad_token_id", None)
                 if val is not None:
                     return int(val), "model.config.text_config.pad_token_id"
@@ -280,8 +323,15 @@ class ArchitectureResolver:
 
     @staticmethod
     def _get_model_type(model: nn.Module) -> str | None:
-        base_config = getattr(model, "config", None)
+        base_config = None
+        if isinstance(model, HFModelProtocol):
+            base_config = model.config
+        else:
+            base_config = getattr(model, "config", None)
+
         if base_config is not None:
+            if isinstance(base_config, HFConfigProtocol):
+                return base_config.model_type
             return getattr(base_config, "model_type", None)
         return None
 
@@ -295,24 +345,26 @@ class ArchitectureResolver:
         if not path:
             return model
         segments = path.split(".")
-        curr = model
+        curr: Any = model
         for seg in segments:
-            if not hasattr(curr, seg):
-                # Check for PEFT/Engram wrappers
-                if hasattr(curr, "base_model") and isinstance(
-                    getattr(curr, "base_model", None), nn.Module
-                ):
-                    base = curr.base_model
-                    if hasattr(base, seg):
-                        curr = getattr(base, seg)
-                        continue
+            if hasattr(curr, seg):
+                curr = getattr(curr, seg)
+            else:
+                # Check for PEFT/Engram wrappers (nominal and structural)
+                base_model = getattr(curr, "base_model", None)
+                if isinstance(base_model, nn.Module) and hasattr(base_model, seg):
+                    curr = getattr(base_model, seg)
+                    continue
 
                 raise AttributeError(
                     f"Module {type(curr).__name__} has no attribute {seg}. "
                     "Traversal failed at this segment. If this is a wrapped model, "
                     "ensure the path reflects the wrapped structure or update ArchitectureResolver."
                 )
-            curr = getattr(curr, seg)
+        if not isinstance(curr, nn.Module):
+            raise TypeError(
+                f"Path '{path}' did not resolve to an nn.Module (found {type(curr)})."
+            )
         return curr
 
     @staticmethod

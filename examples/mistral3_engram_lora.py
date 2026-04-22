@@ -15,7 +15,10 @@ import logging
 import os
 import sys
 import traceback
+from collections.abc import Iterable
 from typing import Any
+
+from engram_peft.protocols import GenerativeProtocol, SizedEncoding
 
 # Add the project root to sys.path to allow absolute imports from the 'examples' package
 # when running the script directly.
@@ -50,8 +53,8 @@ from engram_peft import (
     EngramTrainer,
     get_engram_model,
 )
+from engram_peft.protocols import HFModelProtocol
 from engram_peft.utils import apply_peft_patches
-from engram_peft.utils.typing import HFModelProtocol
 from examples.benchmarks.data_utils import get_dataset_template
 
 # Try to import safetensors
@@ -111,13 +114,24 @@ def prepare_alpaca_dataset(
 
         if not isinstance(tokenized, BatchEncoding):
             tokenized = BatchEncoding(tokenized)
-        labels = list(tokenized["input_ids"])
+
+        # Use isinstance for narrowing to avoid cast (Zero-Cast Principle)
+        encoding_ids = tokenized["input_ids"]
+        if not isinstance(encoding_ids, SizedEncoding):
+            labels = list(encoding_ids) if isinstance(encoding_ids, Iterable) else []
+        else:
+            labels = list(encoding_ids)
 
         # Mask the prompt part in labels (Padding masking handled by Collator)
         prompt_tokenized = tokenizer(prompt, max_length=max_length, truncation=True)
         if not isinstance(prompt_tokenized, BatchEncoding):
             prompt_tokenized = BatchEncoding(prompt_tokenized)
-        prompt_len = len(prompt_tokenized["input_ids"])
+        # Use isinstance for narrowing to avoid cast (Zero-Cast Principle)
+        prompt_ids = prompt_tokenized["input_ids"]
+        if not isinstance(prompt_ids, SizedEncoding):
+            prompt_len = len(prompt_ids) if hasattr(prompt_ids, "__len__") else 0
+        else:
+            prompt_len = len(prompt_ids)
         for i in range(min(prompt_len, max_length)):
             labels[i] = -100
 
@@ -352,20 +366,18 @@ def run_example(args: argparse.Namespace) -> None:
     if not isinstance(tokenizer, PreTrainedTokenizerBase):
         raise TypeError("tokenizer must be a PreTrainedTokenizerBase")
 
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.base_model.device)
+    device = model.base_model.device if hasattr(model.base_model, "device") else "cuda"
+    inputs = tokenizer(prompt, return_tensors="pt").to(device)
 
     print(f"Prompt: {prompt}")
     with torch.no_grad():
-        if isinstance(base_model, HFModelProtocol):
-            output = base_model.generate(
-                **inputs,
-                max_new_tokens=50,
-                max_length=None,
-                do_sample=True,
-                temperature=0.7,
+        if isinstance(model, GenerativeProtocol):
+            gen_model: GenerativeProtocol = model
+            output = gen_model.generate(
+                **inputs, max_new_tokens=50, tokenizer=tokenizer
             )
         else:
-            raise TypeError("base_model must satisfy HFModelProtocol for generation")
+            raise TypeError("Model does not satisfy generative interface")
     print(f"Response: {tokenizer.decode(output[0], skip_special_tokens=True)}")
 
     # 8. Reload and Verify

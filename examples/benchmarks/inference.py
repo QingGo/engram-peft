@@ -6,14 +6,14 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, PreTrainedModel, PreTrainedTokenizerBase
 
 from engram_peft import EngramLayer, EngramModel
-from engram_peft.utils.typing import HFModelProtocol
+from engram_peft.protocols import GenerativeProtocol, HFModelProtocol
 
 
 def demo_base_model(
     model: HFModelProtocol, tokenizer: PreTrainedTokenizerBase, inputs: dict[str, Any]
 ) -> None:
     print("\nGenerating with Base Model (Zero-shot)...")
-    if isinstance(model, PreTrainedModel):
+    if isinstance(model, PreTrainedModel | PeftModel):
         with torch.no_grad():
             output = model.generate(
                 **inputs, max_new_tokens=40, max_length=None, do_sample=False
@@ -42,7 +42,11 @@ def demo_lora(
             **inputs, max_new_tokens=40, max_length=None, do_sample=False
         )
     print(f"Output (LoRA):   {tokenizer.decode(out[0], skip_special_tokens=True)}")
-    model.unload()
+    if isinstance(model, PeftModel):
+        model.unload()
+    else:
+        # Fallback for when type inference fails but we know it's a PeftModel
+        model.unload()
 
 
 def demo_engram(
@@ -91,7 +95,10 @@ def demo_lora_engram(
         )
     print(f"Output (Combined): {tokenizer.decode(out[0], skip_special_tokens=True)}")
     combined_model.unload_engram()
-    lora_model.unload()
+    if isinstance(lora_model, PeftModel):
+        lora_model.unload()
+    else:
+        lora_model.unload()
 
 
 def demo_full_finetune(
@@ -104,12 +111,14 @@ def demo_full_finetune(
     ft_model = AutoModelForCausalLM.from_pretrained(
         path, torch_dtype=base_model.dtype, device_map="auto"
     )
-    if not isinstance(ft_model, HFModelProtocol):
-        # We know it satisfies it structurally, but this satisfies mypy
-        raise TypeError("Loaded model does not satisfy HFModelProtocol")
+    # Use structural narrowing to bypass nominal binding issues in library stubs
+    if not isinstance(ft_model, GenerativeProtocol):
+        raise TypeError("Loaded model does not satisfy generative interface")
 
+    # Explicitly re-bind to the protocol type to break the nominal inheritance chain
+    gen_model: GenerativeProtocol = ft_model
     with torch.no_grad():
-        out = ft_model.generate(
+        out = gen_model.generate(
             **inputs, max_new_tokens=40, max_length=None, do_sample=False
         )
     print(f"Output (Full FT): {tokenizer.decode(out[0], skip_special_tokens=True)}")

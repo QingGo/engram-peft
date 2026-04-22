@@ -1,3 +1,4 @@
+from collections.abc import Iterable, Iterator
 from typing import Any, Protocol, TypeVar, runtime_checkable
 
 import torch
@@ -21,10 +22,48 @@ class ModelWithTags(Protocol):
 
 
 @runtime_checkable
+class SizedEncoding(Iterable[int], Protocol):
+    """
+    Protocol for tokenizers.Encoding to fix missing __len__ and __iter__ in stubs.
+    """
+
+    def __len__(self) -> int: ...
+    def __iter__(self) -> Iterator[int]: ...
+    @property
+    def ids(self) -> list[int]: ...
+    @property
+    def attention_mask(self) -> list[int]: ...
+
+
+@runtime_checkable
+class GenerativeProtocol(Protocol):
+    """Protocol for models that support generation."""
+
+    def generate(self, *args: Any, **kwargs: Any) -> Any: ...
+
+
+@runtime_checkable
+class HFConfigProtocol(Protocol):
+    """
+    Protocol for Hugging Face-style configuration objects.
+    """
+
+    model_type: str
+    vocab_size: int
+    hidden_size: int
+    num_hidden_layers: int
+    pad_token_id: int | None
+
+    # Optional nested configs
+    text_config: Any | None = None
+
+    def to_dict(self) -> dict[str, Any]: ...
+
+
+@runtime_checkable
 class HFModelProtocol(Protocol):
     """
-    Structural protocol for Hugging Face-like models.
-    Defines common methods expected from a transformer backbone.
+    Refined structural protocol for Hugging Face-style models.
     """
 
     def generate(self, *args: Any, **kwargs: Any) -> Any: ...
@@ -42,7 +81,7 @@ class HFModelProtocol(Protocol):
     def device(self) -> torch.device: ...
 
     @property
-    def config(self) -> Any: ...
+    def config(self) -> HFConfigProtocol | Any: ...
 
     def tie_weights(self) -> None: ...
 
@@ -51,3 +90,18 @@ class HFModelProtocol(Protocol):
     def named_parameters(self, prefix: str = "", recurse: bool = True) -> Any: ...
     def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
     def register_forward_pre_hook(self, hook: Any, **kwargs: Any) -> Any: ...
+
+
+@runtime_checkable
+class EngramComponentProtocol(Protocol):
+    """
+    Unified interface for EngramModel and EngramLayer.
+    """
+
+    @property
+    def config(self) -> Any: ...
+
+    @property
+    def layer_id(self) -> int | None: ...
+
+    def forward(self, *args: Any, **kwargs: Any) -> Any: ...

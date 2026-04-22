@@ -3,9 +3,10 @@ from typing import Any
 
 import torch
 from torch.optim.optimizer import Optimizer
-from transformers import PreTrainedTokenizerBase, TrainingArguments
+from transformers import PreTrainedModel, PreTrainedTokenizerBase, TrainingArguments
 from transformers.modeling_utils import unwrap_model
-from trl import SFTConfig, SFTTrainer
+from trl.trainer.sft_config import SFTConfig
+from trl.trainer.sft_trainer import SFTTrainer
 
 from engram_peft.collator import EngramDataCollator
 from engram_peft.model import EngramModel
@@ -39,11 +40,16 @@ def prepare_engram_for_sft(
         EngramModel: The prepared model.
     """
     # 1. Disable cache for training (essential for gradient computation in SFT)
-    if hasattr(model.base_model, "config") and hasattr(
-        model.base_model.config, "use_cache"
-    ):
+
+    if isinstance(model.base_model, PreTrainedModel):
         model.base_model.config.use_cache = False
         logger.info("Disabled base model KV cache for SFT.")
+    elif hasattr(model.base_model, "config") and hasattr(
+        model.base_model.config, "use_cache"
+    ):
+        # Fallback for dynamic config
+        model.base_model.config.use_cache = False
+        logger.info("Disabled base model KV cache for SFT (dynamic).")
 
     # 2. Enable gradient checkpointing if requested
     if use_gradient_checkpointing:

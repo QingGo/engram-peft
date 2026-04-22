@@ -1,4 +1,4 @@
-from typing import Any, cast
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -169,7 +169,13 @@ class EngramTrainer(Trainer):
                     # In evaluation, we return the pure CE loss for fair baseline comparison
                     total_loss = ce_loss
 
-        return (total_loss, ce_outputs) if return_outputs else total_loss
+        if return_outputs:
+            if not isinstance(ce_outputs, dict):
+                # Fallback for older transformers or unexpected return types
+                return (total_loss, {"ce_outputs": ce_outputs})
+            return (total_loss, ce_outputs)
+
+        return total_loss
 
     def _compute_total_norm(self, parameters: Any) -> torch.Tensor | None:
         """Computes the total gradient norm across dense and sparse parameters."""
@@ -232,7 +238,8 @@ class EngramTrainer(Trainer):
         )
 
         if use_per_group:
-            groups = get_trainable_param_groups(cast("EngramModel", unwrapped_model))
+            assert isinstance(unwrapped_model, EngramModel)
+            groups = get_trainable_param_groups(unwrapped_model)
             apply_group_wise_clipping(groups, max_norm)
         else:
             # Standard Global Norm Clipping

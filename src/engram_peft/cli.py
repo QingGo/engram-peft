@@ -1,7 +1,7 @@
 import importlib.resources
 import logging
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import TYPE_CHECKING, Annotated, Any, cast
 
 import typer
 import yaml
@@ -18,6 +18,9 @@ from engram_peft.collator import EngramDataCollator
 from engram_peft.config import EngramConfig
 from engram_peft.model import TrainMode, get_engram_model
 from engram_peft.trainer import EngramTrainer
+
+if TYPE_CHECKING:
+    import torch.nn as nn
 
 app = typer.Typer(help="Engram-PEFT Command Line Interface")
 
@@ -174,7 +177,7 @@ def train(
     engram_config = EngramConfig(tokenizer_name_or_path=model_name, **engram_dict)
 
     # Explicitly type base_model to satisfy mypy
-    base_model: PreTrainedModel = AutoModelForCausalLM.from_pretrained(
+    base_model: nn.Module = AutoModelForCausalLM.from_pretrained(
         model_name, torch_dtype="auto", device_map="auto"
     )
 
@@ -183,8 +186,10 @@ def train(
     if lora_dict:
         typer.echo("[*] Applying LoRA (PEFT) to backbone")
         lora_config = LoraConfig(**lora_dict)
-        # Cast to satisfy mypy's requirement for PreTrainedModel or _BaseModelWithGenerate
-        base_model = cast("PreTrainedModel", get_peft_model(base_model, lora_config))
+        # get_peft_model expects PreTrainedModel, so we cast the AutoModel result
+        # and then cast the PeftModel result to keep base_model consistently typed
+        pm = cast("PreTrainedModel", base_model)
+        base_model = cast("PreTrainedModel", get_peft_model(pm, lora_config))
         # Default to preserving LoRA trainable weights
         if train_mode is None:
             train_mode = "preserve_trainable"
@@ -193,12 +198,21 @@ def train(
     if train_mode is None:
         train_mode = "engram_only"
 
-    typer.echo(f"[*] Wrapping model with Engram layers (train_mode={train_mode})")
+    # Ensure train_mode is valid TrainMode literal
+    resolved_train_mode: TrainMode = "engram_only"
+    if train_mode == "preserve_trainable":
+        resolved_train_mode = "preserve_trainable"
+    elif train_mode == "full_finetune":
+        resolved_train_mode = "full_finetune"
+
+    typer.echo(
+        f"[*] Wrapping model with Engram layers (train_mode={resolved_train_mode})"
+    )
     engram_model = get_engram_model(
         base_model,
         engram_config,
         tokenizer=tokenizer,
-        train_mode=cast("TrainMode", train_mode),
+        train_mode=resolved_train_mode,
     )
 
     # Dataset Loading
@@ -222,15 +236,14 @@ def train(
 
     def tokenize_function(examples: dict[str, Any]) -> dict[str, Any]:
         text_column = data_dict.get("text_column", "text")
-        return cast(
-            "dict[str, Any]",
-            tokenizer(
-                examples[text_column],
-                truncation=True,
-                max_length=data_dict.get("max_length", 512),
-                padding=False,
-            ),
+        tokenized = tokenizer(
+            examples[text_column],
+            truncation=True,
+            max_length=data_dict.get("max_length", 512),
+            padding=False,
         )
+        assert isinstance(tokenized, dict)
+        return tokenized
 
     typer.echo("[*] Tokenizing dataset")
     tokenized_dataset = dataset.map(

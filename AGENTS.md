@@ -81,25 +81,28 @@ uv run env SPRINTEST_TARGET_PKG=engram_peft stest tests/unit --cov=src/engram_pe
 
 ---
 
-### 6.1 类型安全与“零强转”原则 (Type Safety & Zero-Cast Principle)
+### 6.1 类型安全与“三零”原则 (Type Safety & Zero-Cast/Getattr/Ignore)
 
-本项目追求极高的静态类型检查准确率，严禁滥用 `cast("Any", ...)` 规避类型错误。在处理复杂模型接口时，应遵循以下优先级：
+本项目追求极高的静态类型检查准确率，严禁通过逃生舱规避类型错误。在处理复杂模型接口时，应遵循以下优先级：
 
-1.  **结构化协议 (Structural Typing)**：
-    - 优先使用 `src/engram_peft/utils/typing.py` 中的 `HFModelProtocol` 等协议或第三方库自带的的 Mixin (如 GenerationMixin) 来描述第三方库（如 Transformers）的复杂对象。
-    - 如果遇到新的接口需求，应扩展协议而非使用 `Any`。
-2.  **类型收窄 (Type Narrowing)**：
-    - 严禁盲目强转。必须使用 `isinstance(obj, Type)` 或 `hasattr(obj, "attr")` 进行运行时检查。
-    - 静态分析器会识别这些检查并自动收窄后续逻辑中的变量类型。
-3.  **显式联合类型 (Explicit Union Types)**：
-    - 变量在不同生命周期具有不同类型时（如从 `PeftModel` 变为 `EngramModel`），必须显式声明联合类型：`model: PeftModel | EngramModel`。
-4.  **TypedDict 与配置管理**：
-    - 对于复杂的字典参数（如 `kwargs`），应定义 `TypedDict` 或使用具名变量注解，避免 `dict[str, Any]` 导致的类型信息丢失。
-5.  **强制溯源 (No Hallucinations)**：
-    - 严禁凭记忆猜测第三方库的类型定义。必须查阅本地 `site-packages` 中的源码或 Stubs（如 `.pyi` 文件）确认真实签名。
-6.  **`cast` 的熔断机制**：
-    - 只有在静态分析器存在已知 Bug 或 Stub 定义完全错误，且 `isinstance` 无法解决时，才允许使用 `cast`。
-    - 使用 `cast` 时必须附带注释说明原因，例如：`# type: ignore # mypy issue #1234` 或 `# cast: required due to upstream stub bug`。
+1.  **名义与结构双重保障 (Nominal-Structural Hybrid)**：
+    - **Mixin 继承优先**：对于核心类（如 `EngramModel`），应优先继承官方 Mixin（如 `GenerationMixin`）而非仅在 Protocol 中描述其方法。这能确保在调用 `generate` 等复杂方法时满足 `self` 的名义绑定要求。
+    - **Mixin 辅助协议**：在 `HFModelProtocol` 等协议中，应尽量组合官方的 Mixin 存根。
+2.  **现代化类型收窄 (Modern Type Narrowing)**：
+    - **协议重绑定 (Isolation)**：若 `isinstance` 收窄后仍报 `Invalid self argument`（常见于 Transformers Stub 缺陷），**必须将变量重新绑定到明确声明为专用 Protocol 类型的变量上**，以斩断来自上游库名义类型链的污染。
+    - **零 `getattr` 原则**：严禁使用 `getattr(obj, "method")` 规避方法检查。`getattr` 实际上是参数不可校验的 `cast`，应替换为“协议重绑定”后的直接调用。
+    - **PEP 604 规范**：优先使用 `isinstance(obj, X | Y)`。
+3.  **精细化协议 (Protocol Refinement)**：
+    - 避免定义过于宽泛的“万能协议”。应根据职责拆分为 `GenerativeProtocol`、`SaveableProtocol` 等小协议。
+    - **明确返回类型**：协议属性必须明确具体返回类型（如 `torch.device` 而非 `Any`），防止收窄失败。
+4.  **显式联合类型 (Explicit Union Types)**：
+    - 变量在不同生命周期具有不同类型时，必须显式声明联合类型：`model: PeftModel | EngramModel`。
+5.  **TypedDict 与配置管理**：
+    - 对于复杂的字典参数，应定义 `TypedDict`，避免 `dict[str, Any]` 导致的类型信息丢失。
+6.  **强制溯源与 Stubs 补全**：
+    - 严禁凭记忆猜测。若发现上游库定义有误（如 `tokenizers.Encoding` 缺失 `__len__`），应在本项目内定义修正后的 Protocol。
+7.  **`cast` 的熔断与注释机制**：
+    - 仅在静态分析器已知 Bug 或 Stub 严重错误且无法通过重绑定解决时使用。使用时必须附带 `# type: ignore` 或 `cast` 原因注释。
 
 
 ---
