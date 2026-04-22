@@ -34,6 +34,8 @@ def demo_lora(
     path: str = "outputs/benchmarks/lora_weights",
 ) -> None:
     print(f"Generating with LoRA ({path})...")
+    if not isinstance(base_model, torch.nn.Module):
+        raise TypeError("base_model must be a torch.nn.Module for LoRA")
     model = PeftModel.from_pretrained(base_model, path)
     with torch.no_grad():
         out = model.generate(
@@ -102,6 +104,10 @@ def demo_full_finetune(
     ft_model = AutoModelForCausalLM.from_pretrained(
         path, torch_dtype=base_model.dtype, device_map="auto"
     )
+    if not isinstance(ft_model, HFModelProtocol):
+        # We know it satisfies it structurally, but this satisfies mypy
+        raise TypeError("Loaded model does not satisfy HFModelProtocol")
+
     with torch.no_grad():
         out = ft_model.generate(
             **inputs, max_new_tokens=40, max_length=None, do_sample=False

@@ -1,5 +1,6 @@
 from typing import Any, Protocol, TypeVar, runtime_checkable
 
+import torch
 import torch.nn as nn
 
 T = TypeVar("T")
@@ -35,7 +36,10 @@ class HFModelProtocol(Protocol):
     def training(self) -> bool: ...
 
     @property
-    def device(self) -> Any: ...
+    def dtype(self) -> torch.dtype: ...
+
+    @property
+    def device(self) -> torch.device: ...
 
     @property
     def config(self) -> Any: ...

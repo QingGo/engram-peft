@@ -86,7 +86,7 @@ uv run env SPRINTEST_TARGET_PKG=engram_peft stest tests/unit --cov=src/engram_pe
 本项目追求极高的静态类型检查准确率，严禁滥用 `cast("Any", ...)` 规避类型错误。在处理复杂模型接口时，应遵循以下优先级：
 
 1.  **结构化协议 (Structural Typing)**：
-    - 优先使用 `src/engram_peft/utils/typing.py` 中的 `HFModelProtocol` 等协议来描述第三方库（如 Transformers）的复杂对象。
+    - 优先使用 `src/engram_peft/utils/typing.py` 中的 `HFModelProtocol` 等协议或第三方库自带的的 Mixin (如 GenerationMixin) 来描述第三方库（如 Transformers）的复杂对象。
     - 如果遇到新的接口需求，应扩展协议而非使用 `Any`。
 2.  **类型收窄 (Type Narrowing)**：
     - 严禁盲目强转。必须使用 `isinstance(obj, Type)` 或 `hasattr(obj, "attr")` 进行运行时检查。

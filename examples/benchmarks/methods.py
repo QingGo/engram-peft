@@ -81,6 +81,9 @@ def train_lora(
         lora_dropout=0.05,
         bias="none",
     )
+    if not isinstance(base_model, PreTrainedModel):
+        # Fallback to nominal check for get_peft_model
+        raise TypeError("base_model must be a PreTrainedModel for PEFT")
     model = get_peft_model(base_model, peft_config)
     model.print_trainable_parameters()
 
@@ -302,6 +305,8 @@ def train_lora_engram(
         if hasattr(peft_config, k):
             setattr(peft_config, k, v)
 
+    if not isinstance(base_model, PreTrainedModel):
+        raise TypeError("base_model must be a PreTrainedModel for LoRA")
     lora_model = get_peft_model(base_model, peft_config)
 
     # Load Engram wrapper
@@ -373,7 +378,7 @@ def train_lora_engram(
     metrics = extract_trainer_metrics(trainer, train_result)
 
     model.save_pretrained("outputs/benchmarks/lora_engram_weights")
-    if hasattr(model.base_model, "save_pretrained"):
+    if isinstance(model.base_model, HFModelProtocol):
         model.base_model.save_pretrained("outputs/benchmarks/lora_engram_weights")
     model.unload_engram()
     lora_model.unload()
@@ -415,6 +420,8 @@ def train_full_finetune_engram(
         if hasattr(config, k):
             setattr(config, k, v)
 
+    if not isinstance(base_model, PreTrainedModel | torch.nn.Module):
+        raise TypeError("base_model must be a Module for Engram injection")
     model = get_engram_model(
         base_model,
         config,
@@ -474,7 +481,7 @@ def train_full_finetune_engram(
 
     model.save_pretrained("outputs/benchmarks/full_ft_engram_weights")
     # Save finetuned backbone to a subfolder to avoid config.json collision
-    if hasattr(model.base_model, "save_pretrained"):
+    if isinstance(model.base_model, HFModelProtocol):
         model.base_model.save_pretrained(
             "outputs/benchmarks/full_ft_engram_weights/base_model"
         )

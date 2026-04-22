@@ -15,7 +15,7 @@ import logging
 import os
 import sys
 import traceback
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 # Add the project root to sys.path to allow absolute imports from the 'examples' package
 # when running the script directly.
@@ -36,6 +36,7 @@ from transformers import (
     BatchEncoding,
     BitsAndBytesConfig,
     Mistral3ForConditionalGeneration,
+    PreTrainedModel,
     PreTrainedTokenizerBase,
     TrainingArguments,
     set_seed,
@@ -49,15 +50,9 @@ from engram_peft import (
     EngramTrainer,
     get_engram_model,
 )
-from engram_peft.utils import apply_peft_patches, patch_all
+from engram_peft.utils import apply_peft_patches
 from engram_peft.utils.typing import HFModelProtocol
 from examples.benchmarks.data_utils import get_dataset_template
-
-if TYPE_CHECKING:
-    from transformers import PreTrainedModel
-
-# Apply all compatibility patches (set_submodule, DTensor, etc.)
-patch_all()
 
 # Try to import safetensors
 try:
@@ -240,6 +235,8 @@ def run_example(args: argparse.Namespace) -> None:
         lora_dropout=0.05,
         bias="none",
     )
+    if not isinstance(base_model, PreTrainedModel):
+        raise TypeError("base_model must be a PreTrainedModel for LoRA")
     model: PeftModel | PeftMixedModel | EngramModel = get_peft_model(
         base_model, lora_config
     )
@@ -368,14 +365,7 @@ def run_example(args: argparse.Namespace) -> None:
                 temperature=0.7,
             )
         else:
-            # Fallback for standard models
-            output = base_model.generate(
-                **inputs,
-                max_new_tokens=50,
-                max_length=None,
-                do_sample=True,
-                temperature=0.7,
-            )
+            raise TypeError("base_model must satisfy HFModelProtocol for generation")
     print(f"Response: {tokenizer.decode(output[0], skip_special_tokens=True)}")
 
     # 8. Reload and Verify
@@ -383,6 +373,8 @@ def run_example(args: argparse.Namespace) -> None:
     # To fully verify, we should be able to load both LoRA and Engram back
     try:
         # 1. Load LoRA part onto a fresh base model (or reuse base_model for efficiency)
+        if not isinstance(base_model, torch.nn.Module):
+            raise TypeError("base_model must be a Module for reloading LoRA")
         reloaded_peft = PeftModel.from_pretrained(
             base_model, OUTPUT_DIR, trust_remote_code=True
         )

@@ -51,11 +51,8 @@ from engram_peft import (
     EngramTrainer,
     get_engram_model,
 )
-from engram_peft.utils import apply_peft_patches, patch_all
+from engram_peft.utils import apply_peft_patches
 from engram_peft.utils.typing import HFModelProtocol
-
-# Apply all compatibility patches (set_submodule, DTensor, etc.)
-patch_all()
 
 # Ensure benchmarks are importable
 sys.path.append(os.getcwd())
@@ -262,6 +259,9 @@ def run_example(args: argparse.Namespace) -> None:
     if not isinstance(base_model, PreTrainedModel):
         # We need the nominal type for get_peft_model
         raise TypeError("base_model must be a PreTrainedModel for PEFT")
+    if not isinstance(base_model, PreTrainedModel):
+        # We need the nominal type for get_peft_model
+        raise TypeError("base_model must be a PreTrainedModel for PEFT")
     model: PeftModel | PeftMixedModel | EngramModel = get_peft_model(
         base_model, lora_config
     )
@@ -402,16 +402,7 @@ def run_example(args: argparse.Namespace) -> None:
                 tokenizer=tokenizer,
             )
         else:
-            # Fallback for standard models
-            output = base_model.generate(
-                **inputs,
-                max_new_tokens=200,
-                max_length=None,
-                do_sample=True,
-                temperature=0.7,
-                stop_strings=["<think>", "</think>", "<|im_end|>"],
-                tokenizer=tokenizer,
-            )
+            raise TypeError("base_model must satisfy HFModelProtocol for generation")
     original_resp = tokenizer.decode(output[0][input_len:], skip_special_tokens=True)
     print(f"Response: {original_resp}")
 

@@ -1,4 +1,3 @@
-from .compat import patch_all, patch_dtensor, patch_set_submodule
 from .config_utils import patch_config
 from .general import (
     MixedOptimizer,
@@ -25,7 +24,4 @@ __all__ = [
     "patch_config",
     "apply_peft_patches",
     "get_optimal_precision_config",
-    "patch_all",
-    "patch_dtensor",
-    "patch_set_submodule",
 ]

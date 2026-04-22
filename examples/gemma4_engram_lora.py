@@ -15,7 +15,7 @@ import logging
 import os
 import sys
 import traceback
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 # Add the project root to sys.path to allow absolute imports from the 'examples' package
 # when running the script directly.
@@ -25,11 +25,13 @@ import torch
 from datasets import Dataset, load_dataset
 from peft import LoraConfig, PeftMixedModel, PeftModel, TaskType, get_peft_model
 from transformers import (
+    AutoConfig,
     AutoModelForCausalLM,
     AutoProcessor,
     AutoTokenizer,
     BatchEncoding,
     BitsAndBytesConfig,
+    PreTrainedModel,
     PreTrainedTokenizerBase,
     TrainingArguments,
     set_seed,
@@ -45,16 +47,9 @@ from engram_peft import (
 from engram_peft.utils import (
     apply_peft_patches,
     get_optimal_precision_config,
-    patch_all,
 )
 from engram_peft.utils.typing import HFModelProtocol
 from examples.benchmarks.data_utils import get_dataset_template
-
-if TYPE_CHECKING:
-    from transformers import PreTrainedModel
-
-# Apply all compatibility patches (set_submodule, DTensor, etc.)
-patch_all()
 
 # Try to import optional visualization components
 try:
@@ -146,7 +141,7 @@ def run_example(args: argparse.Namespace) -> None:
     print(f"\n>>> Initializing Gemma-4 Example with model: {args.model_id}")
 
     # 1. Load Processor & Model using official Transformers recommended way
-    print(f"Loading base model: {args.model_id}")
+    print(f"Loading tokenizer: {args.model_id}")
 
     # Gemma-4 might use AutoProcessor for multimodal support
     try:
@@ -159,24 +154,13 @@ def run_example(args: argparse.Namespace) -> None:
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    load_kwargs: dict[str, Any] = {
-        "device_map": "auto",
-        "trust_remote_code": True,
-        "torch_dtype": "auto",
-    }
-
-    if args.load_in_4bit:
-        load_kwargs["load_in_4bit"] = True
-    elif args.load_in_8bit:
-        load_kwargs["load_in_8bit"] = True
-
-    base_model = AutoModelForCausalLM.from_pretrained(args.model_id, **load_kwargs)
+    # Pre-load config to check for existing quantization and architecture details
+    config = AutoConfig.from_pretrained(args.model_id, trust_remote_code=True)
 
     # Defensive fix: ensure required attributes exist for Gemma4Model
     # Handle nested text_config which is common in new multimodal or complex architectures
     # CRITICAL: We DO NOT unpack text_config here to avoid losing top-level metadata.
     # Instead, we sync ALL attributes from text_config to the top-level config.
-    config = base_model.config
     if hasattr(config, "text_config"):
         print(
             "Detected nested text_config, synchronizing ALL attributes to top-level..."
@@ -237,12 +221,12 @@ def run_example(args: argparse.Namespace) -> None:
             torch.bfloat16 if get_optimal_precision_config()["bf16"] else torch.float16
         )
 
-    # Type base_model as Union to satisfy both transformers methods and avoid strange 'generate' callable errors
-    base_model: PreTrainedModel | HFModelProtocol = (
-        AutoModelForCausalLM.from_pretrained(
-            args.model_id, config=config, **model_kwargs
-        )
+    # Load model with final configuration
+    model_instance = AutoModelForCausalLM.from_pretrained(
+        args.model_id, config=config, **model_kwargs
     )
+    # Type it as Union to satisfy both transformers methods and avoid strange 'generate' callable errors
+    base_model: PreTrainedModel | HFModelProtocol = model_instance
 
     # 2. Apply LoRA
     print("Applying LoRA...")
@@ -266,6 +250,9 @@ def run_example(args: argparse.Namespace) -> None:
         lora_dropout=0.05,
         bias="none",
     )
+    if not isinstance(base_model, PreTrainedModel):
+        raise TypeError("base_model must be a PreTrainedModel for LoRA")
+
     model: PeftModel | PeftMixedModel | EngramModel = get_peft_model(
         base_model, lora_config
     )
@@ -289,8 +276,6 @@ def run_example(args: argparse.Namespace) -> None:
     # 4. Prepare Dataset
     print("Preparing Alpaca subsets (train + eval)...")
     datasets = prepare_alpaca_dataset(tokenizer)
-    _train_dataset = datasets["train"]
-    eval_dataset = datasets.get("eval")
 
     # 5. Training
     training_args = TrainingArguments(
@@ -300,7 +285,7 @@ def run_example(args: argparse.Namespace) -> None:
         max_steps=args.max_steps,
         learning_rate=args.lr,
         logging_steps=args.logging_steps,
-        eval_strategy="steps" if eval_dataset else "no",
+        eval_strategy="steps" if "eval" in datasets else "no",
         eval_steps=args.eval_steps,
         per_device_eval_batch_size=1,
         prediction_loss_only=True,
@@ -401,16 +386,7 @@ def run_example(args: argparse.Namespace) -> None:
                 tokenizer=tokenizer,
             )
         else:
-            # Fallback for standard models
-            output = base_model.generate(
-                **inputs,
-                max_new_tokens=100,
-                max_length=None,
-                do_sample=True,
-                temperature=0.7,
-                stop_strings=["<end_of_turn>"],
-                tokenizer=tokenizer,
-            )
+            raise TypeError("base_model must satisfy HFModelProtocol for generation")
     print(f"Response: {tokenizer.decode(output[0], skip_special_tokens=True)}")
 
     # 8. Reload and Verify
