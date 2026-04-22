@@ -13,6 +13,7 @@ Usage:
 
 import os
 import time
+from collections.abc import Iterable
 from typing import Any, cast
 
 import torch
@@ -163,6 +164,7 @@ class SimpleTransformer(PreTrainedModel, GenerationMixin):
             [SimpleBlock(config) for _ in range(config.n_layer)]
         )
         self.transformer.ln_f = nn.LayerNorm(config.hidden_size)
+
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
 
@@ -183,14 +185,14 @@ class SimpleTransformer(PreTrainedModel, GenerationMixin):
         b, t = input_ids.size()
         pos = torch.arange(0, t, dtype=torch.long, device=device).unsqueeze(0)
 
-        tok_emb = self.transformer.wte(input_ids)
-        pos_emb = self.transformer.wpe(pos)
+        tok_emb = cast(nn.Embedding, self.transformer.wte)(input_ids)
+        pos_emb = cast(nn.Embedding, self.transformer.wpe)(pos)
         x = tok_emb + pos_emb
 
-        for block in self.transformer.h:
+        for block in cast(Iterable[nn.Module], self.transformer.h):
             x = block(x)
 
-        x = self.transformer.ln_f(x)
+        x = cast(nn.LayerNorm, self.transformer.ln_f)(x)
         logits = self.lm_head(x)
 
         loss = None
@@ -358,7 +360,7 @@ def inference_demo(tokenizer: PreTrainedTokenizer, config: EngramConfig) -> None
             logits = outputs.logits[:, -1, :]
             # Simple greedy decoding
             next_token = torch.argmax(logits, dim=-1, keepdim=True)
-            curr_ids = torch.cat([cast("torch.Tensor", curr_ids), next_token], dim=-1)
+            curr_ids = torch.cat([cast(torch.Tensor, curr_ids), next_token], dim=-1)
 
     print(
         f"Output: {tokenizer.decode(cast('torch.Tensor', curr_ids)[0], skip_special_tokens=True)}"
@@ -388,7 +390,7 @@ def inference_demo(tokenizer: PreTrainedTokenizer, config: EngramConfig) -> None
             logits = outputs.logits[:, -1, :]
             next_token = torch.argmax(logits, dim=-1, keepdim=True)
             curr_ids_base = torch.cat(
-                [cast("torch.Tensor", curr_ids_base), next_token], dim=-1
+                [cast(torch.Tensor, curr_ids_base), next_token], dim=-1
             )
     print(
         f"Base Output: {tokenizer.decode(cast('torch.Tensor', curr_ids_base)[0], skip_special_tokens=True)}"

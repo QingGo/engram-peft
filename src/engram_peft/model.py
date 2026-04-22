@@ -621,18 +621,18 @@ class EngramModel(nn.Module):
         if "max_new_tokens" in kwargs and "max_length" not in kwargs:
             kwargs["max_length"] = None
 
-        generate_func = self.base_model.generate
+        generate_func = cast(Any, self.base_model).generate
         return generate_func(*args, **kwargs)
 
     def gradient_checkpointing_enable(self, **kwargs: Any) -> None:
         """Delegates gradient checkpointing enablement to the base model."""
         if hasattr(self.base_model, "gradient_checkpointing_enable"):
-            self.base_model.gradient_checkpointing_enable(**kwargs)
+            cast(Any, self.base_model).gradient_checkpointing_enable(**kwargs)
 
     def gradient_checkpointing_disable(self, **kwargs: Any) -> None:
         """Delegates gradient checkpointing disablement to the base model."""
         if hasattr(self.base_model, "gradient_checkpointing_disable"):
-            self.base_model.gradient_checkpointing_disable(**kwargs)
+            cast(Any, self.base_model).gradient_checkpointing_disable(**kwargs)
 
     def create_optimizer(
         self, base_learning_rate: float = 4e-4, **optimizer_kwargs: Any

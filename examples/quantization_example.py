@@ -9,6 +9,7 @@ Usage:
 """
 
 import argparse
+from typing import Any, cast
 
 import torch
 from datasets import load_dataset
@@ -88,7 +89,7 @@ def run_quantization_example(model_id: str) -> None:
     # Take a subset for demonstration
     dataset_subset = raw_dataset.select(range(min(500, len(raw_dataset))))
 
-    def tokenize_function(examples):
+    def tokenize_function(examples: dict[str, list[Any]]) -> dict[str, Any]:
         # Implementation of prompt masking for SFT
         prompts = []
         for i, instr in enumerate(examples["instruction"]):
@@ -138,7 +139,7 @@ def run_quantization_example(model_id: str) -> None:
             labels.append(label)
 
         tokenized["labels"] = labels
-        return tokenized
+        return cast(dict[str, Any], tokenized)
 
     train_dataset = dataset_subset.map(
         tokenize_function, batched=True, remove_columns=raw_dataset.column_names

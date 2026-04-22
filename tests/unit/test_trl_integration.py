@@ -21,7 +21,7 @@ def test_prepare_engram_for_sft():
     mock_model.print_trainable_parameters.assert_called_once()
 
 
-@patch("engram_peft.trl.SFTTrainer")
+@patch("engram_peft.trl.EngramCompatibleSFTTrainer")
 def test_create_engram_sft_trainer(mock_trainer_class):
     """Verify that the factory function initializes SFTTrainer with correct defaults."""
     mock_model = MagicMock()

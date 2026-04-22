@@ -243,8 +243,10 @@ def remap_weights_from_corpus(
             batch = tokens_np[:, i : i + batch_size]
             src_hashes = src_mapper.hash(batch)
             if target_model_engram.compressor:
+                # Get device safely from base_model
+                device = next(target_model_engram.base_model.parameters()).device
                 c_ids = target_model_engram.compressor.compress(
-                    torch.from_numpy(batch).to(target_model_engram.base_model.device)
+                    torch.from_numpy(batch).to(device)
                 )
                 c_ids_np = (
                     c_ids.cpu().numpy() if isinstance(c_ids, torch.Tensor) else c_ids
@@ -410,9 +412,8 @@ def _get_aligned_hashes(
 
     # Handle compressor for target if needed
     if target_model.compressor:
-        t_batch_torch = torch.from_numpy(target_batch).to(
-            target_model.base_model.device
-        )
+        device = next(target_model.base_model.parameters()).device
+        t_batch_torch = torch.from_numpy(target_batch).to(device)
         c_ids = target_model.compressor.compress(t_batch_torch)
         c_ids_np = c_ids.cpu().numpy() if isinstance(c_ids, torch.Tensor) else c_ids
         target_hashes = target_model.hash_mapping.hash(c_ids_np)

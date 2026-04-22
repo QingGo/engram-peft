@@ -117,7 +117,7 @@ def save_pretrained_unified(
     # Use feature-detection to avoid hard dependency or circular import issues
     if getattr(model.base_model, "_is_peft_model", False):
         logger.info("Detecting PeftModel (LoRA). Saving base model adapters...")
-        model.base_model.save_pretrained(
+        cast(Any, model.base_model).save_pretrained(
             save_directory, safe_serialization=safe_serialization, **kwargs
         )
 

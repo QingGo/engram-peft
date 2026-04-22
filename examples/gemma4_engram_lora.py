@@ -319,7 +319,7 @@ def run_example(args: argparse.Namespace) -> None:
         per_device_eval_batch_size=1,
         prediction_loss_only=True,
         save_strategy="no",
-        **get_optimal_precision_config(),
+        **cast(Any, get_optimal_precision_config()),
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},
         report_to="none",

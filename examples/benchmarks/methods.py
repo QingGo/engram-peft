@@ -372,7 +372,9 @@ def train_lora_engram(
 
     model.save_pretrained("outputs/benchmarks/lora_engram_weights")
     if hasattr(model.base_model, "save_pretrained"):
-        model.base_model.save_pretrained("outputs/benchmarks/lora_engram_weights")
+        cast(Any, model.base_model).save_pretrained(
+            "outputs/benchmarks/lora_engram_weights"
+        )
     model.unload_engram()
     lora_model.unload()
     return metrics
@@ -472,7 +474,7 @@ def train_full_finetune_engram(
 
     model.save_pretrained("outputs/benchmarks/full_ft_engram_weights")
     # Save finetuned backbone to a subfolder to avoid config.json collision
-    model.base_model.save_pretrained(
+    cast(Any, model.base_model).save_pretrained(
         "outputs/benchmarks/full_ft_engram_weights/base_model"
     )
     model.unload_engram()

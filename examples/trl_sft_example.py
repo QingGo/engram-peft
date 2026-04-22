@@ -2,7 +2,7 @@
 Example script demonstrating how to use Engram-PEFT with trl's SFTTrainer.
 """
 
-from typing import Any
+from typing import Any, cast
 
 from datasets import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -64,7 +64,7 @@ def main() -> None:
         max_steps=5,
         logging_steps=1,
         save_steps=5,
-        **get_optimal_precision_config(),
+        **cast(Any, get_optimal_precision_config()),
         push_to_hub=False,
         report_to="none",
         max_length=128,  # Renamed from max_seq_length in trl>=1.2.0

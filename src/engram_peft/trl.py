@@ -82,12 +82,15 @@ class EngramCompatibleSFTTrainer(SFTTrainer):
 
         super().__init__(*args, **kwargs)
 
-    def create_optimizer(self) -> Optimizer:
+    def create_optimizer(self, model: Any = None) -> Optimizer:
         """
         Creates the MixedOptimizer for EngramModels to support sparse gradients.
         """
         if self.optimizer is None:
-            unwrapped_model = unwrap_model(self.model)
+            model_to_unwrap = model if model is not None else self.model
+            if model_to_unwrap is None:
+                return super().create_optimizer()
+            unwrapped_model = unwrap_model(model_to_unwrap)
             if isinstance(unwrapped_model, EngramModel) and hasattr(
                 unwrapped_model, "create_optimizer"
             ):

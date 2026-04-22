@@ -13,7 +13,7 @@ def demo_base_model(
 ) -> None:
     print("\nGenerating with Base Model (Zero-shot)...")
     with torch.no_grad():
-        output = model.generate(
+        output = cast(Any, model).generate(
             **inputs, max_new_tokens=40, max_length=None, do_sample=False
         )
     print(f"Output (Base):   {tokenizer.decode(output[0], skip_special_tokens=True)}")
@@ -97,7 +97,7 @@ def demo_full_finetune(
         ),
     )
     with torch.no_grad():
-        out = ft_model.generate(
+        out = cast(Any, ft_model).generate(
             **inputs, max_new_tokens=40, max_length=None, do_sample=False
         )
     print(f"Output (Full FT): {tokenizer.decode(out[0], skip_special_tokens=True)}")
