@@ -346,3 +346,75 @@ uv run python examples/qwen3_engram_lora.py --load_in_4bit --max_steps 300
 ```
 
 Refer to the [Examples README](file:///app/examples/README.md) for more details on each template.
+
+## Quantization Support
+
+Engram-PEFT natively supports fine-tuning on top of models quantized via `bitsandbytes` (4-bit/8-bit) or `GPTQ`.
+
+### Core Mechanism
+
+Since quantized models use low-precision weights (e.g., `uint8` or `nf4`) but perform computation in a `compute_dtype` (typically `float16` or `bfloat16`), Engram layers must adapt to this precision.
+
+Engram-PEFT handles this via:
+1.  **Smart Detection**: `get_engram_model` automatically detects the `compute_dtype` of targeted layers and aligns the injected Engram layers accordingly.
+2.  **Explicit Control**: You can force a specific precision (e.g., `float32` for training stability) using the `engram_dtype` parameter in `EngramConfig`.
+
+### Usage Example: 4-bit Training
+
+This is the most common configuration for low-VRAM fine-tuning:
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig
+from peft import prepare_model_for_kbit_training
+from engram_peft import get_engram_model, EngramConfig
+
+model_id = "mistralai/Mistral-7B-v0.1"
+
+# 1. Configure 4-bit quantization
+bnb_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_compute_dtype=torch.bfloat16,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_use_double_quant=True,
+)
+
+# 2. Load backbone model
+base_model = AutoModelForCausalLM.from_pretrained(
+    model_id,
+    quantization_config=bnb_config,
+    device_map="auto"
+)
+
+# 3. [CRITICAL] Prepare quantized model for PEFT training
+base_model = prepare_model_for_kbit_training(base_model)
+
+# 4. Inject Engram
+config = EngramConfig(target_layers=[10, 20])
+model = get_engram_model(base_model, config)
+```
+
+### Combining with LoRA
+
+You can use both LoRA and Engram to maximize parameter efficiency:
+
+```python
+from peft import LoraConfig, get_peft_model
+
+# 1. Apply LoRA first
+lora_config = LoraConfig(
+    r=16,
+    target_modules=["q_proj", "v_proj"],
+    task_type="CAUSAL_LM"
+)
+peft_model = get_peft_model(base_model, lora_config)
+
+# 2. Apply Engram (use wrap_peft=True to preserve LoRA's trainable state)
+engram_model = get_engram_model(peft_model, config, wrap_peft=True)
+```
+
+### Important Notes
+
+- **VRAM Usage**: While the backbone is quantized, Engram embedding tables can still be large. If you hit OOM, consider reducing `embedding_dim` or the number of `target_layers`.
+- **Training Stability**: If loss diverges in extreme quantization scenarios, try setting `engram_dtype="float32"` in your `EngramConfig` to maintain higher precision for the memory module.
+- **Saving/Loading**: Engram adapters are saved in full precision (or BF16) and will automatically re-align to the current backbone's precision when reloaded.

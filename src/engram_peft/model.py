@@ -123,13 +123,22 @@ class EngramModel(nn.Module):
         self._inference_token_buffer: torch.Tensor | None = None
         self._engram_enabled: bool = True
 
-        self._engram_enabled = True
+        # 4. Apply precision settings
+        # By default, we keep Engram layers in float32 for training stability (Mixed Precision).
+        # We perform an initial probe on the base_model to see if an explicit override is requested.
+        target_dtype, source = ArchitectureResolver.resolve_layer_dtype(
+            self.base_model, config
+        )
 
-        # Note: We do NOT unconditionally cast to base_model.dtype here.
-        # Keeping Engram layers in float32 is essential for training stability
-        # when the backbone is float16/bfloat16 (Mixed Precision).
-        # Trainer/autocast will handle the precision transitions during forward/backward.
-        self.adapters.float()
+        if config.engram_dtype is not None:
+            self.adapters.to(target_dtype)
+            logger.info(
+                f"[Engram-PEFT] Set Engram layers to explicit dtype: {target_dtype} (Source: {source})"
+            )
+        else:
+            # If no explicit config, we default to float32 initially for stability.
+            # load_engram() will perform per-layer alignment later.
+            self.adapters.float()
 
         # Attach hooks immediately
         self.load_engram()
@@ -488,11 +497,20 @@ class EngramModel(nn.Module):
                 try:
                     example_param = next(target_module.parameters())
                     target_device = example_param.device
-                    target_dtype = example_param.dtype
 
-                    # Align the entire adapter module to target device AND dtype
+                    # Smart Dtype Detection for Quantization via ArchitectureResolver
+                    target_dtype, source = ArchitectureResolver.resolve_layer_dtype(
+                        target_module, self.config
+                    )
+
+                    # Align the entire adapter module to target device AND detected dtype
                     engram_layer = self.engram_layers[str(layer_id)]
                     engram_layer.to(device=target_device, dtype=target_dtype)
+
+                    logger.info(
+                        f"  - [Injected] Layer {layer_id} -> {module_class} "
+                        f"(device: {target_device}, dtype: {target_dtype}, source: {source})"
+                    )
                 except (StopIteration, AttributeError):
                     pass
 
@@ -864,6 +882,9 @@ def get_engram_model(
     tokenizer: PreTrainedTokenizerBase | None = None,
     wrap_peft: bool = False,
     train_mode: TrainMode | None = None,
+    backbone_freeze_steps: int = 0,
+    engram_dtype: str | None = None,
+    **kwargs: Any,
 ) -> EngramModel:
     """
     Wraps a base model with Engram layers.
@@ -877,7 +898,24 @@ def get_engram_model(
                    "engram_only" freezes the backbone,
                    "preserve_trainable" preserves already-trainable params,
                    "full_finetune" enables the full backbone.
+        backbone_freeze_steps: Initial steps to freeze the backbone.
+        engram_dtype: Explicit dtype for Engram layers.
     """
+    if isinstance(config, dict):
+        # Merge kwargs into dict if config is a dict
+        config.update(kwargs)
+        if "backbone_freeze_steps" not in config:
+            config["backbone_freeze_steps"] = backbone_freeze_steps
+        if "engram_dtype" not in config:
+            config["engram_dtype"] = engram_dtype
+        engram_config = EngramConfig(**config)
+    else:
+        engram_config = config
+        if backbone_freeze_steps > 0:
+            engram_config.backbone_freeze_steps = backbone_freeze_steps
+        if engram_dtype is not None:
+            engram_config.engram_dtype = engram_dtype
+
     if train_mode is None:
         resolved_train_mode: TrainMode = (
             "preserve_trainable" if wrap_peft else "engram_only"

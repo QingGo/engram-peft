@@ -128,6 +128,7 @@ engram-peft train --config training_config.yaml --overrides "training_args.learn
 - **多模态与主流架构深度适配**：原生支持复杂封装架构下的递归层定位，兼容多模态模型特有的嵌套配置（text_config）同步，实现对 Qwen、Gemma 等新架构的无缝支持。
 - **Hugging Face Hub 集成**：支持通过 `push_to_hub` 上传适配器，并通过 `from_pretrained` 直接从 Hub ID 加载，与 PEFT 生态深度对齐。
 - **TRL & SFTTrainer 深度适配**：内置 `trl.SFTTrainer` 工厂函数，自动处理模型预处理与哈希预计算，实现无缝指令微调。
+- **原生量化支持**：原生兼容 **bitsandbytes (4-bit/8-bit)** 和 **GPTQ** 模型。内置智能精度探测逻辑，确保 Engram 层自动对齐骨干网络的 `compute_dtype`。
 
 ---
 

@@ -24,7 +24,13 @@ from typing import Any, cast
 import torch
 import torch.nn as nn
 from datasets import Dataset, load_dataset
-from peft import LoraConfig, PeftModel, TaskType, get_peft_model
+from peft import (
+    LoraConfig,
+    PeftModel,
+    TaskType,
+    get_peft_model,
+    prepare_model_for_kbit_training,
+)
 
 # Polyfill for set_submodule which is missing in some PyTorch versions
 if not hasattr(nn.Module, "set_submodule"):
@@ -244,6 +250,14 @@ def run_example(args: argparse.Namespace) -> None:
     base_model = AutoModelForCausalLM.from_pretrained(
         args.model_id, config=config, **model_kwargs
     )
+
+    # 1.1 Prepare for k-bit training if quantized
+    if args.load_in_4bit or args.load_in_8bit:
+        print("Preparing model for k-bit training...")
+
+        # Note: we use gradient_checkpointing in TrainingArguments later,
+        # but prepare_model_for_kbit_training also enables it by default.
+        base_model = prepare_model_for_kbit_training(base_model)
 
     # 2. Apply LoRA
     print("Applying LoRA...")

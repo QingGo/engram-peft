@@ -316,6 +316,60 @@ class ArchitectureResolver:
         return curr
 
     @staticmethod
+    def resolve_layer_dtype(
+        target_module: nn.Module, config: Any | None = None
+    ) -> tuple[torch.dtype, str]:
+        """
+        Determines the appropriate compute dtype for a given module.
+        Priority: Explicit config > compute_dtype (BNB) > parameter sample.
+
+        Returns:
+            tuple[torch.dtype, str]: The detected dtype and a human-readable source string.
+        """
+        # 1. Explicit Config Override
+        if config is not None:
+            explicit_dtype_str = getattr(config, "engram_dtype", None)
+            if explicit_dtype_str is not None:
+                dtype_map = {
+                    "float32": torch.float32,
+                    "float16": torch.float16,
+                    "bfloat16": torch.bfloat16,
+                }
+                target_dtype = dtype_map.get(explicit_dtype_str)
+                if target_dtype is not None:
+                    return (
+                        target_dtype,
+                        f"Explicit config (engram_dtype='{explicit_dtype_str}')",
+                    )
+
+        # 2. BitsAndBytes compute_dtype detection
+        if hasattr(target_module, "compute_dtype"):
+            val = target_module.compute_dtype
+            if isinstance(val, torch.dtype):
+                return (
+                    val,
+                    f"Quantized compute_dtype ({target_module.__class__.__name__})",
+                )
+
+        # 3. Parameter Sampling
+        try:
+            example_param = next(target_module.parameters())
+            sample_dtype = example_param.dtype
+
+            # If the sampled dtype is floating point, we trust it
+            if sample_dtype.is_floating_point:
+                return sample_dtype, f"Parameter sample ({sample_dtype})"
+
+            # If it's an integer type (e.g. uint8 in 4-bit models), we fallback
+            return (
+                torch.float32,
+                f"Fallback from non-floating-point sample ({sample_dtype})",
+            )
+        except (StopIteration, AttributeError):
+            # No parameters found or attribute error
+            return torch.float32, "Default fallback (no parameters found)"
+
+    @staticmethod
     def find_largest_module_list(model: nn.Module) -> str | None:
         """Heuristically finds the largest nn.ModuleList in the model tree."""
         candidates: list[tuple[str, int]] = []

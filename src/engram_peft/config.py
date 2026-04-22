@@ -152,6 +152,13 @@ class EngramConfig(PretrainedConfig):
             "help": "Number of initial steps to freeze the backbone for 'Adapter-First' pre-training."
         },
     )
+    engram_dtype: str | None = field(
+        default=None,
+        metadata={
+            "help": "Explicit data type for Engram parameters (e.g., 'float32', 'float16', 'bfloat16'). "
+            "If None, it will be automatically detected from the backbone's compute_dtype."
+        },
+    )
     engram_version: str = field(
         default="1.2.2",
         metadata={"help": "The version of the Engram state file format."},
@@ -182,6 +189,7 @@ class EngramConfig(PretrainedConfig):
         enable_telemetry: bool = False,
         entropy_loss_weight: float = 0.0,
         backbone_freeze_steps: int = 0,
+        engram_dtype: str | None = None,
         engram_version: str = "1.2.2",
         **kwargs: Any,
     ):
@@ -261,6 +269,7 @@ class EngramConfig(PretrainedConfig):
         self.enable_telemetry = enable_telemetry
         self.entropy_loss_weight = entropy_loss_weight
         self.backbone_freeze_steps = backbone_freeze_steps
+        self.engram_dtype = engram_dtype
         self.engram_version = engram_version
 
         super().__init__(**kwargs)

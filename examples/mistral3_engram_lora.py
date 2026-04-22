@@ -50,9 +50,11 @@ from peft import (  # type: ignore # noqa: E402
     PeftModel,
     TaskType,
     get_peft_model,
+    prepare_model_for_kbit_training,
 )
 from transformers import (  # noqa: E402
     AutoTokenizer,
+    BitsAndBytesConfig,
     Mistral3ForConditionalGeneration,
     PreTrainedTokenizerBase,
     TrainingArguments,
@@ -207,7 +209,22 @@ def run_example(args: argparse.Namespace) -> None:
         "trust_remote_code": True,
     }
 
-    # Handle BF16 dequantization if requested
+    # Handle quantization if requested
+    if args.load_in_4bit:
+        print("Enabling 4-bit quantization...")
+        load_kwargs["quantization_config"] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.bfloat16
+            if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+            else torch.float16,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+        )
+    elif args.load_in_8bit:
+        print("Enabling 8-bit quantization...")
+        load_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
+
+    # Handle BF16 dequantization if requested (for FP8 models)
     if args.load_in_bf16:
         print("Forcing model to BF16 precision to bypass FP8 kernel issues...")
         load_kwargs["torch_dtype"] = torch.bfloat16
@@ -224,6 +241,11 @@ def run_example(args: argparse.Namespace) -> None:
 
     # Tie weights after loading to ensure lm_head is correct
     base_model.tie_weights()
+
+    # 1.1 Prepare for k-bit training if quantized
+    if args.load_in_4bit or args.load_in_8bit:
+        print("Preparing model for k-bit training...")
+        base_model = prepare_model_for_kbit_training(base_model)
 
     # 2. Apply LoRA
     print("Applying LoRA...")

@@ -38,6 +38,7 @@ Configuration class for Engram PEFT module. Inherits from `transformers.Pretrain
 - `enable_telemetry` (`bool`, default: `False`): Enables detailed metric logging (norms, drift, max values).
 - `entropy_loss_weight` (`float`, default: `0.0`): Weight for the gating entropy penalty loss.
 - `backbone_freeze_steps` (`int`, default: `0`): Initial steps where backbone is frozen (Adapter-First warm-up).
+- `engram_dtype` (`Optional[str]`, default: `None`): Explicit precision for Engram layers (e.g., `"float32"`, `"float16"`, `"bfloat16"`). If `None`, it's auto-detected from the backbone's `compute_dtype`.
 
 **Example Usage:**
 ```python
@@ -46,7 +47,8 @@ from engram_peft import EngramConfig
 config = EngramConfig(
     target_layers=[2, 11, 20],
     embedding_dim=1024,
-    learning_rate_multiplier=5.0
+    learning_rate_multiplier=5.0,
+    engram_dtype="bfloat16"
 )
 ```
 
@@ -55,7 +57,7 @@ config = EngramConfig(
 ## Model Wrapping
 
 ### `get_engram_model`
-`engram_peft.model.get_engram_model(model, config, tokenizer=None, wrap_peft=False, train_mode=None)`
+`engram_peft.model.get_engram_model(model, config, tokenizer=None, wrap_peft=False, train_mode=None, backbone_freeze_steps=0, engram_dtype=None)`
 
 Injects Engram layers into a base Transformer model and configures which backbone
 parameters remain trainable.
@@ -66,6 +68,8 @@ parameters remain trainable.
 - `tokenizer` (`Optional[PreTrainedTokenizer]`): Tokenizer for vocabulary/compression.
 - `wrap_peft` (`bool`, default: `False`): Backward-compatible alias for `train_mode="preserve_trainable"`.
 - `train_mode` (`Literal["engram_only", "preserve_trainable", "full_finetune"]`, optional): Controls backbone trainability.
+- `backbone_freeze_steps` (`int`, default: `0`): Initial steps to freeze the backbone.
+- `engram_dtype` (`Optional[str]`, default: `None`): Explicit precision for Engram layers.
   - `engram_only`: Freeze the backbone and train only Engram.
   - `preserve_trainable`: Preserve parameters that were already trainable before wrapping (e.g., LoRA), then add trainable Engram layers.
   - `full_finetune`: Train the full backbone together with Engram.
