@@ -24,6 +24,7 @@ from transformers import (
 from engram_peft import (
     EngramConfig,
     EngramDataCollator,
+    EngramModel,
     EngramTrainer,
     get_engram_model,
 )
@@ -139,7 +140,7 @@ def run_quantization_example(model_id: str) -> None:
             labels.append(label)
 
         tokenized["labels"] = labels
-        return cast(dict[str, Any], tokenized)
+        return cast("dict[str, Any]", tokenized)
 
     train_dataset = dataset_subset.map(
         tokenize_function, batched=True, remove_columns=raw_dataset.column_names
@@ -167,16 +168,23 @@ def run_quantization_example(model_id: str) -> None:
     )
 
     trainer.train()
+    OUTPUT_DIR = "outputs/quant_engram_final"
 
-    # 6. Simple Inference Test
-    print("\nRunning post-training inference test...")
+    # 6. Saving
+    print(f"\nSaving fine-tuned Engram adapter to {OUTPUT_DIR}...")
+    model.save_pretrained(OUTPUT_DIR)
+
+    # 7. Inference Demo
+    print("\n>>> Inference Demo (Active Model)")
     model.eval()
     # Explicitly disable gradient checkpointing for inference stability
-    model.gradient_checkpointing_disable()
+    if hasattr(model, "gradient_checkpointing_disable"):
+        model.gradient_checkpointing_disable()
 
     # Use the same format as training
     prompt = "Instruction: What is the capital of France?\nResponse: "
     inputs = tokenizer(prompt, return_tensors="pt").to(base_model.device)
+    input_len = inputs["input_ids"].shape[-1]
 
     print(f"Prompt: {prompt}")
     with torch.no_grad():
@@ -185,16 +193,48 @@ def run_quantization_example(model_id: str) -> None:
             max_new_tokens=40,
             max_length=None,
             do_sample=True,
-            temperature=0.1,  # Lower for stability
-            top_p=0.9,  # Add top_p for better quality
+            temperature=0.7,
+            top_p=0.9,
         )
 
     # Decode only the NEW tokens
-    input_len = inputs["input_ids"].shape[-1]
-    generated_tokens = outputs[0][input_len:]
-    print(f"Generated {len(generated_tokens)} new tokens.")
-    response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+    response = tokenizer.decode(outputs[0][input_len:], skip_special_tokens=True)
     print(f"Response: {response}")
+
+    # 8. Reload and Verify
+    print("\n>>> Reloading for Verification")
+    try:
+        print("Re-loading base model in 4-bit...")
+        # Re-use bnb_config from step 1
+        reloaded_base = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            quantization_config=bnb_config,
+            device_map="auto",
+            trust_remote_code=True,
+        )
+
+        print(f"Loading Engram adapter from {OUTPUT_DIR}...")
+        reloaded_model = EngramModel.from_pretrained(
+            reloaded_base, OUTPUT_DIR, tokenizer=tokenizer
+        )
+
+        print("Inference with Reloaded Model:")
+        with torch.no_grad():
+            reloaded_outputs = reloaded_model.generate(
+                **inputs,
+                max_new_tokens=40,
+                max_length=None,
+                do_sample=True,
+                temperature=0.7,
+                top_p=0.9,
+            )
+        reloaded_resp = tokenizer.decode(
+            reloaded_outputs[0][input_len:], skip_special_tokens=True
+        )
+        print(f"Response: {reloaded_resp}")
+        print("\nReload verification successful!")
+    except Exception as e:
+        print(f"Reloading failed: {e}")
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from huggingface_hub import HfApi, snapshot_download
-from transformers import PreTrainedModel, PreTrainedTokenizerBase
+from transformers import GenerationMixin, PreTrainedModel, PreTrainedTokenizerBase
 
 from engram_peft import saving
 from engram_peft.compression import CompressedTokenizer
@@ -20,6 +20,11 @@ from engram_peft.discovery import ArchitectureResolver
 from engram_peft.hashing import NgramHashMapping
 from engram_peft.layer import EngramLayer
 from engram_peft.utils import get_optimizer, get_scheduler
+from engram_peft.utils.typing import (
+    HFModelProtocol,
+    ModelWithTags,
+    ToDictProtocol,
+)
 from engram_peft.weight_transfer import (
     align_embedding_table,
     check_compatibility,
@@ -34,7 +39,7 @@ TrainMode = Literal["engram_only", "preserve_trainable", "full_finetune"]
 # Architecture Layer Mapping moved to discovery.py
 
 
-class EngramModel(nn.Module):
+class EngramModel(nn.Module, GenerationMixin):
     """
     Wrapper model that injects EngramLayer into a PreTrainedModel via forward hooks.
     """
@@ -43,7 +48,7 @@ class EngramModel(nn.Module):
 
     def __init__(
         self,
-        base_model: PreTrainedModel | nn.Module,
+        base_model: PreTrainedModel | nn.Module | HFModelProtocol,
         config: EngramConfig,
         tokenizer: PreTrainedTokenizerBase | None = None,
     ) -> None:
@@ -127,7 +132,7 @@ class EngramModel(nn.Module):
         # By default, we keep Engram layers in float32 for training stability (Mixed Precision).
         # We perform an initial probe on the base_model to see if an explicit override is requested.
         target_dtype, source = ArchitectureResolver.resolve_layer_dtype(
-            self.base_model, config
+            cast("nn.Module", self.base_model), config
         )
 
         if config.engram_dtype is not None:
@@ -147,8 +152,8 @@ class EngramModel(nn.Module):
         """
         Add model tags for Hugging Face integration (e.g., TRL).
         """
-        if hasattr(self.base_model, "add_model_tags"):
-            cast("Any", self.base_model).add_model_tags(tags)
+        if isinstance(self.base_model, ModelWithTags):
+            self.base_model.add_model_tags(tags)
 
     def print_trainable_parameters(self) -> None:
         """
@@ -187,6 +192,9 @@ class EngramModel(nn.Module):
         all_norm_ratios = []
 
         for _, layer in self.engram_layers.items():
+            if not isinstance(layer, EngramLayer):
+                continue
+
             # 1. Gating Stats
             if hasattr(layer, "gating") and hasattr(layer.gating, "last_gate"):
                 gate = layer.gating.last_gate
@@ -239,7 +247,11 @@ class EngramModel(nn.Module):
         """
         entropies = []
         for _, layer in self.engram_layers.items():
-            if hasattr(layer, "gating") and hasattr(layer.gating, "gating_entropy"):
+            if (
+                isinstance(layer, EngramLayer)
+                and hasattr(layer, "gating")
+                and hasattr(layer.gating, "gating_entropy")
+            ):
                 entropies.append(layer.gating.gating_entropy)
 
         if not entropies:
@@ -296,7 +308,7 @@ class EngramModel(nn.Module):
         if container_path is None:
             # This should have been resolved by the factory function, but as fallback:
             container_path = ArchitectureResolver.find_largest_module_list(
-                self.base_model
+                cast("nn.Module", self.base_model)
             )
             if container_path is None:
                 raise ValueError(
@@ -304,7 +316,7 @@ class EngramModel(nn.Module):
                 )
 
         container = ArchitectureResolver.get_submodule_by_path(
-            self.base_model, container_path
+            cast("nn.Module", self.base_model), container_path
         )
         if not isinstance(container, nn.ModuleList):
             raise ValueError(f"Path '{container_path}' is not a nn.ModuleList.")
@@ -593,11 +605,11 @@ class EngramModel(nn.Module):
 
         # Robust input handling: if first arg or 'input_ids' kwarg is a dict-like object,
         # extract its contents to ensure base_model.generate handles it correctly.
-        if len(args) > 0 and (isinstance(args[0], dict) or hasattr(args[0], "to_dict")):
+        if len(args) > 0 and (
+            isinstance(args[0], dict) or isinstance(args[0], ToDictProtocol)
+        ):
             input_dict = (
-                cast("Any", args[0]).to_dict()
-                if hasattr(args[0], "to_dict")
-                else args[0]
+                args[0].to_dict() if isinstance(args[0], ToDictProtocol) else args[0]
             )
             args = args[1:]
             # Only update kwargs if not already set
@@ -606,11 +618,11 @@ class EngramModel(nn.Module):
                     kwargs[k] = v
         elif "input_ids" in kwargs and (
             isinstance(kwargs["input_ids"], dict)
-            or hasattr(kwargs["input_ids"], "to_dict")
+            or isinstance(kwargs["input_ids"], ToDictProtocol)
         ):
             input_dict = (
-                cast("Any", kwargs["input_ids"]).to_dict()
-                if hasattr(kwargs["input_ids"], "to_dict")
+                kwargs["input_ids"].to_dict()
+                if isinstance(kwargs["input_ids"], ToDictProtocol)
                 else kwargs["input_ids"]
             )
             kwargs.pop("input_ids")
@@ -621,18 +633,25 @@ class EngramModel(nn.Module):
         if "max_new_tokens" in kwargs and "max_length" not in kwargs:
             kwargs["max_length"] = None
 
-        generate_func = cast(Any, self.base_model).generate
-        return generate_func(*args, **kwargs)
+        if isinstance(self.base_model, HFModelProtocol):
+            return self.base_model.generate(*args, **kwargs)
+
+        # Fallback for generic nn.Module
+        generate_func = getattr(self.base_model, "generate", None)
+        if generate_func is not None:
+            return generate_func(*args, **kwargs)
+
+        raise AttributeError("Base model does not have a 'generate' method.")
 
     def gradient_checkpointing_enable(self, **kwargs: Any) -> None:
         """Delegates gradient checkpointing enablement to the base model."""
-        if hasattr(self.base_model, "gradient_checkpointing_enable"):
-            cast(Any, self.base_model).gradient_checkpointing_enable(**kwargs)
+        if isinstance(self.base_model, HFModelProtocol):
+            self.base_model.gradient_checkpointing_enable(**kwargs)
 
     def gradient_checkpointing_disable(self, **kwargs: Any) -> None:
         """Delegates gradient checkpointing disablement to the base model."""
-        if hasattr(self.base_model, "gradient_checkpointing_disable"):
-            cast(Any, self.base_model).gradient_checkpointing_disable(**kwargs)
+        if isinstance(self.base_model, HFModelProtocol):
+            self.base_model.gradient_checkpointing_disable(**kwargs)
 
     def create_optimizer(
         self, base_learning_rate: float = 4e-4, **optimizer_kwargs: Any

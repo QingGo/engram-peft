@@ -1,9 +1,9 @@
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import torch
 from peft import PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel
 
 from engram_peft.model import EngramModel
 
@@ -20,14 +20,14 @@ if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
 
 # 2. Load Base Model and PEFT (LoRA) if exists
-base_model = AutoModelForCausalLM.from_pretrained(
+base_model: PreTrainedModel | PeftModel = AutoModelForCausalLM.from_pretrained(
     model_id, torch_dtype="auto", device_map="auto"
 )
 
 # Check if there is a LoRA adapter (PeftModel) in the same directory
 if (adapter_path / "adapter_config.json").exists():
     print("[*] Detected LoRA adapter. Loading PEFT model...")
-    base_model = cast("Any", PeftModel.from_pretrained(base_model, str(adapter_path)))
+    base_model = PeftModel.from_pretrained(base_model, str(adapter_path))
 
 # 3. Load Engram-augmented model
 model = EngramModel.from_pretrained(base_model, str(adapter_path), tokenizer=tokenizer)

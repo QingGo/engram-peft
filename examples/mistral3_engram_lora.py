@@ -8,71 +8,56 @@ Usage:
     uv run python examples/mistral3_engram_lora.py --model_id mistralai/Ministral-3-3B-Instruct-2512 --max_steps 50
 """
 
+from __future__ import annotations
+
 import argparse
 import logging
 import os
 import sys
 import traceback
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any
 
 # Add the project root to sys.path to allow absolute imports from the 'examples' package
 # when running the script directly.
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import torch
-import torch.nn as nn
-
-
-# CRITICAL COMPATIBILITY HACK:
-# Latest transformers (for Mistral-3) expects torch.distributed.tensor.DTensor.
-# In PyTorch < 2.5, this path might not exist or be empty.
-class DummyDTensor:
-    pass
-
-
-try:
-    import torch.distributed.tensor as _dt
-
-    if not hasattr(_dt, "DTensor"):
-        _dt.DTensor = DummyDTensor  # type: ignore
-except ImportError:
-    # If the module doesn't exist at all, we create it in sys.modules
-    import sys
-    from types import ModuleType
-
-    mock_dt = ModuleType("torch.distributed.tensor")
-    mock_dt.DTensor = DummyDTensor  # type: ignore
-    sys.modules["torch.distributed.tensor"] = mock_dt
-
-from datasets import Dataset, load_dataset  # noqa: E402
-from peft import (  # type: ignore # noqa: E402
+from datasets import Dataset, load_dataset
+from peft import (
     LoraConfig,
+    PeftMixedModel,
     PeftModel,
     TaskType,
     get_peft_model,
     prepare_model_for_kbit_training,
 )
-from transformers import (  # noqa: E402
+from transformers import (
     AutoTokenizer,
+    BatchEncoding,
     BitsAndBytesConfig,
     Mistral3ForConditionalGeneration,
     PreTrainedTokenizerBase,
     TrainingArguments,
     set_seed,
 )
+from transformers.models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 
-from engram_peft import EngramConfig, get_engram_model  # noqa: E402
-
-# Check for latest transformers features
-try:
-    from transformers import FineGrainedFP8Config
-except ImportError:
-    FineGrainedFP8Config = None  # type: ignore
-from transformers.models.auto.modeling_auto import (  # noqa: E402
-    MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
+from engram_peft import (
+    EngramConfig,
+    EngramDataCollator,
+    EngramModel,
+    EngramTrainer,
+    get_engram_model,
 )
+from engram_peft.utils import apply_peft_patches, patch_all
+from engram_peft.utils.typing import HFModelProtocol
+from examples.benchmarks.data_utils import get_dataset_template
 
-from examples.benchmarks.data_utils import get_dataset_template  # noqa: E402
+if TYPE_CHECKING:
+    from transformers import PreTrainedModel
+
+# Apply all compatibility patches (set_submodule, DTensor, etc.)
+patch_all()
 
 # Try to import safetensors
 try:
@@ -80,25 +65,11 @@ try:
 except ImportError:
     safe_load_file = None  # type: ignore
 
-from engram_peft import (  # noqa: E402
-    EngramDataCollator,
-    EngramModel,
-    EngramTrainer,
-)
-from engram_peft.utils import apply_peft_patches  # noqa: E402
-
-# Polyfill for set_submodule which is missing in some PyTorch versions
-if not hasattr(nn.Module, "set_submodule"):
-
-    def set_submodule(self: nn.Module, target: str, module: nn.Module) -> None:
-        if not target:
-            raise ValueError("Cannot set empty submodule")
-        atoms = target.split(".")
-        name = atoms.pop(-1)
-        parent = self.get_submodule(".".join(atoms))
-        setattr(parent, name, module)
-
-    nn.Module.set_submodule = set_submodule  # type: ignore
+# Check for latest transformers features
+try:
+    from transformers import FineGrainedFP8Config
+except ImportError:
+    FineGrainedFP8Config = None  # type: ignore
 
 # Try to import optional visualization components
 try:
@@ -143,12 +114,14 @@ def prepare_alpaca_dataset(
             padding="max_length",
         )
 
-        labels = list(cast("Any", tokenized)["input_ids"])
+        if not isinstance(tokenized, BatchEncoding):
+            tokenized = BatchEncoding(tokenized)
+        labels = list(tokenized["input_ids"])
 
         # Mask the prompt part in labels (Padding masking handled by Collator)
-        prompt_tokenized = cast("Any", tokenizer)(
-            prompt, max_length=max_length, truncation=True
-        )
+        prompt_tokenized = tokenizer(prompt, max_length=max_length, truncation=True)
+        if not isinstance(prompt_tokenized, BatchEncoding):
+            prompt_tokenized = BatchEncoding(prompt_tokenized)
         prompt_len = len(prompt_tokenized["input_ids"])
         for i in range(min(prompt_len, max_length)):
             labels[i] = -100
@@ -204,7 +177,7 @@ def run_example(args: argparse.Namespace) -> None:
     # 1. Load model using official Transformers Mistral3 class
     print(f"Loading base model: {args.model_id}")
 
-    load_kwargs = {
+    load_kwargs: dict[str, Any] = {
         "device_map": "auto",
         "trust_remote_code": True,
     }
@@ -235,8 +208,9 @@ def run_example(args: argparse.Namespace) -> None:
         # Default to FP8 as per official docs
         print("Loading in native FP8 precision...")
 
-    base_model = cast("Any", Mistral3ForConditionalGeneration).from_pretrained(
-        args.model_id, **load_kwargs
+    # Type base_model as Union to satisfy both transformers methods and avoid strange 'generate' callable errors
+    base_model: PreTrainedModel | HFModelProtocol = (
+        Mistral3ForConditionalGeneration.from_pretrained(args.model_id, **load_kwargs)
     )
 
     # Tie weights after loading to ensure lm_head is correct
@@ -266,7 +240,9 @@ def run_example(args: argparse.Namespace) -> None:
         lora_dropout=0.05,
         bias="none",
     )
-    model = get_peft_model(base_model, lora_config)
+    model: PeftModel | PeftMixedModel | EngramModel = get_peft_model(
+        base_model, lora_config
+    )
 
     # 3. Apply Engram-PEFT
     print("Applying Engram-PEFT...")
@@ -282,7 +258,7 @@ def run_example(args: argparse.Namespace) -> None:
         backbone_freeze_steps=0,
     )
     # get_engram_model handles architecture-specific patching automatically!
-    model = cast("Any", get_engram_model(model, engram_config, tokenizer=tokenizer))
+    model = get_engram_model(model, engram_config, tokenizer=tokenizer)
 
     # 4. Prepare Dataset
     print("Preparing Alpaca subsets (train + eval)...")
@@ -309,7 +285,12 @@ def run_example(args: argparse.Namespace) -> None:
         remove_unused_columns=True,
     )
 
-    data_collator = EngramDataCollator(tokenizer=tokenizer, config=model.config)
+    # Use the explicit engram_config from the model wrapper
+    engram_config_obj = model.config
+    if not isinstance(engram_config_obj, EngramConfig):
+        raise TypeError("Model config is not an EngramConfig")
+
+    data_collator = EngramDataCollator(tokenizer=tokenizer, config=engram_config_obj)
 
     trainer = EngramTrainer(
         model=model,
@@ -359,7 +340,8 @@ def run_example(args: argparse.Namespace) -> None:
     # 6. Saving
     print(f"Saving combined adapters to {OUTPUT_DIR}")
     # Explicitly save LoRA adapters first to ensure adapter_config.json exists
-    if hasattr(model.base_model, "save_pretrained"):
+    # Use the Protocol for saving/generating to avoid strange mypy attribute errors
+    if isinstance(model.base_model, HFModelProtocol):
         print("Saving LoRA adapters...")
         model.base_model.save_pretrained(OUTPUT_DIR)
 
@@ -370,14 +352,30 @@ def run_example(args: argparse.Namespace) -> None:
     # 7. Inference Demo (Original Model)
     print("\n>>> Inference Demo (Original Model)")
     prompt = "<s>[INST] List three benefits of using parameter-efficient fine-tuning for edge models. [/INST]"
-    inputs = cast("Any", tokenizer)(prompt, return_tensors="pt").to(
-        model.base_model.device
-    )
+    if not isinstance(tokenizer, PreTrainedTokenizerBase):
+        raise TypeError("tokenizer must be a PreTrainedTokenizerBase")
+
+    inputs = tokenizer(prompt, return_tensors="pt").to(model.base_model.device)
 
     print(f"Prompt: {prompt}")
-    output = base_model.generate(  # type: ignore
-        **inputs, max_new_tokens=50, max_length=None, do_sample=True, temperature=0.7
-    )
+    with torch.no_grad():
+        if isinstance(base_model, HFModelProtocol):
+            output = base_model.generate(
+                **inputs,
+                max_new_tokens=50,
+                max_length=None,
+                do_sample=True,
+                temperature=0.7,
+            )
+        else:
+            # Fallback for standard models
+            output = base_model.generate(
+                **inputs,
+                max_new_tokens=50,
+                max_length=None,
+                do_sample=True,
+                temperature=0.7,
+            )
     print(f"Response: {tokenizer.decode(output[0], skip_special_tokens=True)}")
 
     # 8. Reload and Verify
@@ -396,7 +394,7 @@ def run_example(args: argparse.Namespace) -> None:
 
         print("Inference with Fully Reloaded Model (LoRA + Engram):")
         with torch.no_grad():
-            reloaded_output = reloaded_model.generate(  # type: ignore
+            reloaded_output = reloaded_model.generate(
                 **inputs,
                 max_new_tokens=50,
                 max_length=None,

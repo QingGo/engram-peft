@@ -1,26 +1,34 @@
 import gc
-from typing import Any, cast
+from typing import Any
 
 import torch
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, PreTrainedModel, PreTrainedTokenizerBase
 
 from engram_peft import EngramLayer, EngramModel
+from engram_peft.utils.typing import HFModelProtocol
 
 
 def demo_base_model(
-    model: PreTrainedModel, tokenizer: PreTrainedTokenizerBase, inputs: dict[str, Any]
+    model: HFModelProtocol, tokenizer: PreTrainedTokenizerBase, inputs: dict[str, Any]
 ) -> None:
     print("\nGenerating with Base Model (Zero-shot)...")
-    with torch.no_grad():
-        output = cast(Any, model).generate(
-            **inputs, max_new_tokens=40, max_length=None, do_sample=False
-        )
+    if isinstance(model, PreTrainedModel):
+        with torch.no_grad():
+            output = model.generate(
+                **inputs, max_new_tokens=40, max_length=None, do_sample=False
+            )
+    else:
+        # Fallback for generic HFModelProtocol
+        with torch.no_grad():
+            output = model.generate(
+                **inputs, max_new_tokens=40, max_length=None, do_sample=False
+            )
     print(f"Output (Base):   {tokenizer.decode(output[0], skip_special_tokens=True)}")
 
 
 def demo_lora(
-    base_model: PreTrainedModel,
+    base_model: HFModelProtocol,
     tokenizer: PreTrainedTokenizerBase,
     inputs: dict[str, Any],
     path: str = "outputs/benchmarks/lora_weights",
@@ -52,12 +60,15 @@ def demo_engram(
     # Optional gating visualization
     print("Gating Activation (Mean per branch):")
     for layer_id in model.config.target_layers:
-        engram_layer = cast("EngramLayer", model.engram_layers[str(layer_id)])
-        gate = engram_layer.gating.last_gate
-        if gate is not None:
-            mean_gates = gate.mean(dim=(0, 1, 3)).cpu().tolist()
-            gate_str = " | ".join([f"B{i}: {g:.3f}" for i, g in enumerate(mean_gates)])
-            print(f"  Layer {layer_id}: {gate_str}")
+        layer_mod = model.engram_layers[str(layer_id)]
+        if isinstance(layer_mod, EngramLayer):
+            gate = layer_mod.gating.last_gate
+            if gate is not None:
+                mean_gates = gate.mean(dim=(0, 1, 3)).cpu().tolist()
+                gate_str = " | ".join(
+                    [f"B{i}: {g:.3f}" for i, g in enumerate(mean_gates)]
+                )
+                print(f"  Layer {layer_id}: {gate_str}")
     model.unload_engram()
 
 
@@ -71,9 +82,7 @@ def demo_lora_engram(
     # Load LoRA first
     lora_model = PeftModel.from_pretrained(base_model, path)
     # Load Engram wrapper
-    combined_model = EngramModel.from_pretrained(
-        cast("PreTrainedModel", lora_model), path, tokenizer=tokenizer
-    )
+    combined_model = EngramModel.from_pretrained(lora_model, path, tokenizer=tokenizer)
     with torch.no_grad():
         out = combined_model.generate(
             **inputs, max_new_tokens=40, max_length=None, do_sample=False
@@ -84,20 +93,17 @@ def demo_lora_engram(
 
 
 def demo_full_finetune(
-    base_model: PreTrainedModel,
+    base_model: HFModelProtocol,
     tokenizer: PreTrainedTokenizerBase,
     inputs: dict[str, Any],
     path: str = "outputs/benchmarks/full_ft_only_weights",
 ) -> None:
     print(f"Generating with Full FT ({path})...")
-    ft_model = cast(
-        "PreTrainedModel",
-        AutoModelForCausalLM.from_pretrained(
-            path, dtype=base_model.dtype, device_map="auto"
-        ),
+    ft_model = AutoModelForCausalLM.from_pretrained(
+        path, torch_dtype=base_model.dtype, device_map="auto"
     )
     with torch.no_grad():
-        out = cast(Any, ft_model).generate(
+        out = ft_model.generate(
             **inputs, max_new_tokens=40, max_length=None, do_sample=False
         )
     print(f"Output (Full FT): {tokenizer.decode(out[0], skip_special_tokens=True)}")
@@ -114,11 +120,8 @@ def demo_full_finetune_engram(
     print(f"Generating with Full FT + Engram ({path})...")
     # Load finetuned base model from subfolder
     sub_path = f"{path}/base_model"
-    ft_base_model = cast(
-        "PreTrainedModel",
-        AutoModelForCausalLM.from_pretrained(
-            sub_path, dtype=base_model.dtype, device_map="auto"
-        ),
+    ft_base_model = AutoModelForCausalLM.from_pretrained(
+        sub_path, torch_dtype=base_model.dtype, device_map="auto"
     )
     # Load Engram wrapper
     model = EngramModel.from_pretrained(ft_base_model, path, tokenizer=tokenizer)

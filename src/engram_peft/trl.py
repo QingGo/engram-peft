@@ -1,5 +1,5 @@
 import logging
-from typing import Any, cast
+from typing import Any
 
 import torch
 from torch.optim.optimizer import Optimizer
@@ -200,7 +200,7 @@ def create_engram_sft_trainer(
     # 4. Instantiate EngramCompatibleSFTTrainer
     # This class supports sparse gradient clipping and is mandatory for EngramModel
     return EngramCompatibleSFTTrainer(
-        model=cast("Any", model),
+        model=model,
         args=args,
         data_collator=data_collator,
         train_dataset=train_dataset,

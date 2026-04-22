@@ -8,26 +8,27 @@ Usage:
     uv run python examples/gemma4_engram_lora.py --model_id google/gemma-4-E2B-it --max_steps 300
 """
 
+from __future__ import annotations
+
 import argparse
 import logging
 import os
 import sys
+import traceback
+from typing import TYPE_CHECKING, Any
 
 # Add the project root to sys.path to allow absolute imports from the 'examples' package
 # when running the script directly.
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import traceback
-from typing import Any, cast
-
 import torch
-import torch.nn as nn
 from datasets import Dataset, load_dataset
-from peft import LoraConfig, PeftModel, TaskType, get_peft_model
+from peft import LoraConfig, PeftMixedModel, PeftModel, TaskType, get_peft_model
 from transformers import (
     AutoModelForCausalLM,
     AutoProcessor,
     AutoTokenizer,
+    BatchEncoding,
     BitsAndBytesConfig,
     PreTrainedTokenizerBase,
     TrainingArguments,
@@ -41,40 +42,19 @@ from engram_peft import (
     EngramTrainer,
     get_engram_model,
 )
-from engram_peft.utils import apply_peft_patches, get_optimal_precision_config
+from engram_peft.utils import (
+    apply_peft_patches,
+    get_optimal_precision_config,
+    patch_all,
+)
+from engram_peft.utils.typing import HFModelProtocol
 from examples.benchmarks.data_utils import get_dataset_template
 
-# Polyfill for set_submodule which is missing in some PyTorch versions
-if not hasattr(nn.Module, "set_submodule"):
+if TYPE_CHECKING:
+    from transformers import PreTrainedModel
 
-    def set_submodule(self: nn.Module, target: str, module: nn.Module) -> None:
-        if not target:
-            raise ValueError("Cannot set empty submodule")
-        atoms = target.split(".")
-        name = atoms.pop(-1)
-        parent = self.get_submodule(".".join(atoms))
-        setattr(parent, name, module)
-
-    nn.Module.set_submodule = set_submodule  # type: ignore
-
-
-# Latest transformers (for Gemma-4/Mistral-3) expects torch.distributed.tensor.DTensor.
-class DummyDTensor:
-    pass
-
-
-try:
-    import torch.distributed.tensor as _dt
-
-    if not hasattr(_dt, "DTensor"):
-        _dt.DTensor = DummyDTensor  # type: ignore
-except ImportError:
-    import sys
-    from types import ModuleType
-
-    mock_dt = ModuleType("torch.distributed.tensor")
-    mock_dt.DTensor = DummyDTensor  # type: ignore
-    sys.modules["torch.distributed.tensor"] = mock_dt
+# Apply all compatibility patches (set_submodule, DTensor, etc.)
+patch_all()
 
 # Try to import optional visualization components
 try:
@@ -118,10 +98,14 @@ def prepare_alpaca_dataset(
             padding="max_length",
         )
 
-        labels = list(cast("Any", tokenized)["input_ids"])
+        if not isinstance(tokenized, BatchEncoding):
+            tokenized = BatchEncoding(tokenized)
+        labels = list(tokenized["input_ids"])
         # Mask the prompt part in labels (Padding masking will be handled by SmartDataCollator)
         prompt_tokenized = tokenizer(prompt, max_length=max_length, truncation=True)
-        prompt_len = len(cast("Any", prompt_tokenized)["input_ids"])
+        if not isinstance(prompt_tokenized, BatchEncoding):
+            prompt_tokenized = BatchEncoding(prompt_tokenized)
+        prompt_len = len(prompt_tokenized["input_ids"])
         for i in range(min(prompt_len, max_length)):
             labels[i] = -100
 
@@ -253,8 +237,11 @@ def run_example(args: argparse.Namespace) -> None:
             torch.bfloat16 if get_optimal_precision_config()["bf16"] else torch.float16
         )
 
-    base_model = AutoModelForCausalLM.from_pretrained(
-        args.model_id, config=config, **model_kwargs
+    # Type base_model as Union to satisfy both transformers methods and avoid strange 'generate' callable errors
+    base_model: PreTrainedModel | HFModelProtocol = (
+        AutoModelForCausalLM.from_pretrained(
+            args.model_id, config=config, **model_kwargs
+        )
     )
 
     # 2. Apply LoRA
@@ -279,7 +266,9 @@ def run_example(args: argparse.Namespace) -> None:
         lora_dropout=0.05,
         bias="none",
     )
-    model = get_peft_model(base_model, lora_config)
+    model: PeftModel | PeftMixedModel | EngramModel = get_peft_model(
+        base_model, lora_config
+    )
 
     # 3. Apply Engram-PEFT
     print("Applying Engram-PEFT...")
@@ -292,11 +281,8 @@ def run_example(args: argparse.Namespace) -> None:
         target_layers=target_layers,
     )
 
-    model = cast(
-        "Any",
-        get_engram_model(
-            model, engram_config, tokenizer=tokenizer, train_mode="preserve_trainable"
-        ),
+    model = get_engram_model(
+        model, engram_config, tokenizer=tokenizer, train_mode="preserve_trainable"
     )
     model.print_trainable_parameters()
 
@@ -319,7 +305,7 @@ def run_example(args: argparse.Namespace) -> None:
         per_device_eval_batch_size=1,
         prediction_loss_only=True,
         save_strategy="no",
-        **cast(Any, get_optimal_precision_config()),
+        **get_optimal_precision_config(),
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},
         report_to="none",
@@ -330,7 +316,12 @@ def run_example(args: argparse.Namespace) -> None:
     print("Preparing Trainer...")
 
     # Use the library's data collator which now handles padding masking automatically!
-    data_collator = EngramDataCollator(tokenizer=tokenizer, config=model.config)
+    # Use the explicit engram_config from the model wrapper
+    engram_config_obj = model.config
+    if not isinstance(engram_config_obj, EngramConfig):
+        raise TypeError("Model config is not an EngramConfig")
+
+    data_collator = EngramDataCollator(tokenizer=tokenizer, config=engram_config_obj)
 
     trainer = EngramTrainer(
         model=model,
@@ -380,7 +371,8 @@ def run_example(args: argparse.Namespace) -> None:
     # 6. Saving
     print(f"Saving combined adapters to {OUTPUT_DIR}")
     # Explicitly save LoRA adapters first to ensure adapter_config.json exists
-    if hasattr(model.base_model, "save_pretrained"):
+    # Use the Protocol for saving/generating to avoid strange mypy attribute errors
+    if isinstance(model.base_model, HFModelProtocol):
         print("Saving LoRA adapters...")
         model.base_model.save_pretrained(OUTPUT_DIR)
 
@@ -394,15 +386,31 @@ def run_example(args: argparse.Namespace) -> None:
     inputs = tokenizer(prompt, return_tensors="pt").to(model.base_model.device)
 
     print(f"Prompt: {prompt}")
-    output = base_model.generate(  # type: ignore
-        **inputs,
-        max_new_tokens=100,
-        max_length=None,
-        do_sample=True,
-        temperature=0.7,
-        stop_strings=["<end_of_turn>"],
-        tokenizer=tokenizer,
-    )
+    if not isinstance(tokenizer, PreTrainedTokenizerBase):
+        raise TypeError("tokenizer must be a PreTrainedTokenizerBase")
+
+    with torch.no_grad():
+        if isinstance(base_model, HFModelProtocol):
+            output = base_model.generate(
+                **inputs,
+                max_new_tokens=100,
+                max_length=None,
+                do_sample=True,
+                temperature=0.7,
+                stop_strings=["<end_of_turn>"],
+                tokenizer=tokenizer,
+            )
+        else:
+            # Fallback for standard models
+            output = base_model.generate(
+                **inputs,
+                max_new_tokens=100,
+                max_length=None,
+                do_sample=True,
+                temperature=0.7,
+                stop_strings=["<end_of_turn>"],
+                tokenizer=tokenizer,
+            )
     print(f"Response: {tokenizer.decode(output[0], skip_special_tokens=True)}")
 
     # 8. Reload and Verify
@@ -421,7 +429,7 @@ def run_example(args: argparse.Namespace) -> None:
 
         print("Inference with Fully Reloaded Model (LoRA + Engram):")
         with torch.no_grad():
-            reloaded_output = reloaded_model.generate(  # type: ignore
+            reloaded_output = reloaded_model.generate(
                 **inputs,
                 max_new_tokens=100,
                 max_length=None,

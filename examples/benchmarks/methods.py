@@ -1,5 +1,5 @@
 import logging
-from typing import Any, cast
+from typing import Any
 
 import torch
 from peft import LoraConfig, TaskType, get_peft_model
@@ -18,6 +18,7 @@ from engram_peft import (
     EngramTrainer,
     get_engram_model,
 )
+from engram_peft.utils.typing import HFModelProtocol
 
 # Configure logging to see Engram injection logs
 logging.basicConfig(level=logging.WARNING, format="%(message)s")
@@ -27,7 +28,8 @@ logging.getLogger("engram_peft").setLevel(logging.INFO)
 def extract_trainer_metrics(trainer: Trainer, train_result: Any) -> dict[str, Any]:
     """Helper to extract common metrics from a Trainer object."""
     eval_results = trainer.evaluate()
-    eval_loss = cast("float", eval_results.get("eval_loss", 0.0))
+    eval_loss_raw = eval_results.get("eval_loss", 0.0)
+    eval_loss = float(eval_loss_raw) if eval_loss_raw is not None else 0.0
 
     avg_time_per_step = train_result.metrics.get("train_runtime", 0) / max(
         1, train_result.global_step
@@ -59,7 +61,7 @@ def extract_trainer_metrics(trainer: Trainer, train_result: Any) -> dict[str, An
 
 
 def train_lora(
-    base_model: PreTrainedModel,
+    base_model: HFModelProtocol,
     tokenizer: PreTrainedTokenizerBase,
     train_dataset: Any,
     eval_dataset: Any,
@@ -274,7 +276,7 @@ def train_full_finetune(
 
 
 def train_lora_engram(
-    base_model: PreTrainedModel,
+    base_model: HFModelProtocol,
     tokenizer: PreTrainedTokenizerBase,
     train_dataset: Any,
     eval_dataset: Any,
@@ -372,16 +374,14 @@ def train_lora_engram(
 
     model.save_pretrained("outputs/benchmarks/lora_engram_weights")
     if hasattr(model.base_model, "save_pretrained"):
-        cast(Any, model.base_model).save_pretrained(
-            "outputs/benchmarks/lora_engram_weights"
-        )
+        model.base_model.save_pretrained("outputs/benchmarks/lora_engram_weights")
     model.unload_engram()
     lora_model.unload()
     return metrics
 
 
 def train_full_finetune_engram(
-    base_model: PreTrainedModel,
+    base_model: HFModelProtocol,
     tokenizer: PreTrainedTokenizerBase,
     train_dataset: Any,
     eval_dataset: Any,
@@ -474,8 +474,9 @@ def train_full_finetune_engram(
 
     model.save_pretrained("outputs/benchmarks/full_ft_engram_weights")
     # Save finetuned backbone to a subfolder to avoid config.json collision
-    cast(Any, model.base_model).save_pretrained(
-        "outputs/benchmarks/full_ft_engram_weights/base_model"
-    )
+    if hasattr(model.base_model, "save_pretrained"):
+        model.base_model.save_pretrained(
+            "outputs/benchmarks/full_ft_engram_weights/base_model"
+        )
     model.unload_engram()
     return metrics

@@ -29,22 +29,22 @@ class DummyModel(nn.Module):
         self.model.layers = nn.ModuleList(
             [nn.Linear(hidden_size, hidden_size) for _ in range(2)]
         )
+
         # Mock config for parameter syncing
-        self.config = cast(
-            "Any",
-            type(
-                "MockConfig",
-                (),
-                {"hidden_size": hidden_size, "vocab_size": 1000, "pad_token_id": 0},
-            )(),
-        )
+        class MockConfig:
+            def __init__(self, hs: int, vs: int, pid: int):
+                self.hidden_size = hs
+                self.vocab_size = vs
+                self.pad_token_id = pid
+
+        self.config: Any = MockConfig(hidden_size, 1000, 0)
 
     def forward(self, input_ids: torch.Tensor, **kwargs: Any) -> torch.Tensor:
         batch_size, seq_len = input_ids.shape
         # Need a tensor that requires grad for backprop to work
         x = torch.randn(batch_size, seq_len, self.hidden_size).requires_grad_(True)
         # mypy needs help since nn.Module doesn't have .layers
-        model_part = cast("Any", self.model)
+        model_part = self.model
         for layer in model_part.layers:
             x = cast("torch.Tensor", layer(x))
         return x
@@ -196,8 +196,12 @@ def test_gradient_sparsity() -> None:
     )
     model = get_engram_model(cast("PreTrainedModel", base_model), config)
 
-    engram_layer = cast("EngramLayer", model.engram_layers["0"])
-    embedding = cast("nn.Embedding", engram_layer.multi_head_embedding.embedding)
+    engram_layer = model.engram_layers["0"]
+    from engram_peft.layer import EngramLayer
+
+    assert isinstance(engram_layer, EngramLayer)
+    embedding = engram_layer.multi_head_embedding.embedding
+    assert isinstance(embedding, nn.Embedding)
     assert embedding.sparse is True
 
     # Forward pass

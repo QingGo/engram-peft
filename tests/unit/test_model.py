@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 
 from engram_peft.config import EngramConfig
+from engram_peft.layer import EngramLayer
 from engram_peft.model import EngramModel, get_engram_model
 from engram_peft.saving import ADAPTER_SAFE_NAME
 
@@ -129,8 +130,9 @@ def test_save_load_consistency() -> None:
     engram_model = get_engram_model(base_model, config, tokenizer=None)
 
     with torch.no_grad():
-        layer1 = cast("Any", engram_model.engram_layers["1"])
-        layer1.multi_head_embedding.embedding.weight.add_(1.0)
+        layer1 = engram_model.engram_layers["1"]
+        if isinstance(layer1, EngramLayer):
+            layer1.multi_head_embedding.embedding.weight.add_(1.0)
 
     org_weight_sum = layer1.multi_head_embedding.embedding.weight.sum().item()
 
@@ -143,10 +145,13 @@ def test_save_load_consistency() -> None:
         base_model_new = MockModel(hidden_size=32)
         loaded_model = EngramModel.from_pretrained(base_model_new, temp_dir)
 
-        loaded_layer1 = cast("Any", loaded_model.engram_layers["1"])
-        loaded_weight_sum = (
-            loaded_layer1.multi_head_embedding.embedding.weight.sum().item()
-        )
+        loaded_layer1 = loaded_model.engram_layers["1"]
+        if isinstance(loaded_layer1, EngramLayer):
+            loaded_weight_sum = (
+                loaded_layer1.multi_head_embedding.embedding.weight.sum().item()
+            )
+        else:
+            loaded_weight_sum = 0.0
         assert abs(org_weight_sum - loaded_weight_sum) < 1e-5
     finally:
         shutil.rmtree(temp_dir)

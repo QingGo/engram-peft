@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from engram_peft import EngramModel
 
 
-def get_optimal_precision_config() -> dict[str, bool]:
+def get_optimal_precision_config() -> dict[str, Any]:
     """
     Returns the optimal precision configuration based on available hardware.
     Prefers bf16 on supported GPUs, otherwise falls back to fp16 if CUDA is available.

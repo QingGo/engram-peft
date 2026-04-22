@@ -9,79 +9,53 @@ Usage:
     uv run python examples/qwen3_engram_lora.py --model_id Qwen/Qwen3.5-4B --max_steps 50
 """
 
+from __future__ import annotations
+
 import argparse
 import logging
 import os
 import sys
 import traceback
+from typing import Any
 
 # Add the project root to sys.path to allow absolute imports from the 'examples' package
 # when running the script directly.
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from typing import Any, cast
-
 import torch
-import torch.nn as nn
 from datasets import Dataset, load_dataset
 from peft import (
     LoraConfig,
+    PeftMixedModel,
     PeftModel,
     TaskType,
     get_peft_model,
     prepare_model_for_kbit_training,
 )
-
-# Polyfill for set_submodule which is missing in some PyTorch versions
-if not hasattr(nn.Module, "set_submodule"):
-
-    def set_submodule(self: nn.Module, target: str, module: nn.Module) -> None:
-        if not target:
-            raise ValueError("Cannot set empty submodule")
-        atoms = target.split(".")
-        name = atoms.pop(-1)
-        parent = self.get_submodule(".".join(atoms))
-        setattr(parent, name, module)
-
-    nn.Module.set_submodule = set_submodule  # type: ignore
-
-
-# CRITICAL COMPATIBILITY HACK:
-# Latest transformers (for Qwen3.5) expects torch.distributed.tensor.DTensor.
-class DummyDTensor:
-    pass
-
-
-try:
-    import torch.distributed.tensor as _dt
-
-    if not hasattr(_dt, "DTensor"):
-        _dt.DTensor = DummyDTensor  # type: ignore
-except ImportError:
-    import sys
-    from types import ModuleType
-
-    mock_dt = ModuleType("torch.distributed.tensor")
-    mock_dt.DTensor = DummyDTensor  # type: ignore
-    sys.modules["torch.distributed.tensor"] = mock_dt
-from transformers import (  # noqa: E402
+from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
+    BatchEncoding,
     BitsAndBytesConfig,
+    PreTrainedModel,
     PreTrainedTokenizerBase,
     TrainingArguments,
     set_seed,
 )
 
-from engram_peft import (  # noqa: E402
+from engram_peft import (
     EngramConfig,
     EngramDataCollator,
     EngramModel,
     EngramTrainer,
     get_engram_model,
 )
-from engram_peft.utils import apply_peft_patches  # noqa: E402
+from engram_peft.utils import apply_peft_patches, patch_all
+from engram_peft.utils.typing import HFModelProtocol
+
+# Apply all compatibility patches (set_submodule, DTensor, etc.)
+patch_all()
 
 # Ensure benchmarks are importable
 sys.path.append(os.getcwd())
@@ -124,7 +98,9 @@ def prepare_alpaca_dataset(
             padding="max_length",
         )
 
-        labels = list(cast("Any", tokenized)["input_ids"])
+        if not isinstance(tokenized, BatchEncoding):
+            tokenized = BatchEncoding(tokenized)
+        labels = list(tokenized["input_ids"])
 
         # Mask padding tokens in labels so they don't contribute to loss
         if tokenizer.pad_token_id is not None:
@@ -134,7 +110,9 @@ def prepare_alpaca_dataset(
 
         # Mask the prompt part in labels
         prompt_tokenized = tokenizer(prompt, max_length=max_length, truncation=True)
-        prompt_len = len(cast("Any", prompt_tokenized)["input_ids"])
+        if not isinstance(prompt_tokenized, BatchEncoding):
+            prompt_tokenized = BatchEncoding(prompt_tokenized)
+        prompt_len = len(prompt_tokenized["input_ids"])
         for i in range(min(prompt_len, max_length)):
             labels[i] = -100
 
@@ -247,8 +225,11 @@ def run_example(args: argparse.Namespace) -> None:
             else torch.float16
         )
 
-    base_model = AutoModelForCausalLM.from_pretrained(
-        args.model_id, config=config, **model_kwargs
+    # Type base_model as Union to satisfy both transformers methods and avoid strange 'generate' callable errors
+    base_model: PreTrainedModel | HFModelProtocol = (
+        AutoModelForCausalLM.from_pretrained(
+            args.model_id, config=config, **model_kwargs
+        )
     )
 
     # 1.1 Prepare for k-bit training if quantized
@@ -278,7 +259,12 @@ def run_example(args: argparse.Namespace) -> None:
         lora_dropout=0.05,
         bias="none",
     )
-    model = get_peft_model(base_model, lora_config)
+    if not isinstance(base_model, PreTrainedModel):
+        # We need the nominal type for get_peft_model
+        raise TypeError("base_model must be a PreTrainedModel for PEFT")
+    model: PeftModel | PeftMixedModel | EngramModel = get_peft_model(
+        base_model, lora_config
+    )
 
     # 3. Apply Engram-PEFT
     print("Applying Engram-PEFT...")
@@ -294,7 +280,7 @@ def run_example(args: argparse.Namespace) -> None:
         backbone_freeze_steps=0,
     )
     # get_engram_model handles text_config and vocab_size automatically!
-    model = cast("Any", get_engram_model(model, engram_config, tokenizer=tokenizer))
+    model = get_engram_model(model, engram_config, tokenizer=tokenizer)
 
     # 4. Prepare Dataset
     print("Preparing Alpaca subsets (train + eval)...")
@@ -321,7 +307,12 @@ def run_example(args: argparse.Namespace) -> None:
         remove_unused_columns=True,
     )
 
-    data_collator = EngramDataCollator(tokenizer=tokenizer, config=model.config)
+    # Use the explicit engram_config from the model wrapper
+    engram_config_obj = model.config
+    if not isinstance(engram_config_obj, EngramConfig):
+        raise TypeError("Model config is not an EngramConfig")
+
+    data_collator = EngramDataCollator(tokenizer=tokenizer, config=engram_config_obj)
 
     trainer = EngramTrainer(
         model=model,
@@ -371,7 +362,8 @@ def run_example(args: argparse.Namespace) -> None:
     # 6. Saving
     print(f"Saving combined adapters to {OUTPUT_DIR}")
     # Explicitly save LoRA adapters first to ensure adapter_config.json exists
-    if hasattr(model.base_model, "save_pretrained"):
+    # Use the Protocol for saving/generating to avoid strange mypy attribute errors
+    if isinstance(model.base_model, HFModelProtocol):
         print("Saving LoRA adapters...")
         model.base_model.save_pretrained(OUTPUT_DIR)
 
@@ -391,20 +383,35 @@ def run_example(args: argparse.Namespace) -> None:
     prompt = tokenizer.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True
     )
+    if not isinstance(tokenizer, PreTrainedTokenizerBase):
+        raise TypeError("tokenizer must be a PreTrainedTokenizerBase")
+
     inputs = tokenizer(prompt, return_tensors="pt").to(model.base_model.device)
     input_len = inputs["input_ids"].shape[-1]
 
     print(f"Prompt: {prompt}")
     with torch.no_grad():
-        output = base_model.generate(  # type: ignore
-            **inputs,
-            max_new_tokens=200,
-            max_length=None,
-            do_sample=True,
-            temperature=0.7,
-            stop_strings=["<think>", "</think>", "<|im_end|>"],
-            tokenizer=tokenizer,
-        )
+        if isinstance(base_model, HFModelProtocol):
+            output = base_model.generate(
+                **inputs,
+                max_new_tokens=200,
+                max_length=None,
+                do_sample=True,
+                temperature=0.7,
+                stop_strings=["<think>", "</think>", "<|im_end|>"],
+                tokenizer=tokenizer,
+            )
+        else:
+            # Fallback for standard models
+            output = base_model.generate(
+                **inputs,
+                max_new_tokens=200,
+                max_length=None,
+                do_sample=True,
+                temperature=0.7,
+                stop_strings=["<think>", "</think>", "<|im_end|>"],
+                tokenizer=tokenizer,
+            )
     original_resp = tokenizer.decode(output[0][input_len:], skip_special_tokens=True)
     print(f"Response: {original_resp}")
 
@@ -424,7 +431,7 @@ def run_example(args: argparse.Namespace) -> None:
 
         print("Inference with Fully Reloaded Model (LoRA + Engram):")
         with torch.no_grad():
-            reloaded_output = reloaded_model.generate(  # type: ignore
+            reloaded_output = reloaded_model.generate(
                 **inputs,
                 max_new_tokens=200,
                 max_length=None,

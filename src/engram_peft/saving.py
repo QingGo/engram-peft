@@ -8,6 +8,8 @@ from safetensors.torch import load_file, save_file
 if TYPE_CHECKING:
     from engram_peft.model import EngramModel
 
+from engram_peft.utils.typing import HFModelProtocol
+
 logger = logging.getLogger(__name__)
 
 # Constants for file naming
@@ -117,9 +119,17 @@ def save_pretrained_unified(
     # Use feature-detection to avoid hard dependency or circular import issues
     if getattr(model.base_model, "_is_peft_model", False):
         logger.info("Detecting PeftModel (LoRA). Saving base model adapters...")
-        cast(Any, model.base_model).save_pretrained(
-            save_directory, safe_serialization=safe_serialization, **kwargs
-        )
+        if isinstance(model.base_model, HFModelProtocol):
+            model.base_model.save_pretrained(
+                save_directory, safe_serialization=safe_serialization, **kwargs
+            )
+        else:
+            # Fallback for PeftModel that doesn't strictly match Protocol but has the method
+            save_pretrained_func = getattr(model.base_model, "save_pretrained", None)
+            if save_pretrained_func:
+                save_pretrained_func(
+                    save_directory, safe_serialization=safe_serialization, **kwargs
+                )
 
     # 2. Save Engram Artifacts
     save_pretrained_engram(model, save_directory, safe_serialization=safe_serialization)

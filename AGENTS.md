@@ -81,14 +81,26 @@ uv run env SPRINTEST_TARGET_PKG=engram_peft stest tests/unit --cov=src/engram_pe
 
 ---
 
-## 6. 代码风格与质量规约 (Coding Standards)
+### 6.1 类型安全与“零强转”原则 (Type Safety & Zero-Cast Principle)
 
-- **强制类型提示 (Type Hints)**：所有新函数和类的方法必须包含完整的 Python 类型提示。务必确保能通过 `mypy` 检查。
-- **文档注释 (Docstrings)**：使用 Google 风格的 Docstring 描述类和复杂函数。不仅要写“它做什么”，更要写“为什么这么设计”。
-- **精确修改模式 (Precise Search/Replace)**：
-  - 如果是新建文件，输出完整代码。
-  - **修改长文件时，严禁输出整个文件或整个巨型类**。为了节约 Token，你必须使用精确的搜索/替换块（Search/Replace block）或标准的 Unified Diff 格式，仅输出发生变动的那几行代码及其必要的上下文。
-  - **绝对红线**：在你输出的局部代码块内部，**绝对禁止**使用 `// ... existing code ...` 或 `# pass` 等省略形式敷衍。输出的代码片段必须是逻辑完整、可直接复制替换的。
+本项目追求极高的静态类型检查准确率，严禁滥用 `cast("Any", ...)` 规避类型错误。在处理复杂模型接口时，应遵循以下优先级：
+
+1.  **结构化协议 (Structural Typing)**：
+    - 优先使用 `src/engram_peft/utils/typing.py` 中的 `HFModelProtocol` 等协议来描述第三方库（如 Transformers）的复杂对象。
+    - 如果遇到新的接口需求，应扩展协议而非使用 `Any`。
+2.  **类型收窄 (Type Narrowing)**：
+    - 严禁盲目强转。必须使用 `isinstance(obj, Type)` 或 `hasattr(obj, "attr")` 进行运行时检查。
+    - 静态分析器会识别这些检查并自动收窄后续逻辑中的变量类型。
+3.  **显式联合类型 (Explicit Union Types)**：
+    - 变量在不同生命周期具有不同类型时（如从 `PeftModel` 变为 `EngramModel`），必须显式声明联合类型：`model: PeftModel | EngramModel`。
+4.  **TypedDict 与配置管理**：
+    - 对于复杂的字典参数（如 `kwargs`），应定义 `TypedDict` 或使用具名变量注解，避免 `dict[str, Any]` 导致的类型信息丢失。
+5.  **强制溯源 (No Hallucinations)**：
+    - 严禁凭记忆猜测第三方库的类型定义。必须查阅本地 `site-packages` 中的源码或 Stubs（如 `.pyi` 文件）确认真实签名。
+6.  **`cast` 的熔断机制**：
+    - 只有在静态分析器存在已知 Bug 或 Stub 定义完全错误，且 `isinstance` 无法解决时，才允许使用 `cast`。
+    - 使用 `cast` 时必须附带注释说明原因，例如：`# type: ignore # mypy issue #1234` 或 `# cast: required due to upstream stub bug`。
+
 
 ---
 
