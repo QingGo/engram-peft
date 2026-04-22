@@ -13,7 +13,9 @@ def demo_base_model(
 ) -> None:
     print("\nGenerating with Base Model (Zero-shot)...")
     with torch.no_grad():
-        output = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        output = model.generate(
+            **inputs, max_new_tokens=40, max_length=None, do_sample=False
+        )
     print(f"Output (Base):   {tokenizer.decode(output[0], skip_special_tokens=True)}")
 
 
@@ -26,7 +28,9 @@ def demo_lora(
     print(f"Generating with LoRA ({path})...")
     model = PeftModel.from_pretrained(base_model, path)
     with torch.no_grad():
-        out = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        out = model.generate(
+            **inputs, max_new_tokens=40, max_length=None, do_sample=False
+        )
     print(f"Output (LoRA):   {tokenizer.decode(out[0], skip_special_tokens=True)}")
     model.unload()
 
@@ -40,7 +44,9 @@ def demo_engram(
     print(f"Generating with Engram ({path})...")
     model = EngramModel.from_pretrained(base_model, path, tokenizer=tokenizer)
     with torch.no_grad():
-        out = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        out = model.generate(
+            **inputs, max_new_tokens=40, max_length=None, do_sample=False
+        )
     print(f"Output (Engram): {tokenizer.decode(out[0], skip_special_tokens=True)}")
 
     # Optional gating visualization
@@ -69,7 +75,9 @@ def demo_lora_engram(
         cast("PreTrainedModel", lora_model), path, tokenizer=tokenizer
     )
     with torch.no_grad():
-        out = combined_model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        out = combined_model.generate(
+            **inputs, max_new_tokens=40, max_length=None, do_sample=False
+        )
     print(f"Output (Combined): {tokenizer.decode(out[0], skip_special_tokens=True)}")
     combined_model.unload_engram()
     lora_model.unload()
@@ -89,7 +97,9 @@ def demo_full_finetune(
         ),
     )
     with torch.no_grad():
-        out = ft_model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        out = ft_model.generate(
+            **inputs, max_new_tokens=40, max_length=None, do_sample=False
+        )
     print(f"Output (Full FT): {tokenizer.decode(out[0], skip_special_tokens=True)}")
     del ft_model
     gc.collect()
@@ -113,7 +123,9 @@ def demo_full_finetune_engram(
     # Load Engram wrapper
     model = EngramModel.from_pretrained(ft_base_model, path, tokenizer=tokenizer)
     with torch.no_grad():
-        out = model.generate(**inputs, max_new_tokens=40, do_sample=False)
+        out = model.generate(
+            **inputs, max_new_tokens=40, max_length=None, do_sample=False
+        )
     print(f"Output (FT+Engram): {tokenizer.decode(out[0], skip_special_tokens=True)}")
     model.unload_engram()
     del ft_base_model

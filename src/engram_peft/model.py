@@ -611,6 +611,9 @@ class EngramModel(nn.Module):
                 if k not in kwargs:
                     kwargs[k] = v
 
+        if "max_new_tokens" in kwargs and "max_length" not in kwargs:
+            kwargs["max_length"] = None
+
         generate_func = self.base_model.generate
         return generate_func(*args, **kwargs)
 

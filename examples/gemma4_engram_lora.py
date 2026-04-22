@@ -400,6 +400,7 @@ def run_example(args: argparse.Namespace) -> None:
     output = base_model.generate(  # type: ignore
         **inputs,
         max_new_tokens=100,
+        max_length=None,
         do_sample=True,
         temperature=0.7,
         stop_strings=["<end_of_turn>"],
@@ -426,6 +427,7 @@ def run_example(args: argparse.Namespace) -> None:
             reloaded_output = reloaded_model.generate(  # type: ignore
                 **inputs,
                 max_new_tokens=100,
+                max_length=None,
                 do_sample=True,
                 temperature=0.7,
                 stop_strings=["<end_of_turn>"],

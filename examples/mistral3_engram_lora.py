@@ -376,7 +376,7 @@ def run_example(args: argparse.Namespace) -> None:
 
     print(f"Prompt: {prompt}")
     output = base_model.generate(  # type: ignore
-        **inputs, max_new_tokens=50, do_sample=True, temperature=0.7
+        **inputs, max_new_tokens=50, max_length=None, do_sample=True, temperature=0.7
     )
     print(f"Response: {tokenizer.decode(output[0], skip_special_tokens=True)}")
 
@@ -397,7 +397,11 @@ def run_example(args: argparse.Namespace) -> None:
         print("Inference with Fully Reloaded Model (LoRA + Engram):")
         with torch.no_grad():
             reloaded_output = reloaded_model.generate(  # type: ignore
-                **inputs, max_new_tokens=50, do_sample=True, temperature=0.7
+                **inputs,
+                max_new_tokens=50,
+                max_length=None,
+                do_sample=True,
+                temperature=0.7,
             )
         reloaded_resp = tokenizer.decode(reloaded_output[0], skip_special_tokens=True)
         print(f"Response: {reloaded_resp}")
