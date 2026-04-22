@@ -41,7 +41,7 @@ from engram_peft import (
     EngramTrainer,
     get_engram_model,
 )
-from engram_peft.utils import apply_peft_patches
+from engram_peft.utils import apply_peft_patches, get_optimal_precision_config
 from examples.benchmarks.data_utils import get_dataset_template
 
 # Polyfill for set_submodule which is missing in some PyTorch versions
@@ -250,9 +250,7 @@ def run_example(args: argparse.Namespace) -> None:
 
     if not quantization_config:
         model_kwargs["torch_dtype"] = (
-            torch.bfloat16
-            if torch.cuda.is_available() and torch.cuda.is_bf16_supported()
-            else torch.float16
+            torch.bfloat16 if get_optimal_precision_config()["bf16"] else torch.float16
         )
 
     base_model = AutoModelForCausalLM.from_pretrained(
@@ -321,8 +319,7 @@ def run_example(args: argparse.Namespace) -> None:
         per_device_eval_batch_size=1,
         prediction_loss_only=True,
         save_strategy="no",
-        bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
-        fp16=not torch.cuda.is_bf16_supported() and torch.cuda.is_available(),
+        **get_optimal_precision_config(),
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},
         report_to="none",

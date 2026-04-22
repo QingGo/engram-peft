@@ -127,7 +127,7 @@ engram-peft train --config training_config.yaml --overrides "training_args.learn
 - **Mainstream Model Templates**: Out-of-the-box scripts for **Qwen 3.5-4B**, **Ministral-3-3B**, and **Gemma-4-E2B** with quantization support.
 - **Multimodal & Hybrid Architecture Support**: Native support for recursive layer discovery in complex wrappers and synchronization of nested `text_config` attributes for state-of-the-art models.
 - **Hugging Face Hub Integration**: Support for pushing adapters via `push_to_hub` and loading directly from Hub IDs via `from_pretrained`, fully aligned with the PEFT ecosystem.
-- **TRL & SFTTrainer Compatibility**: Native factory for `trl.SFTTrainer` that handles model preparation and hash precomputation automatically for seamless instruction tuning.
+- **TRL & SFTTrainer Compatibility**: Native `EngramCompatibleSFTTrainer` that handles model preparation, hash precomputation, and **sparse gradient clipping** automatically for seamless instruction tuning.
 - **Quantization Support**: Native compatibility with **bitsandbytes (4-bit/8-bit)** and **GPTQ** models. Smart dtype detection ensures Engram layers automatically align with the backbone's `compute_dtype`.
 
 ---

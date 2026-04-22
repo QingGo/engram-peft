@@ -162,7 +162,8 @@ class EngramConfig(PretrainedConfig):
     use_sparse_embeddings: bool = field(
         default=True,
         metadata={
-            "help": "Whether to use sparse embeddings for Engram layers. Recommended for GPU, but may cause issues on CPU."
+            "help": "Whether to use sparse embeddings for Engram layers. Enabled by default for performance. "
+            "Note: Standard HF Trainers (SFTTrainer) do not support sparse gradients and require this to be False."
         },
     )
     engram_version: str = field(

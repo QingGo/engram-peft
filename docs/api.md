@@ -165,10 +165,17 @@ Standardizes the calculation of Zero-shot loss for language models. Uses `DataCo
 
 ## TRL Integration
 
-### `create_engram_sft_trainer`
-`engram_peft.trl.create_engram_sft_trainer(model, tokenizer, train_dataset, eval_dataset=None, args=None, **kwargs)`
+A high-level factory function that creates an `EngramCompatibleSFTTrainer` (a subclass of `trl.SFTTrainer`) pre-configured for Engram models. It automatically handles model preparation, sets up the `EngramDataCollator`, and enables sparse gradient support.
 
-A high-level factory function that creates a `trl.SFTTrainer` pre-configured for Engram models. It automatically handles model preparation (disabling cache, enabling gradient checkpointing) and sets up the `EngramDataCollator`.
+### `EngramCompatibleSFTTrainer`
+`engram_peft.trl.EngramCompatibleSFTTrainer`
+
+A customized `SFTTrainer` that provides native support for Engram's sparse gradients within the TRL ecosystem.
+
+**Key Features:**
+- **`create_optimizer`**: Automatically uses `MixedOptimizer` to handle sparse embedding updates correctly.
+- **`_clip_grad_norm`**: Implements a custom gradient clipping logic that supports sparse tensors on both CPU and GPU, bypassing PyTorch's `NotImplementedError`.
+- **Automatic Config**: Inherits all features from `trl.SFTTrainer` while ensuring compatibility with `EngramModel` specific requirements.
 
 ### `prepare_engram_for_sft`
 `engram_peft.trl.prepare_engram_for_sft(model, use_gradient_checkpointing=True)`
@@ -213,10 +220,35 @@ Returns a dictionary with three trainable parameter lists:
 - `engram_dense`
 - `engram_sparse`
 
-### `get_scheduler`
-`engram_peft.utils.get_scheduler(optimizer, num_training_steps, warmup_steps=0)`
-
 Returns a `LambdaLR` scheduler implementing the Step Decay schedule from the DeepSeek paper (decay at 80% and 90% progress).
+
+---
+
+## General Utilities
+
+### `get_optimal_precision_config`
+`engram_peft.utils.get_optimal_precision_config()`
+
+Automatically detects the best available training precision based on hardware.
+
+**Returns:**
+- `dict[str, bool]`: A dictionary with keys `"bf16"` and `"fp16"`.
+  - On Ampere+ GPUs: `{"bf16": True, "fp16": False}`
+  - On older GPUs: `{"bf16": False, "fp16": True}`
+  - On CPU: `{"bf16": False, "fp16": False}`
+
+**Example:**
+```python
+training_args = TrainingArguments(
+    output_dir="./results",
+    **get_optimal_precision_config()
+)
+```
+
+### `apply_peft_patches`
+`engram_peft.utils.apply_peft_patches()`
+
+Applies necessary monkey-patches to third-party libraries (like PEFT) to improve compatibility with Engram modules.
 
 ---
 

@@ -148,7 +148,7 @@ class EngramModel(nn.Module):
         Add model tags for Hugging Face integration (e.g., TRL).
         """
         if hasattr(self.base_model, "add_model_tags"):
-            cast(Any, self.base_model).add_model_tags(tags)
+            cast("Any", self.base_model).add_model_tags(tags)
 
     def print_trainable_parameters(self) -> None:
         """

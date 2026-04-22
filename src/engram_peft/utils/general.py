@@ -24,6 +24,26 @@ from transformers import (
 if TYPE_CHECKING:
     from engram_peft import EngramModel
 
+
+def get_optimal_precision_config() -> dict[str, bool]:
+    """
+    Returns the optimal precision configuration based on available hardware.
+    Prefers bf16 on supported GPUs, otherwise falls back to fp16 if CUDA is available.
+
+    Returns:
+        dict[str, bool]: A dictionary containing 'bf16' and 'fp16' flags.
+    """
+    is_cuda = torch.cuda.is_available()
+    if not is_cuda:
+        return {"bf16": False, "fp16": False}
+
+    supports_bf16 = torch.cuda.is_bf16_supported()
+    return {
+        "bf16": supports_bf16,
+        "fp16": not supports_bf16,
+    }
+
+
 OptimizerFactory = Callable[[list[dict[str, Any]]], Optimizer]
 OptimizerSpec = str | type[Optimizer] | OptimizerFactory
 

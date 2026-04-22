@@ -20,9 +20,10 @@ class EngramTrainer(Trainer):
     """
     Custom Trainer that handles sparse gradient clipping and norm calculation.
 
-    Standard torch.nn.utils.clip_grad_norm_ (and by extension accelerate's default implementation)
-    does not support SparseCPU tensors. This trainer overrides both clipping and norm
-    calculation to correctly handle SparseCPU/SparseCUDA tensors.
+    Standard torch.nn.utils.clip_grad_norm_ (and by extension accelerate's default implementation
+    used in SFTTrainer) does not support SparseCPU/SparseCUDA tensors. This trainer
+    overrides the clipping logic to correctly handle sparse parameters, making it the
+    preferred choice when `use_sparse_embeddings=True` is set in the EngramConfig.
     """
 
     def __init__(

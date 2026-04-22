@@ -12,6 +12,7 @@ Learn how to inject Engram conditional memory into a small model like TinyLlama 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, Trainer
 from engram_peft import EngramConfig, get_engram_model, EngramDataCollator, get_optimizer
+from engram_peft.utils import get_optimal_precision_config
 
 # 1. Setup
 model_id = "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T"
@@ -47,7 +48,8 @@ trainer = EngramTrainer(
     args=TrainingArguments(
         output_dir="engram_out",
         per_device_train_batch_size=4,
-        learning_rate=4e-4  # Automatically passed to MixedOptimizer
+        learning_rate=4e-4,  # Automatically passed to MixedOptimizer
+        **get_optimal_precision_config()  # Automatically handle bf16/fp16
     ),
     data_collator=collator,
     train_dataset=my_dataset
@@ -418,3 +420,50 @@ engram_model = get_engram_model(peft_model, config, wrap_peft=True)
 - **VRAM Usage**: While the backbone is quantized, Engram embedding tables can still be large. If you hit OOM, consider reducing `embedding_dim` or the number of `target_layers`.
 - **Training Stability**: If loss diverges in extreme quantization scenarios, try setting `engram_dtype="float32"` in your `EngramConfig` to maintain higher precision for the memory module.
 - **Saving/Loading**: Engram adapters are saved in full precision (or BF16) and will automatically re-align to the current backbone's precision when reloaded.
+
+---
+
+## Tutorial 9: Seamless SFT with TRL
+
+Engram-PEFT provides a deep integration with Hugging Face `trl`, including full support for sparse embeddings in instruction tuning.
+
+### Using EngramCompatibleSFTTrainer
+
+While the standard `SFTTrainer` doesn't natively support sparse gradient clipping, our `EngramCompatibleSFTTrainer` solves this by providing custom clipping and optimization logic.
+
+```python
+import torch
+from datasets import Dataset
+from trl import SFTConfig
+from engram_peft import EngramConfig, get_engram_model, create_engram_sft_trainer
+from engram_peft.utils import get_optimal_precision_config
+
+# 1. Setup Model and Engram
+model = ...
+tokenizer = ...
+config = EngramConfig(target_layers=[2, 11])
+model = get_engram_model(model, config, tokenizer=tokenizer)
+
+# 2. Configure SFT
+sft_config = SFTConfig(
+    output_dir="outputs/sft_results",
+    learning_rate=2e-4,
+    max_steps=500,
+    **get_optimal_precision_config() # Optimal hardware support
+)
+
+# 3. Create & Train (factory handles everything)
+trainer = create_engram_sft_trainer(
+    model=model,
+    tokenizer=tokenizer,
+    train_dataset=my_dataset,
+    args=sft_config,
+)
+
+trainer.train()
+```
+
+**Key Advantages:**
+*   **Sparse Support**: `use_sparse_embeddings=True` (default) now works out-of-the-box in TRL.
+*   **Mixed Optimizer**: Automatically uses `SparseAdam` for embeddings and `AdamW` for dense weights.
+*   **Robust Clipping**: Bypasses PyTorch `NotImplementedError` for sparse gradients on all hardware.

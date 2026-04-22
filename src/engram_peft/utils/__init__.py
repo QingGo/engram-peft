@@ -5,6 +5,7 @@ from .general import (
     compute_grad_norm,
     compute_telemetry_stats,
     evaluate_model_loss,
+    get_optimal_precision_config,
     get_optimizer,
     get_scheduler,
     get_trainable_param_groups,
@@ -22,4 +23,5 @@ __all__ = [
     "MixedOptimizer",
     "patch_config",
     "apply_peft_patches",
+    "get_optimal_precision_config",
 ]

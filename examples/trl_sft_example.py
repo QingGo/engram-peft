@@ -8,20 +8,11 @@ from datasets import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl import SFTConfig
 
-from engram_peft import create_engram_sft_trainer, get_engram_model
+from engram_peft import EngramConfig, create_engram_sft_trainer, get_engram_model
+from engram_peft.utils import get_optimal_precision_config
 
 
 def main() -> None:
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Engram-PEFT SFT Example with TRL")
-    parser.add_argument(
-        "--cpu",
-        action="store_true",
-        help="Enable CPU compatibility mode (dense embeddings, no bf16)",
-    )
-    args_cli = parser.parse_args()
-
     # 1. Setup a dummy dataset for SFT
     data = {
         "instruction": [
@@ -50,33 +41,30 @@ def main() -> None:
     base_model = AutoModelForCausalLM.from_pretrained(model_id)
 
     # 3. Define Engram Configuration
-    from engram_peft import EngramConfig
 
+    # EngramCompatibleSFTTrainer now supports sparse embeddings natively
     config = EngramConfig(
         target_layers=[0, 1],
         engram_vocab_size_per_ngram=[1000, 1000],
         ngram_sizes=[2, 3],
         n_head_per_ngram=2,
-        use_sparse_embeddings=not args_cli.cpu,  # GPU uses sparse, CPU uses dense
     )
 
     # 4. Initialize Engram Model
-    print(f"Injecting Engram layers into the model (CPU mode: {args_cli.cpu})...")
+    print("Injecting Engram layers into the model...")
     model = get_engram_model(base_model, config, tokenizer=tokenizer)
 
     # 5. Define Training Arguments using SFTConfig
     # SFTConfig inherits from TrainingArguments and includes SFT-specific fields
     sft_config = SFTConfig(
-        output_dir="./engram_sft_results",
+        output_dir="outputs/engram_sft_results",  # Moved to outputs/ to keep workspace clean
         per_device_train_batch_size=1,
         gradient_accumulation_steps=1,
         learning_rate=2e-4,
         max_steps=5,
         logging_steps=1,
         save_steps=5,
-        fp16=False,
-        bf16=not args_cli.cpu,  # Disable bf16 if on CPU
-        use_cpu=args_cli.cpu,
+        **get_optimal_precision_config(),
         push_to_hub=False,
         report_to="none",
         max_length=128,  # Renamed from max_seq_length in trl>=1.2.0
@@ -96,10 +84,10 @@ def main() -> None:
     print("Starting training...")
     trainer.train()
 
-    # 8. Save the results
+    # 8. Save the final model
     print("Saving the fine-tuned Engram adapter...")
-    model.save_pretrained("./engram_sft_final")
-    print("Success!")
+    model.save_pretrained("outputs/engram_sft_final")
+    print("Success! Results saved to outputs/engram_sft_final")
 
 
 if __name__ == "__main__":

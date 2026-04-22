@@ -1,11 +1,19 @@
 import logging
 from typing import Any, cast
 
+import torch
+from torch.optim.optimizer import Optimizer
 from transformers import PreTrainedTokenizerBase, TrainingArguments
+from transformers.modeling_utils import unwrap_model
 from trl import SFTConfig, SFTTrainer
 
 from engram_peft.collator import EngramDataCollator
 from engram_peft.model import EngramModel
+from engram_peft.utils import (
+    apply_group_wise_clipping,
+    compute_grad_norm,
+    get_trainable_param_groups,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +71,7 @@ class EngramCompatibleSFTTrainer(SFTTrainer):
         """
         Initializes the trainer with EngramModel compatibility checks.
         """
+        self.optimizer_kwargs = kwargs.pop("optimizer_kwargs", {})
         # Ensure model is an EngramModel
         model = kwargs.get("model")
         if model is not None and not isinstance(model, EngramModel):
@@ -72,6 +81,65 @@ class EngramCompatibleSFTTrainer(SFTTrainer):
             )
 
         super().__init__(*args, **kwargs)
+
+    def create_optimizer(self) -> Optimizer:
+        """
+        Creates the MixedOptimizer for EngramModels to support sparse gradients.
+        """
+        if self.optimizer is None:
+            unwrapped_model = unwrap_model(self.model)
+            if isinstance(unwrapped_model, EngramModel) and hasattr(
+                unwrapped_model, "create_optimizer"
+            ):
+                self.optimizer = unwrapped_model.create_optimizer(
+                    base_learning_rate=self.args.learning_rate,
+                    **self.optimizer_kwargs,
+                )
+            else:
+                self.optimizer = super().create_optimizer()
+        return self.optimizer
+
+    def _clip_grad_norm(
+        self, model: torch.nn.Module, max_norm: float | None = None
+    ) -> torch.Tensor | None:
+        """
+        Custom gradient clipping that handles sparse tensors.
+        Overrides the default behavior of transformers.Trainer.
+        """
+        if max_norm is None:
+            max_norm = self.args.max_grad_norm
+
+        if max_norm is None or max_norm <= 0:
+            return None
+
+        unwrapped_model = unwrap_model(model)
+        total_norm = compute_grad_norm(model.parameters())
+
+        use_per_group = (
+            getattr(unwrapped_model.config, "clip_grad_per_group", False)
+            if isinstance(unwrapped_model, EngramModel)
+            else False
+        )
+
+        if use_per_group and isinstance(unwrapped_model, EngramModel):
+            groups = get_trainable_param_groups(unwrapped_model)
+            apply_group_wise_clipping(groups, max_norm)
+        else:
+            # Standard Global Norm Clipping with Sparse Support
+            if total_norm is None:
+                return None
+
+            clip_coef = max_norm / (total_norm + 1e-6)
+            if clip_coef < 1.0:
+                for p in model.parameters():
+                    if p.grad is not None:
+                        g = p.grad
+                        if g.is_sparse:
+                            # Manual clipping for sparse tensors
+                            g.coalesce().values().detach().mul_(clip_coef.to(g.device))
+                        else:
+                            g.detach().mul_(clip_coef.to(g.device))
+        return total_norm
 
 
 def create_engram_sft_trainer(
@@ -124,12 +192,11 @@ def create_engram_sft_trainer(
             args = SFTConfig(**args_dict)
         else:
             # Create a default SFTConfig
-            args = SFTConfig(output_dir="./sft_output", max_length=max_seq_length)
+            args = SFTConfig(output_dir="outputs/sft_output", max_length=max_seq_length)
 
-    # 4. Instantiate SFTTrainer
-    # We cast model to Any to avoid type-checking errors since EngramModel
-    # doesn't directly inherit from PreTrainedModel, but is compatible at runtime.
-    return SFTTrainer(
+    # 4. Instantiate EngramCompatibleSFTTrainer
+    # This class supports sparse gradient clipping and is mandatory for EngramModel
+    return EngramCompatibleSFTTrainer(
         model=cast("Any", model),
         args=args,
         data_collator=data_collator,
