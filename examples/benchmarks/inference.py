@@ -7,7 +7,7 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, PreTrainedModel, PreTrainedTokenizerBase
 
 from engram_peft import EngramLayer, EngramModel
-from engram_peft.types import GenerativeProtocol, ModelProtocol, PeftUnloadable
+from engram_peft.types import ModelProtocol, PeftUnloadable
 
 
 def demo_base_model(
@@ -114,13 +114,13 @@ def demo_full_finetune(
     )
     # Use structural narrowing to bypass nominal binding issues in library stubs
     # Use object cast to bypass Pyright's nominal overlap check for runtime_checkable protocols
-    if not isinstance(typing_cast("object", ft_model), GenerativeProtocol):
+    if not isinstance(typing_cast("object", ft_model), ModelProtocol):
         raise TypeError("Loaded model does not satisfy generative interface")
 
     # Explicitly re-bind to the protocol type to break the nominal inheritance chain
     # Using cast to Any first then to Protocol is a way to truly isolate from nominal types
     # if the nominal inheritance is causing 'Invalid self'
-    gen_model = typing_cast("GenerativeProtocol", ft_model)
+    gen_model = typing_cast("ModelProtocol", ft_model)
     with torch.no_grad():
         out = gen_model.generate(
             **inputs, max_new_tokens=40, max_length=None, do_sample=False

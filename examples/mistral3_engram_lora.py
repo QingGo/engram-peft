@@ -18,7 +18,7 @@ import traceback
 from collections.abc import Iterable
 from typing import Any
 
-from engram_peft.types import GenerativeProtocol, SizedEncoding
+from engram_peft.types import ModelProtocol, SizedEncoding
 
 # Add the project root to sys.path to allow absolute imports from the 'examples' package
 # when running the script directly.
@@ -53,7 +53,6 @@ from engram_peft import (
     EngramTrainer,
     get_engram_model,
 )
-from engram_peft.types import ModelProtocol
 from engram_peft.utils import apply_peft_patches
 from examples.benchmarks.data_utils import get_dataset_template
 
@@ -372,7 +371,7 @@ def run_example(args: argparse.Namespace) -> None:
 
     print(f"Prompt: {prompt}")
     with torch.no_grad():
-        gen_model: GenerativeProtocol = model
+        gen_model: ModelProtocol = model
         output = gen_model.generate(**inputs, max_new_tokens=50, tokenizer=tokenizer)
     print(f"Response: {tokenizer.decode(output[0], skip_special_tokens=True)}")
 
