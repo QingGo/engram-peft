@@ -1,7 +1,7 @@
-# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none
+# discovery.py
 import logging
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import torch
 import torch.nn as nn
@@ -12,7 +12,11 @@ from engram_peft.types import (
     ModelProtocol,
     TokenizerProtocol,
 )
+from engram_peft.utils.compat import get_config_attr
 from engram_peft.utils.general import get_submodule_by_path
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +135,7 @@ class ArchitectureResolver:
             original_vocab_size=orig_vocab_size,
             pad_token_id=pad_id,
             layer_container_path=layer_path,
-            tokenizer_name_or_path=getattr(config, "tokenizer_name_or_path", None),
+            tokenizer_name_or_path=get_config_attr(config, "tokenizer_name_or_path"),
             model_type=model_type,
         )
 
@@ -139,7 +143,7 @@ class ArchitectureResolver:
     def _resolve_hidden_size(model: nn.Module, config: Any | None) -> tuple[int, str]:
         # 1. explicit config
         if config is not None:
-            val = getattr(config, "hidden_size", None)
+            val = get_config_attr(config, "hidden_size")
             if val is not None:
                 return int(val), "EngramConfig.hidden_size"
 
@@ -148,7 +152,7 @@ class ArchitectureResolver:
         if isinstance(model, ModelProtocol):
             base_config = model.config
         else:
-            base_config = getattr(model, "config", None)
+            base_config = get_config_attr(model, "config")
 
         if base_config is not None:
             if isinstance(base_config, ConfigProtocol):
@@ -162,12 +166,12 @@ class ArchitectureResolver:
                 "n_embd",
                 "word_embed_proj_dim",
             ]:
-                val = getattr(base_config, attr, None)
+                val = get_config_attr(base_config, attr)
                 if val is not None:
                     return int(val), f"model.config.{attr}"
 
             # Check nested text_config (common in multimodal models)
-            text_config = getattr(base_config, "text_config", None)
+            text_config = get_config_attr(base_config, "text_config")
             if text_config is not None:
                 if isinstance(text_config, ConfigProtocol):
                     return (
@@ -176,13 +180,13 @@ class ArchitectureResolver:
                     )
 
                 for attr in ["hidden_size", "d_model", "dim", "n_embd"]:
-                    val = getattr(text_config, attr, None)
+                    val = get_config_attr(text_config, attr)
                     if val is not None:
                         return int(val), f"model.config.text_config.{attr}"
 
         # 3. Direct attribute
         for attr in ["hidden_size", "d_model"]:
-            val = getattr(model, attr, None)
+            val = get_config_attr(model, attr)
             if val is not None:
                 return int(val), f"model.{attr}"
 
@@ -198,7 +202,7 @@ class ArchitectureResolver:
     ) -> tuple[int, str]:
         # 1. explicit config
         if config is not None:
-            val = getattr(config, "original_vocab_size", None)
+            val = get_config_attr(config, "original_vocab_size")
             if val is not None:
                 return int(val), "EngramConfig.original_vocab_size"
 
@@ -211,24 +215,24 @@ class ArchitectureResolver:
         if isinstance(model, ModelProtocol):
             base_config = model.config
         else:
-            base_config = getattr(model, "config", None)
+            base_config = get_config_attr(model, "config")
 
         if base_config is not None:
             if isinstance(base_config, ConfigProtocol):
                 return base_config.vocab_size, "model.config.vocab_size"
 
             # Check top level
-            val = getattr(base_config, "vocab_size", None)
+            val = get_config_attr(base_config, "vocab_size")
             if val is not None:
                 return int(val), "model.config.vocab_size"
 
             # Check nested text_config
-            text_config = getattr(base_config, "text_config", None)
+            text_config = get_config_attr(base_config, "text_config")
             if text_config is not None:
                 if isinstance(text_config, ConfigProtocol):
                     return text_config.vocab_size, "model.config.text_config.vocab_size"
 
-                val = getattr(text_config, "vocab_size", None)
+                val = get_config_attr(text_config, "vocab_size")
                 if val is not None:
                     return int(val), "model.config.text_config.vocab_size"
 
@@ -242,7 +246,7 @@ class ArchitectureResolver:
     ) -> tuple[int, str]:
         # 1. explicit config
         if config is not None:
-            val = getattr(config, "pad_id", None)
+            val = get_config_attr(config, "pad_id")
             if val is not None:
                 return int(val), "EngramConfig.pad_id"
 
@@ -255,7 +259,7 @@ class ArchitectureResolver:
         if isinstance(model, ModelProtocol):
             base_config = model.config
         else:
-            base_config = getattr(model, "config", None)
+            base_config = get_config_attr(model, "config")
 
         if base_config is not None:
             if isinstance(base_config, ConfigProtocol):
@@ -263,12 +267,12 @@ class ArchitectureResolver:
                     return int(base_config.pad_token_id), "model.config.pad_token_id"
 
             # Check top level
-            val = getattr(base_config, "pad_token_id", None)
+            val = get_config_attr(base_config, "pad_token_id")
             if val is not None:
                 return int(val), "model.config.pad_token_id"
 
             # Check nested text_config
-            text_config = getattr(base_config, "text_config", None)
+            text_config = get_config_attr(base_config, "text_config")
             if text_config is not None:
                 if isinstance(text_config, ConfigProtocol):
                     if text_config.pad_token_id is not None:
@@ -277,7 +281,7 @@ class ArchitectureResolver:
                             "model.config.text_config.pad_token_id",
                         )
 
-                val = getattr(text_config, "pad_token_id", None)
+                val = get_config_attr(text_config, "pad_token_id")
                 if val is not None:
                     return int(val), "model.config.text_config.pad_token_id"
 
@@ -292,9 +296,9 @@ class ArchitectureResolver:
         # 1. Explicit path
         if (
             config is not None
-            and getattr(config, "layer_container_path", None) is not None
+            and get_config_attr(config, "layer_container_path") is not None
         ):
-            path = config.layer_container_path
+            path = cast("str", config.layer_container_path)
             try:
                 container = get_submodule_by_path(model, path)
                 if isinstance(container, nn.ModuleList):
@@ -342,12 +346,12 @@ class ArchitectureResolver:
         if isinstance(model, ModelProtocol):
             base_config = model.config
         else:
-            base_config = getattr(model, "config", None)
+            base_config = get_config_attr(model, "config")
 
         if base_config is not None:
             if isinstance(base_config, ConfigProtocol):
                 return base_config.model_type
-            return getattr(base_config, "model_type", None)
+            return get_config_attr(base_config, "model_type")
         return None
 
     @staticmethod
@@ -363,7 +367,7 @@ class ArchitectureResolver:
         """
         # 1. Explicit Config Override
         if config is not None:
-            explicit_dtype_str = getattr(config, "engram_dtype", None)
+            explicit_dtype_str = get_config_attr(config, "engram_dtype")
             if explicit_dtype_str is not None:
                 dtype_map = {
                     "float32": torch.float32,
@@ -406,10 +410,10 @@ class ArchitectureResolver:
     def find_largest_module_list(model: nn.Module) -> str | None:
         """Heuristically finds the largest nn.ModuleList in the model tree."""
         candidates: list[tuple[str, int]] = []
-        # Explicit typing to resolve Unknown from torch.named_modules()
-        for name, module in model.named_modules():
-            name = cast("str", name)
-            module = cast("nn.Module", module)
+        # Use cast to ensure we iterate over typed tuples
+        for name, module in cast(
+            "Iterable[tuple[str, nn.Module]]", model.named_modules()
+        ):
             if isinstance(module, torch.nn.ModuleList) and len(module) > 0:
                 candidates.append((name, len(module)))
         if not candidates:

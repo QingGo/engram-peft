@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportUnknownParameterType=none
 """
 Quantization Support Example for Engram-PEFT.
 

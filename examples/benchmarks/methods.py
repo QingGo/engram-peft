@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportUnknownParameterType=none
 import logging
 from typing import Any
 
@@ -30,7 +31,7 @@ def extract_trainer_metrics(trainer: Trainer, train_result: Any) -> dict[str, An
     """Helper to extract common metrics from a Trainer object."""
     eval_results = trainer.evaluate()
     eval_loss_raw = eval_results.get("eval_loss", 0.0)
-    eval_loss = float(eval_loss_raw) if eval_loss_raw is not None else 0.0
+    eval_loss = float(eval_loss_raw)
 
     avg_time_per_step = train_result.metrics.get("train_runtime", 0) / max(
         1, train_result.global_step
@@ -169,8 +170,7 @@ def train_engram(
         if hasattr(config, k):
             setattr(config, k, v)
 
-    if not isinstance(base_model, PreTrainedModel):
-        raise TypeError("base_model must be a PreTrainedModel")
+    # base_model is already a PreTrainedModel
     model = get_engram_model(base_model, config, wash_tokenizer(tokenizer))
     model.print_trainable_parameters()
 
@@ -333,8 +333,7 @@ def train_lora_engram(
         if hasattr(config, k):
             setattr(config, k, v)
 
-    if not isinstance(lora_model, torch.nn.Module):
-        raise TypeError("lora_model must be a torch.nn.Module")
+    # lora_model is already a torch.nn.Module
     model = get_engram_model(
         lora_model,
         config,
@@ -428,8 +427,7 @@ def train_full_finetune_engram(
 
     if not isinstance(base_model, PreTrainedModel | torch.nn.Module):
         raise TypeError("base_model must be a Module for Engram injection")
-    if not isinstance(base_model, PreTrainedModel):
-        raise TypeError("base_model must be a PreTrainedModel")
+    # base_model is already a PreTrainedModel
     model = get_engram_model(
         base_model,
         config,

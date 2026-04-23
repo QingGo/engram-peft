@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportUnknownParameterType=none
 """
 Engram-PEFT End-to-End CPU Example.
 
@@ -15,7 +16,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, cast
+from typing import Any, ClassVar, cast, override
 
 import torch
 import torch.nn as nn
@@ -70,7 +71,13 @@ DEVICE = get_device()
 
 # 2. Minimal Nano-style Transformer Implementation
 class SimpleConfig(PretrainedConfig):
-    model_type = "simple_transformer"
+    model_type: ClassVar[str] = "simple_transformer"
+    vocab_size: int
+    hidden_size: int
+    n_layer: int
+    num_hidden_layers: int
+    n_head: int
+    max_position_embeddings: int
 
     def __init__(
         self,
@@ -91,6 +98,12 @@ class SimpleConfig(PretrainedConfig):
 
 
 class SimpleAttention(nn.Module):
+    n_head: int
+    head_dim: int
+    c_attn: nn.Linear
+    c_proj: nn.Linear
+    bias: torch.Tensor
+
     def __init__(self, config: SimpleConfig) -> None:
         super().__init__()
         self.n_head = config.n_head
@@ -108,6 +121,7 @@ class SimpleAttention(nn.Module):
             ),
         )
 
+    @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, T, C = x.size()
         q, k, v = self.c_attn(x).split(C, dim=2)
@@ -125,12 +139,17 @@ class SimpleAttention(nn.Module):
 
 
 class SimpleMLP(nn.Module):
+    c_fc: nn.Linear
+    c_proj: nn.Linear
+    act: nn.GELU
+
     def __init__(self, config: SimpleConfig) -> None:
         super().__init__()
         self.c_fc = nn.Linear(config.hidden_size, 4 * config.hidden_size)
         self.c_proj = nn.Linear(4 * config.hidden_size, config.hidden_size)
         self.act = nn.GELU()
 
+    @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.c_fc(x)
         x = self.act(x)
@@ -139,6 +158,11 @@ class SimpleMLP(nn.Module):
 
 
 class SimpleBlock(nn.Module):
+    ln_1: nn.LayerNorm
+    attn: SimpleAttention
+    ln_2: nn.LayerNorm
+    mlp: SimpleMLP
+
     def __init__(self, config: SimpleConfig) -> None:
         super().__init__()
         self.ln_1 = nn.LayerNorm(config.hidden_size)
@@ -146,6 +170,7 @@ class SimpleBlock(nn.Module):
         self.ln_2 = nn.LayerNorm(config.hidden_size)
         self.mlp = SimpleMLP(config)
 
+    @override
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x + self.attn(self.ln_1(x))
         x = x + self.mlp(self.ln_2(x))
@@ -153,7 +178,9 @@ class SimpleBlock(nn.Module):
 
 
 class SimpleTransformer(PreTrainedModel, GenerationMixin):
-    config_class = SimpleConfig
+    config_class: ClassVar[Any] = SimpleConfig
+    transformer: nn.Module
+    lm_head: nn.Linear
 
     def __init__(self, config: SimpleConfig) -> None:
         super().__init__(config)
@@ -170,12 +197,15 @@ class SimpleTransformer(PreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
 
+    @override
     def get_input_embeddings(self) -> nn.Module:
         return self.transformer.wte  # type: ignore
 
+    @override
     def set_input_embeddings(self, value: nn.Module) -> None:
         self.transformer.wte = value
 
+    @override
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -184,7 +214,7 @@ class SimpleTransformer(PreTrainedModel, GenerationMixin):
         **kwargs: Any,
     ) -> Any:
         device = input_ids.device
-        b, t = input_ids.size()
+        _, t = input_ids.size()
         pos = torch.arange(0, t, dtype=torch.long, device=device).unsqueeze(0)
 
         assert isinstance(self.transformer.wte, nn.Embedding)
@@ -212,6 +242,7 @@ class SimpleTransformer(PreTrainedModel, GenerationMixin):
             logits=logits,
         )
 
+    @override
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.Tensor,

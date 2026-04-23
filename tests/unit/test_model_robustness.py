@@ -7,7 +7,7 @@ from engram_peft.config import EngramConfig
 from engram_peft.model import get_engram_model
 
 
-def test_get_engram_model_invalid_mode():
+def test_get_engram_model_invalid_mode(tiny_tokenizer: Any):
     class DummyModel(nn.Module):
         layers: nn.ModuleList
         config: Any
@@ -31,18 +31,24 @@ def test_get_engram_model_invalid_mode():
         original_vocab_size=10,
         hidden_size=10,
         layer_container_path="layers",
-        tokenizer_name_or_path="gpt2",
+        tokenizer_name_or_path="mock/tiny",
+        engram_vocab_size_per_ngram=[100, 100],
     )
 
     # Test valid modes
-    get_engram_model(model, config, train_mode="engram_only")
+    get_engram_model(model, config, train_mode="engram_only", tokenizer=tiny_tokenizer)
 
     # Test invalid mode using cast to silence static error
     with pytest.raises(ValueError, match="Unsupported train_mode"):
-        get_engram_model(model, config, train_mode=cast("Any", "invalid_mode"))
+        get_engram_model(
+            model,
+            config,
+            train_mode=cast("Any", "invalid_mode"),
+            tokenizer=tiny_tokenizer,
+        )
 
 
-def test_get_engram_model_wrap_peft_incompatibility():
+def test_get_engram_model_wrap_peft_incompatibility(tiny_tokenizer: Any):
     class DummyModel(nn.Module):
         layers: nn.ModuleList
         config: Any
@@ -66,9 +72,16 @@ def test_get_engram_model_wrap_peft_incompatibility():
         original_vocab_size=10,
         hidden_size=10,
         layer_container_path="layers",
-        tokenizer_name_or_path="gpt2",
+        tokenizer_name_or_path="mock/tiny",
+        engram_vocab_size_per_ngram=[100, 100],
     )
 
     # wrap_peft=True is only compatible with preserve_trainable
     with pytest.raises(ValueError, match="compatible with"):
-        get_engram_model(model, config, train_mode="engram_only", wrap_peft=True)
+        get_engram_model(
+            model,
+            config,
+            train_mode="engram_only",
+            wrap_peft=True,
+            tokenizer=tiny_tokenizer,
+        )

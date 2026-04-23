@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportUnknownParameterType=none
 """
 Engram-PEFT Hugging Face Hub Sharing Example.
 
@@ -49,7 +50,7 @@ def main():
 
     print(f"Loading tokenizer & base model: {args.model_name}")
     tokenizer = cast(
-        PreTrainedTokenizerBase, AutoTokenizer.from_pretrained(args.model_name)
+        "PreTrainedTokenizerBase", AutoTokenizer.from_pretrained(args.model_name)
     )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -57,7 +58,7 @@ def main():
     # We use CPU or half-precision to save memory in this demo
     device = "cuda" if torch.cuda.is_available() else "cpu"
     base_model = cast(
-        PreTrainedModel,
+        "PreTrainedModel",
         AutoModelForCausalLM.from_pretrained(
             args.model_name,
             dtype=torch.float16 if device == "cuda" else torch.float32,

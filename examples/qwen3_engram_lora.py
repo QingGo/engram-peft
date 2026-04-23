@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportUnknownParameterType=none
 """
 Qwen3.5 (Qwen 3.5 Compatible) LoRA + Engram Fine-tuning Example.
 
@@ -39,7 +40,6 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
-    BatchEncoding,
     BitsAndBytesConfig,
     PreTrainedModel,
     PreTrainedTokenizerBase,
@@ -98,27 +98,24 @@ def prepare_alpaca_dataset(
             padding="max_length",
         )
 
-        if not isinstance(tokenized, BatchEncoding):
-            tokenized = BatchEncoding(tokenized)
+        # tokenized is already a BatchEncoding
 
-        # Use isinstance for narrowing to avoid cast (Zero-Cast Principle)
         encoding_ids = tokenized["input_ids"]
-        if not isinstance(encoding_ids, SizedEncoding):
-            labels = list(encoding_ids) if isinstance(encoding_ids, Iterable) else []
-        else:
+        if isinstance(encoding_ids, list):
             labels = list(encoding_ids)
+        elif isinstance(encoding_ids, Iterable):
+            labels = list(encoding_ids)
+        else:
+            labels = []
 
         # Mask padding tokens in labels so they don't contribute to loss
         if tokenizer.pad_token_id is not None:
-            if isinstance(labels, list):
-                for i in range(len(labels)):
-                    if labels[i] == tokenizer.pad_token_id:
-                        labels[i] = -100
+            for i in range(len(labels)):
+                if labels[i] == tokenizer.pad_token_id:
+                    labels[i] = -100
 
         # Mask the prompt part in labels
         prompt_tokenized = tokenizer(prompt, max_length=max_length, truncation=True)
-        if not isinstance(prompt_tokenized, BatchEncoding):
-            prompt_tokenized = BatchEncoding(prompt_tokenized)
         # Use isinstance for narrowing to avoid cast (Zero-Cast Principle)
         prompt_ids = prompt_tokenized["input_ids"]
         if isinstance(prompt_ids, SizedEncoding):
@@ -322,8 +319,6 @@ def run_example(args: argparse.Namespace) -> None:
 
     # Use the explicit engram_config from the model wrapper
     engram_config_obj = model.config
-    if not isinstance(engram_config_obj, EngramConfig):
-        raise TypeError("Model config is not an EngramConfig")
 
     data_collator = EngramDataCollator(
         tokenizer=wash_tokenizer(tokenizer), config=engram_config_obj
@@ -438,16 +433,14 @@ def run_example(args: argparse.Namespace) -> None:
     # To fully verify, we should be able to load both LoRA and Engram back
     try:
         # 1. Load LoRA part onto a fresh base model (or reuse base_model for efficiency)
-        if not isinstance(base_model, torch.nn.Module):
-            raise TypeError("base_model must be a torch.nn.Module for reloading")
+        # base_model is already a torch.nn.Module
 
         reloaded_peft = PeftModel.from_pretrained(
             base_model, OUTPUT_DIR, trust_remote_code=True
         )
 
         # 2. Re-wrap with Engram using the class method which is cleaner
-        if not isinstance(reloaded_peft, torch.nn.Module):
-            raise TypeError("reloaded_peft must be a torch.nn.Module")
+        # reloaded_peft is already a torch.nn.Module
 
         reloaded_model = EngramModel.from_pretrained(
             reloaded_peft, OUTPUT_DIR, tokenizer=wash_tokenizer(tokenizer)

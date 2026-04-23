@@ -155,8 +155,9 @@ reportUnannotatedClassAttribute = "warning"
 # 分级环境
 # ----------------------------------------------------------------------
 executionEnvironments = [
-    { root = "tests", reportUnknownVariableType = "none", reportUnknownMemberType = "none", reportUnknownArgumentType = "none" },
-    { root = "examples", reportUnknownVariableType = "warning", reportUnknownMemberType = "warning", reportUnknownArgumentType = "warning" },
+    { root = "src", reportUnknownVariableType = "error", reportUnknownMemberType = "error", reportUnknownArgumentType = "error", reportUnknownParameterType = "error" },
+    { root = "tests", reportUnknownVariableType = "none", reportUnknownMemberType = "none", reportUnknownArgumentType = "none", reportUnknownParameterType = "none", reportUnknownLambdaType = "none" },
+    { root = "examples", reportUnknownVariableType = "none", reportUnknownMemberType = "none", reportUnknownArgumentType = "none", reportUnknownParameterType = "none", reportUnknownLambdaType = "none" },
 ]
 
 

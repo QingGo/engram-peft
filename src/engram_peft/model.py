@@ -1,4 +1,4 @@
-# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none
+# model.py
 from __future__ import annotations
 
 import logging
@@ -86,7 +86,7 @@ class EngramModel(nn.Module, GenerationMixin):
             config: EngramConfig containing hyperparameters.
             tokenizer: Optional tokenizer for extracting vocabulary size or mapping.
         """
-        super().__init__()
+        super().__init__()  # pyright: ignore[reportUnknownMemberType]
         self.base_model = base_model
         self.train_mode = "engram_only"
         # hidden_size is now an explicit field in EngramConfig.
@@ -140,7 +140,10 @@ class EngramModel(nn.Module, GenerationMixin):
         # Initialize Engram layers for the default adapter
         default_layers = nn.ModuleDict()
         for layer_id in config.target_layers:
-            flat_primes: list[int] = sum(self.hash_mapping.prime_tables[layer_id], [])
+            prime_list = self.hash_mapping.prime_tables[layer_id]
+            flat_primes: list[int] = [
+                p for head_primes in prime_list for p in head_primes
+            ]
             default_layers[str(layer_id)] = EngramLayer(
                 config=config,
                 layer_id=layer_id,
@@ -274,7 +277,7 @@ class EngramModel(nn.Module, GenerationMixin):
         """
         Computes the average entropy across all gating layers.
         """
-        entropies = []
+        entropies: list[torch.Tensor] = []
         for _, layer in self.engram_layers.items():
             if (
                 isinstance(layer, EngramLayer)
@@ -341,7 +344,8 @@ class EngramModel(nn.Module, GenerationMixin):
             # For simplicity, we create new layers.
             # We might need a separate hash_mapping per adapter if configs differ.
             # But hashing is usually tied to the backbone/tokenizer.
-            flat_primes = sum(self.hash_mapping.prime_tables[layer_id], [])
+            prime_list = self.hash_mapping.prime_tables[layer_id]
+            flat_primes = [p for head_primes in prime_list for p in head_primes]
             new_layers[str(layer_id)] = EngramLayer(
                 config=config,
                 layer_id=layer_id,
@@ -668,8 +672,9 @@ class EngramModel(nn.Module, GenerationMixin):
         if len(args) > 0 and (
             isinstance(args[0], dict) or isinstance(args[0], ToDictProtocol)
         ):
-            input_dict = (
-                args[0].to_dict() if isinstance(args[0], ToDictProtocol) else args[0]
+            input_dict = cast(
+                "dict[str, Any]",
+                args[0].to_dict() if isinstance(args[0], ToDictProtocol) else args[0],
             )
             args = args[1:]
             # Only update kwargs if not already set
@@ -680,10 +685,11 @@ class EngramModel(nn.Module, GenerationMixin):
             isinstance(kwargs["input_ids"], dict)
             or isinstance(kwargs["input_ids"], ToDictProtocol)
         ):
-            input_dict = (
+            input_dict = cast(
+                "dict[str, Any]",
                 kwargs["input_ids"].to_dict()
                 if isinstance(kwargs["input_ids"], ToDictProtocol)
-                else kwargs["input_ids"]
+                else kwargs["input_ids"],
             )
             kwargs.pop("input_ids")
             for k, v in input_dict.items():

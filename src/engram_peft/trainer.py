@@ -1,5 +1,6 @@
-# pyright: reportUnknownMemberType=none, reportUnknownArgumentType=none, reportUnknownVariableType=none, reportUnusedParameter=none, reportUnnecessaryComparison=none
-from typing import Any, override
+# trainer.py
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none
+from typing import TYPE_CHECKING, Any, cast, override
 
 import torch
 import torch.nn as nn
@@ -15,6 +16,10 @@ from engram_peft.utils import (
     get_scheduler,
     get_trainable_param_groups,
 )
+from engram_peft.utils.compat import get_config_attr, wash_model
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 
 class EngramTrainer(Trainer):
@@ -55,11 +60,13 @@ class EngramTrainer(Trainer):
         """Initially freezes the backbone if backbone_freeze_steps > 0."""
         if self.model is None:
             return
-        unwrapped = unwrap_model(self.model)
+        unwrapped = unwrap_model(cast("Any", self.model))
         if not isinstance(unwrapped, EngramModel):
             return
 
-        freeze_steps = getattr(unwrapped.config, "backbone_freeze_steps", 0)
+        freeze_steps = int(
+            get_config_attr(unwrapped.config, "backbone_freeze_steps") or 0
+        )
         if freeze_steps > 0:
             print(
                 f"[Engram-PEFT] Adapter-First Mode: Freezing backbone for {freeze_steps} steps."
@@ -71,8 +78,10 @@ class EngramTrainer(Trainer):
         """Captures initial weights of Engram modules on CPU for drift calculation."""
         if self.model is None:
             return
-        unwrapped = unwrap_model(self.model)
-        if isinstance(unwrapped, EngramModel) and unwrapped.config.enable_telemetry:
+        unwrapped = unwrap_model(cast("Any", self.model))
+        if isinstance(unwrapped, EngramModel) and get_config_attr(
+            unwrapped.config, "enable_telemetry"
+        ):
             print("[Engram-PEFT] Capturing initial weights for telemetry...")
             groups = get_trainable_param_groups(unwrapped)
             # We only track drift for Engram groups to save memory
@@ -88,10 +97,9 @@ class EngramTrainer(Trainer):
         if self.optimizer is None:
             # Check if model has the helper
 
-            if isinstance(self.model, EngramModel) and hasattr(
-                self.model, "create_optimizer"
-            ):
-                self.optimizer = self.model.create_optimizer(
+            model = wash_model(self.model)
+            if isinstance(model, EngramModel) and hasattr(model, "create_optimizer"):
+                self.optimizer = model.create_optimizer(
                     base_learning_rate=self.args.learning_rate,
                     **self.optimizer_kwargs,
                 )
@@ -120,10 +128,9 @@ class EngramTrainer(Trainer):
             if optimizer is None:
                 optimizer = self.create_optimizer()
 
-            if isinstance(self.model, EngramModel) and hasattr(
-                self.model, "create_scheduler"
-            ):
-                self.lr_scheduler = self.model.create_scheduler(
+            model = cast("Any", self.model)
+            if isinstance(model, EngramModel) and hasattr(model, "create_scheduler"):
+                self.lr_scheduler = model.create_scheduler(
                     optimizer,
                     num_training_steps=num_training_steps,
                     warmup_steps=self.args.get_warmup_steps(num_training_steps),
@@ -169,7 +176,9 @@ class EngramTrainer(Trainer):
         self._last_entropy_loss = 0.0
 
         if isinstance(unwrapped, EngramModel):
-            alpha = getattr(unwrapped.config, "entropy_loss_weight", 0.0)
+            alpha = float(
+                get_config_attr(unwrapped.config, "entropy_loss_weight") or 0.0
+            )
             if alpha > 0:
                 entropy = unwrapped.get_total_gating_entropy()
                 penalty = alpha * entropy
@@ -186,7 +195,7 @@ class EngramTrainer(Trainer):
             if not isinstance(ce_outputs, dict):
                 # Fallback for older transformers or unexpected return types
                 return (total_loss, {"ce_outputs": ce_outputs})
-            return (total_loss, ce_outputs)
+            return (total_loss, cast("dict[str, Any]", ce_outputs))
 
         return total_loss
 
@@ -208,9 +217,11 @@ class EngramTrainer(Trainer):
             return super().training_step(
                 model, inputs, num_items_in_batch=num_items_in_batch
             )
-        unwrapped = unwrap_model(self.model)
+        unwrapped = unwrap_model(cast("Any", self.model))
         if isinstance(unwrapped, EngramModel):
-            freeze_steps = getattr(unwrapped.config, "backbone_freeze_steps", 0)
+            freeze_steps = int(
+                get_config_attr(unwrapped.config, "backbone_freeze_steps") or 0
+            )
             if freeze_steps > 0 and self.state.global_step == freeze_steps:
                 print(
                     f"\n[Engram-PEFT] Step {freeze_steps}: Unfreezing backbone for joint training."
@@ -240,7 +251,7 @@ class EngramTrainer(Trainer):
         self, model: nn.Module, max_norm: float | None = None
     ) -> torch.Tensor | None:
         if max_norm is None:
-            max_norm = self.args.max_grad_norm
+            max_norm = cast("float | None", self.args.max_grad_norm)
 
         if max_norm is None or max_norm <= 0:
             return None
@@ -264,9 +275,11 @@ class EngramTrainer(Trainer):
             apply_group_wise_clipping(groups, max_norm)
         else:
             # Standard Global Norm Clipping
-            clip_coef = max_norm / (total_norm + 1e-6)
+            clip_coef = torch.tensor(max_norm, device=total_norm.device) / (
+                total_norm + 1e-6
+            )
             if clip_coef < 1.0:
-                for p in model.parameters():
+                for p in cast("Iterable[nn.Parameter]", model.parameters()):
                     if p.grad is not None:
                         g = p.grad
                         if g.is_sparse:
@@ -281,22 +294,17 @@ class EngramTrainer(Trainer):
     ) -> torch.Tensor | None:
         """Override _get_grad_norm to avoid SparseCPU NotImplementedError during logging."""
         if grad_norm is not None:
-            return (
-                torch.tensor(grad_norm)
-                if not isinstance(grad_norm, torch.Tensor)
-                else grad_norm
-            )
+            return torch.tensor(grad_norm)
 
-        return self._compute_total_norm(model.parameters())
+        return self._compute_total_norm(cast("Any", model.parameters()))
 
     def _collect_telemetry(self) -> dict[str, float]:
         """Performs deep telemetry collection across parameter groups."""
         if self.model is None:
             return {}
-        unwrapped = unwrap_model(self.model)
-        if (
-            not isinstance(unwrapped, EngramModel)
-            or not unwrapped.config.enable_telemetry
+        unwrapped = unwrap_model(cast("Any", self.model))
+        if not isinstance(unwrapped, EngramModel) or not get_config_attr(
+            unwrapped.config, "enable_telemetry"
         ):
             return {}
 

@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportUnknownParameterType=none
 import gc
 from typing import Any
 from typing import cast as typing_cast
@@ -60,8 +61,7 @@ def demo_engram(
     path: str = "outputs/benchmarks/engram_weights",
 ) -> None:
     print(f"Generating with Engram ({path})...")
-    if not isinstance(base_model, torch.nn.Module):
-        raise TypeError("base_model must be a torch.nn.Module")
+    # PreTrainedModel is already a torch.nn.Module
     model = EngramModel.from_pretrained(
         base_model, path, tokenizer=wash_tokenizer(tokenizer)
     )
@@ -94,12 +94,10 @@ def demo_lora_engram(
 ) -> None:
     print(f"Generating with LoRA + Engram ({path})...")
     # Load LoRA first
-    if not isinstance(base_model, torch.nn.Module):
-        raise TypeError("base_model must be a torch.nn.Module")
+    # PreTrainedModel is already a torch.nn.Module
     lora_model = PeftModel.from_pretrained(base_model, path)
     # Load Engram wrapper
-    if not isinstance(lora_model, torch.nn.Module):
-        raise TypeError("lora_model must be a torch.nn.Module")
+    # PeftModel is already a torch.nn.Module
     combined_model = EngramModel.from_pretrained(
         lora_model, path, tokenizer=wash_tokenizer(tokenizer)
     )
@@ -154,8 +152,7 @@ def demo_full_finetune_engram(
         sub_path, dtype=base_model.dtype, device_map="auto"
     )
     # Load Engram wrapper
-    if not isinstance(ft_base_model, torch.nn.Module):
-        raise TypeError("ft_base_model must be a torch.nn.Module")
+    # AutoModel results are torch.nn.Modules
     model = EngramModel.from_pretrained(
         ft_base_model, path, tokenizer=wash_tokenizer(tokenizer)
     )

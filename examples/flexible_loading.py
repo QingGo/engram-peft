@@ -1,7 +1,8 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportUnknownParameterType=none
 import os
 import shutil
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, override
 
 import torch
 import torch.nn as nn
@@ -13,6 +14,9 @@ from engram_peft.model import get_engram_model
 
 # --- Setup Dummy Base Model ---
 class DummyModel(nn.Module):
+    config: Any
+    model: nn.Module
+
     def __init__(self, hidden_size: int = 768) -> None:
         super().__init__()
         self.config = SimpleNamespace()
@@ -23,6 +27,7 @@ class DummyModel(nn.Module):
             [nn.Linear(hidden_size, hidden_size) for _ in range(12)]
         )
 
+    @override
     def forward(
         self, input_ids: torch.Tensor | None = None, **kwargs: Any
     ) -> torch.Tensor | None:

@@ -1,4 +1,5 @@
-from typing import Any, cast
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportUnknownParameterType=none
+from typing import Any, cast, override
 
 import torch
 from transformers import DataCollatorForLanguageModeling
@@ -9,6 +10,7 @@ class SmartDataCollator(DataCollatorForLanguageModeling):
     Standardized data collator that ensures padding tokens are masked in labels.
     """
 
+    @override
     def __call__(
         self, examples: list[dict[str, Any]], return_tensors: str | None = None
     ) -> dict[str, torch.Tensor]:

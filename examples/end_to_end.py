@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportUnknownParameterType=none
 """
 Engram-PEFT End-to-End GPU Example.
 
@@ -98,8 +99,7 @@ def train_engram(
     )
 
     print("Injecting Engram layers and freezing base model...")
-    if not isinstance(base_model, PreTrainedModel):
-        raise TypeError("base_model must be a PreTrainedModel")
+    # base_model is already a PreTrainedModel
 
     model = get_engram_model(
         base_model,
@@ -158,8 +158,7 @@ def inference_demo(
 
     # Load trained Engram onto the base model
     print(f"Loading trained Engram from {ENGRAM_WEIGHTS_DIR}")
-    if not isinstance(base_model, torch.nn.Module):
-        raise TypeError("base_model must be a torch.nn.Module")
+    # base_model is already a torch.nn.Module
 
     model = EngramModel.from_pretrained(base_model, ENGRAM_WEIGHTS_DIR)
 

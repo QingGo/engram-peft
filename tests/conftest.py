@@ -15,7 +15,7 @@ class MockTokenizer:
     def __init__(self) -> None:
         self.pad_token_id = 0
         self.eos_token_id = 1
-        self.tokenizer_vocab_size = 129280  # from NgramHashMapping default
+        self.tokenizer_vocab_size = 128  # reduced for fast unit testing (was 129280)
         self.vocab = {f"token_{i}": i for i in range(10)}
 
     @property

@@ -21,12 +21,15 @@ if TYPE_CHECKING:
     import os
     from collections.abc import Callable
 
-    from datasets import Dataset, DatasetDict
+    from datasets import Dataset
     from torch import Tensor
 
     from engram_peft.types import (
         CausalLMOutputProtocol,
         ConfigProtocol,
+        DatasetDictProtocol,
+        DatasetProtocol,
+        GenerativeModelProtocol,
         ModelOutputProtocol,
         ModelProtocol,
         SafeTrainingArguments,
@@ -34,13 +37,15 @@ if TYPE_CHECKING:
     )
 
 
-def safe_load_dataset(path: str, **kwargs: Any) -> Dataset | DatasetDict:
+def safe_load_dataset(
+    path: str, **kwargs: Any
+) -> DatasetProtocol | DatasetDictProtocol:
     """
     Type-safe wrapper for datasets.load_dataset.
     """
     from datasets import load_dataset as _load_dataset  # noqa: PLC0415
 
-    return cast("Dataset | DatasetDict", _load_dataset(path, **kwargs))
+    return cast("DatasetProtocol | DatasetDictProtocol", _load_dataset(path, **kwargs))
 
 
 def safe_dataset_map(
@@ -111,12 +116,12 @@ def safe_model_from_pretrained(model_name_or_path: str, **kwargs: Any) -> ModelP
 
 def safe_causal_lm_from_pretrained(
     model_name_or_path: str, **kwargs: Any
-) -> ModelProtocol:
+) -> GenerativeModelProtocol:
     """
     Type-safe wrapper for AutoModelForCausalLM.from_pretrained.
     """
     model = AutoModelForCausalLM.from_pretrained(model_name_or_path, **kwargs)
-    return cast("ModelProtocol", model)
+    return cast("GenerativeModelProtocol", model)
 
 
 def safe_config_from_pretrained(
@@ -309,3 +314,11 @@ def wash_model(model: Any) -> ModelProtocol:
     caused by complex inheritance or incomplete stubs.
     """
     return cast("ModelProtocol", model)
+
+
+def get_config_attr(config: Any, attr: str, default: Any = None) -> Any:
+    """
+    Type-safe retrieval of configuration attributes.
+    Helps avoid 'Unknown' warnings from direct attribute access on HF configs.
+    """
+    return getattr(config, attr, default)

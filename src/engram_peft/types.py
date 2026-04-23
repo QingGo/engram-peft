@@ -167,6 +167,55 @@ class ModelProtocol(Protocol):
     def add_model_tags(self, tags: list[str]) -> None: ...
 
 
+@runtime_checkable
+class GenerativeModelProtocol(ModelProtocol, Protocol):
+    """
+    Protocol for models that support text generation (transformers.PreTrainedModel).
+    """
+
+    @override
+    def generate(self, *args: Any, **kwargs: Any) -> torch.Tensor | Any: ...
+
+
+@runtime_checkable
+class DatasetProtocol(Protocol):
+    """
+    Protocol for datasets (datasets.Dataset).
+    """
+
+    def map(
+        self, function: Callable[..., Any], batched: bool = False, **kwargs: Any
+    ) -> DatasetProtocol: ...
+
+    def select(self, indices: Iterable[int]) -> DatasetProtocol: ...
+
+    @property
+    def column_names(self) -> list[str]: ...
+
+    def __len__(self) -> int: ...
+
+    def __getitem__(self, key: Any) -> Any: ...
+
+
+@runtime_checkable
+class DatasetDictProtocol(Protocol):
+    """
+    Protocol for dataset dictionaries (datasets.DatasetDict).
+    """
+
+    def __getitem__(self, key: str) -> DatasetProtocol: ...
+
+    def keys(self) -> Iterable[str]: ...
+
+    def values(self) -> Iterable[DatasetProtocol]: ...
+
+    def items(self) -> Iterable[tuple[str, DatasetProtocol]]: ...
+
+    def map(
+        self, function: Callable[..., Any], batched: bool = False, **kwargs: Any
+    ) -> DatasetDictProtocol: ...
+
+
 class SafeTrainingArguments(TypedDict, total=False):
     """
     TypedDict for common TrainingArguments to avoid Unknown parameter errors.

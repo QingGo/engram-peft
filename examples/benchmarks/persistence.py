@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportUnknownParameterType=none
 import json
 import os
 from datetime import datetime
@@ -6,6 +7,11 @@ from typing import Any
 
 class BenchmarkResult:
     """Container for benchmark metadata and metrics."""
+
+    method: str
+    params: dict[str, Any]
+    metrics: dict[str, Any]
+    timestamp: str
 
     def __init__(
         self,
@@ -47,6 +53,8 @@ class BenchmarkResult:
 
 
 class ResultManager:
+    base_dir: str
+
     def __init__(self, base_dir: str = "outputs/benchmarks"):
         self.base_dir = base_dir
         os.makedirs(self.base_dir, exist_ok=True)
