@@ -43,7 +43,7 @@ from engram_peft import (
 )
 
 # 1. Constants & Device Detection
-MODEL_NAME = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+MODEL_NAME = "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T"
 OUTPUT_DIR = "outputs/engram_cpu_demo"
 ENGRAM_WEIGHT_DIR = os.path.join(OUTPUT_DIR, "engram_weights")
 SEED = 42

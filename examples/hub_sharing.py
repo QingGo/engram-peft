@@ -6,7 +6,7 @@ This script demonstrates how to:
 2. Reload an Engram adapter directly from the Hub using its Repository ID.
 
 Prerequisites:
-    1. Login to your account: `huggingface-cli login`
+    1. Login to your account: `hf auth login`
     2. (Optional) Create a repository on the Hugging Face website,
        though `push_to_hub` will create it for you if it doesn't exist.
 
@@ -59,7 +59,7 @@ def main():
         PreTrainedModel,
         AutoModelForCausalLM.from_pretrained(
             args.model_name,
-            torch_dtype=torch.float16 if device == "cuda" else torch.float32,
+            dtype=torch.float16 if device == "cuda" else torch.float32,
             device_map="auto" if device == "cuda" else None,
         ),
     )
@@ -67,8 +67,8 @@ def main():
     # 1. Initialize Engram Model
     print("Initializing Engram layers...")
     config = EngramConfig(
-        target_layers=[2],  # Just one layer for demonstration
-        engram_vocab_size_per_ngram=[128000],
+        target_layers=[2],
+        engram_vocab_size_per_ngram=[128000, 128000],
         hidden_size=base_model.config.hidden_size,
         tokenizer_name_or_path=args.model_name,
     )

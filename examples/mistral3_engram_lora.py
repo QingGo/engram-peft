@@ -18,7 +18,7 @@ import traceback
 from collections.abc import Iterable
 from typing import Any
 
-from engram_peft.protocols import GenerativeProtocol, SizedEncoding
+from engram_peft.types import GenerativeProtocol, SizedEncoding
 
 # Add the project root to sys.path to allow absolute imports from the 'examples' package
 # when running the script directly.
@@ -53,7 +53,7 @@ from engram_peft import (
     EngramTrainer,
     get_engram_model,
 )
-from engram_peft.protocols import HFModelProtocol
+from engram_peft.types import ModelProtocol
 from engram_peft.utils import apply_peft_patches
 from examples.benchmarks.data_utils import get_dataset_template
 
@@ -214,7 +214,7 @@ def run_example(args: argparse.Namespace) -> None:
         print("Loading in native FP8 precision...")
 
     # Type base_model as Union to satisfy both transformers methods and avoid strange 'generate' callable errors
-    base_model: PreTrainedModel | HFModelProtocol = (
+    base_model: PreTrainedModel | ModelProtocol = (
         Mistral3ForConditionalGeneration.from_pretrained(args.model_id, **load_kwargs)
     )
 
@@ -348,7 +348,7 @@ def run_example(args: argparse.Namespace) -> None:
     print(f"Saving combined adapters to {OUTPUT_DIR}")
     # Explicitly save LoRA adapters first to ensure adapter_config.json exists
     # Use the Protocol for saving/generating to avoid strange mypy attribute errors
-    if isinstance(model.base_model, HFModelProtocol):
+    if isinstance(model.base_model, ModelProtocol):
         print("Saving LoRA adapters...")
         model.base_model.save_pretrained(OUTPUT_DIR)
 
@@ -364,7 +364,7 @@ def run_example(args: argparse.Namespace) -> None:
 
     # Use the Protocol to get the device cleanly
     target_device: torch.device | str
-    if isinstance(model.base_model, HFModelProtocol):
+    if isinstance(model.base_model, ModelProtocol):
         target_device = model.base_model.device
     else:
         target_device = "cuda"

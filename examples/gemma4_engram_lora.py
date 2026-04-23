@@ -18,7 +18,7 @@ import traceback
 from collections.abc import Iterable
 from typing import Any
 
-from engram_peft.protocols import GenerativeProtocol, SizedEncoding
+from engram_peft.types import GenerativeProtocol, SizedEncoding
 
 # Add the project root to sys.path to allow absolute imports from the 'examples' package
 # when running the script directly.
@@ -47,7 +47,7 @@ from engram_peft import (
     EngramTrainer,
     get_engram_model,
 )
-from engram_peft.protocols import HFModelProtocol
+from engram_peft.types import ModelProtocol
 from engram_peft.utils import (
     apply_peft_patches,
     get_optimal_precision_config,
@@ -241,7 +241,7 @@ def run_example(args: argparse.Namespace) -> None:
         args.model_id, config=config, **model_kwargs
     )
     # Type it as Union to satisfy both transformers methods and avoid strange 'generate' callable errors
-    base_model: PreTrainedModel | HFModelProtocol = model_instance
+    base_model: PreTrainedModel | ModelProtocol = model_instance
 
     # 2. Apply LoRA
     print("Applying LoRA...")
@@ -370,7 +370,7 @@ def run_example(args: argparse.Namespace) -> None:
     print(f"Saving combined adapters to {OUTPUT_DIR}")
     # Explicitly save LoRA adapters first to ensure adapter_config.json exists
     # Use the Protocol for saving/generating to avoid strange mypy attribute errors
-    if isinstance(model.base_model, HFModelProtocol):
+    if isinstance(model.base_model, ModelProtocol):
         print("Saving LoRA adapters...")
         model.base_model.save_pretrained(OUTPUT_DIR)
 

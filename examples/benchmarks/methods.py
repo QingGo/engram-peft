@@ -18,7 +18,7 @@ from engram_peft import (
     EngramTrainer,
     get_engram_model,
 )
-from engram_peft.protocols import HFModelProtocol, PeftUnloadable
+from engram_peft.types import ModelProtocol, PeftUnloadable
 
 # Configure logging to see Engram injection logs
 logging.basicConfig(level=logging.WARNING, format="%(message)s")
@@ -61,7 +61,7 @@ def extract_trainer_metrics(trainer: Trainer, train_result: Any) -> dict[str, An
 
 
 def train_lora(
-    base_model: HFModelProtocol,
+    base_model: ModelProtocol,
     tokenizer: PreTrainedTokenizerBase,
     train_dataset: Any,
     eval_dataset: Any,
@@ -281,7 +281,7 @@ def train_full_finetune(
 
 
 def train_lora_engram(
-    base_model: HFModelProtocol,
+    base_model: ModelProtocol,
     tokenizer: PreTrainedTokenizerBase,
     train_dataset: Any,
     eval_dataset: Any,
@@ -380,7 +380,7 @@ def train_lora_engram(
     metrics = extract_trainer_metrics(trainer, train_result)
 
     model.save_pretrained("outputs/benchmarks/lora_engram_weights")
-    if isinstance(model.base_model, HFModelProtocol):
+    if isinstance(model.base_model, ModelProtocol):
         model.base_model.save_pretrained("outputs/benchmarks/lora_engram_weights")
     model.unload_engram()
     if isinstance(lora_model, PeftUnloadable):
@@ -389,7 +389,7 @@ def train_lora_engram(
 
 
 def train_full_finetune_engram(
-    base_model: HFModelProtocol,
+    base_model: ModelProtocol,
     tokenizer: PreTrainedTokenizerBase,
     train_dataset: Any,
     eval_dataset: Any,
@@ -484,7 +484,7 @@ def train_full_finetune_engram(
 
     model.save_pretrained("outputs/benchmarks/full_ft_engram_weights")
     # Save finetuned backbone to a subfolder to avoid config.json collision
-    if isinstance(model.base_model, HFModelProtocol):
+    if isinstance(model.base_model, ModelProtocol):
         model.base_model.save_pretrained(
             "outputs/benchmarks/full_ft_engram_weights/base_model"
         )

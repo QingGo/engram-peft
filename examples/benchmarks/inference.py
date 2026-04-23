@@ -7,11 +7,11 @@ from peft import PeftModel
 from transformers import AutoModelForCausalLM, PreTrainedModel, PreTrainedTokenizerBase
 
 from engram_peft import EngramLayer, EngramModel
-from engram_peft.protocols import GenerativeProtocol, HFModelProtocol, PeftUnloadable
+from engram_peft.types import GenerativeProtocol, ModelProtocol, PeftUnloadable
 
 
 def demo_base_model(
-    model: HFModelProtocol, tokenizer: PreTrainedTokenizerBase, inputs: dict[str, Any]
+    model: ModelProtocol, tokenizer: PreTrainedTokenizerBase, inputs: dict[str, Any]
 ) -> None:
     print("\nGenerating with Base Model (Zero-shot)...")
     if isinstance(model, PreTrainedModel | PeftModel):
@@ -20,7 +20,7 @@ def demo_base_model(
                 **inputs, max_new_tokens=40, max_length=None, do_sample=False
             )
     else:
-        # Fallback for generic HFModelProtocol
+        # Fallback for generic ModelProtocol
         with torch.no_grad():
             output = model.generate(
                 **inputs, max_new_tokens=40, max_length=None, do_sample=False
@@ -29,7 +29,7 @@ def demo_base_model(
 
 
 def demo_lora(
-    base_model: HFModelProtocol,
+    base_model: ModelProtocol,
     tokenizer: PreTrainedTokenizerBase,
     inputs: dict[str, Any],
     path: str = "outputs/benchmarks/lora_weights",
@@ -103,7 +103,7 @@ def demo_lora_engram(
 
 
 def demo_full_finetune(
-    base_model: HFModelProtocol,
+    base_model: ModelProtocol,
     tokenizer: PreTrainedTokenizerBase,
     inputs: dict[str, Any],
     path: str = "outputs/benchmarks/full_ft_only_weights",

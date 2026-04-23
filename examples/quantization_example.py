@@ -5,7 +5,7 @@ This script demonstrates how to inject Engram layers into a 4-bit quantized
 backbone (bitsandbytes) while maintaining correct computation precision.
 
 Usage:
-    uv run python examples/quantization_example.py --model_id TinyLlama/TinyLlama-1.1B-Chat-v1.0
+    uv run python examples/quantization_example.py --model_id TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T
 """
 
 import argparse
@@ -240,7 +240,9 @@ def run_quantization_example(model_id: str) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--model_id", type=str, default="TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        "--model_id",
+        type=str,
+        default="TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T",
     )
     args = parser.parse_args()
 

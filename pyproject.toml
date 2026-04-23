@@ -102,10 +102,9 @@ ignore = ["E501", "F722"]
 
 
 [tool.basedpyright]
-include = ["src"]
+include = ["src", "examples"]
 exclude = [
     "tests",
-    "examples",
     "src/engram_peft/inference_template.py",
     "**/__pycache__",
     ".venv",
