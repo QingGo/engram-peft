@@ -213,6 +213,15 @@ class BenchmarkEngine:
                 run.finish()
             return
 
+        # Log initial trainable params summary
+        trainable_params = [
+            n for n, p in self.base_model.named_parameters() if p.requires_grad
+        ]
+        print(f">>> Method: {method_name}")
+        print(f"[Engine] Initial trainable parameters: {len(trainable_params)}")
+        if len(trainable_params) < 10 and len(trainable_params) > 0:
+            print(f"[Engine] Sample trainable params: {trainable_params}")
+
         metrics = train_fn(
             self.base_model,
             self.tokenizer,
@@ -244,8 +253,8 @@ class BenchmarkEngine:
                 run.log(log)
             run.finish()
 
-        # Update dirty flag for full-ft methods
-        if "full_finetune" in method_name:
+        # Update dirty flag for any method that modifies the model (all except base)
+        if method_name != "base":
             self.is_dirty = True
 
         # Cleanup tmp directory (checkpoints)

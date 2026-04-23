@@ -174,6 +174,16 @@ class EngramConfig(PreTrainedConfig):
         default="1.2.2",
         metadata={"help": "The version of the Engram state file format."},
     )
+    train_mode: str | None = field(
+        default=None,
+        metadata={
+            "help": "Training mode: 'engram_only', 'preserve_trainable', or 'full_finetune'."
+        },
+    )
+    wrap_peft: bool = field(
+        default=False,
+        metadata={"help": "Whether the base model is a PEFT model."},
+    )
 
     def __init__(
         self,
@@ -203,6 +213,8 @@ class EngramConfig(PreTrainedConfig):
         engram_dtype: str | None = None,
         use_sparse_embeddings: bool = True,
         engram_version: str = "1.2.2",
+        train_mode: str | None = None,
+        wrap_peft: bool = False,
         **kwargs: Any,
     ):
         """Constructs EngramConfig."""
@@ -242,6 +254,8 @@ class EngramConfig(PreTrainedConfig):
         self.engram_dtype = engram_dtype
         self.use_sparse_embeddings = use_sparse_embeddings
         self.engram_version = engram_version
+        self.train_mode = train_mode
+        self.wrap_peft = wrap_peft
 
         super().__init__(**kwargs)
         # Ensure extra kwargs are set, as PretrainedConfig might miss them in some environments

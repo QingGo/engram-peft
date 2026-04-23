@@ -1,5 +1,7 @@
 # pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportUnknownParameterType=none
 import logging
+import os
+import shutil
 from typing import Any
 
 import torch
@@ -279,7 +281,10 @@ def train_full_finetune(
     train_result = trainer.train()
     metrics = extract_trainer_metrics(trainer, train_result)
 
-    base_model.save_pretrained("outputs/benchmarks/full_ft_only_weights")
+    save_path = "outputs/benchmarks/full_ft_only_weights"
+    if os.path.exists(save_path):
+        shutil.rmtree(save_path)
+    base_model.save_pretrained(save_path)
     return metrics
 
 
@@ -327,6 +332,8 @@ def train_lora_engram(
         else None,
         pad_id=tokenizer.pad_token_id if isinstance(tokenizer.pad_token_id, int) else 0,
         learning_rate_multiplier=15.0,
+        backbone_freeze_steps=10,
+        weight_decay=0.01,
     )
     # Apply overrides to engram config
     for k, v in overrides.items():

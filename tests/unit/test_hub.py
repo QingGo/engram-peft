@@ -107,8 +107,8 @@ class TestHubIntegration(unittest.TestCase):
             mock_config_from_pretrained.assert_called_once_with(
                 "/mock/path", token="test-token"
             )
-            # Called twice: once in __init__ (no args) and once in from_pretrained (with path)
-            self.assertEqual(mock_load_engram.call_count, 2)
+            # Called exactly once in from_pretrained (with path)
+            self.assertEqual(mock_load_engram.call_count, 1)
             mock_load_engram.assert_called_with("/mock/path")
             self.assertIsInstance(model, EngramModel)
 

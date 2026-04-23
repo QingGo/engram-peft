@@ -136,6 +136,8 @@ class EngramModel(nn.Module, GenerationMixin):
         self.active_adapter = "default"
         self.peft_config = {"default": config}
         self.adapters = nn.ModuleDict()
+        # Track which parameters in the base model were already trainable (e.g. LoRA)
+        self.trainable_backbone_names: set[str] = set()
 
         # Initialize Engram layers for the default adapter
         default_layers = nn.ModuleDict()
@@ -174,11 +176,9 @@ class EngramModel(nn.Module, GenerationMixin):
             )
         else:
             # If no explicit config, we default to float32 initially for stability.
-            # load_engram() will perform per-layer alignment later.
+            # Attach precision settings initially
+            # By default, we keep Engram layers in float32 for training stability (Mixed Precision).
             self.adapters.float()
-
-        # Attach hooks immediately
-        self.load_engram()
 
     def add_model_tags(self, tags: list[str]) -> None:
         """
@@ -1034,24 +1034,36 @@ def get_engram_model(
         if engram_dtype is not None:
             engram_config.engram_dtype = engram_dtype
 
-    if train_mode is None:
-        resolved_train_mode: TrainMode = (
-            "preserve_trainable" if wrap_peft else "engram_only"
+    # 0. Resolve Training Mode & PEFT Wrapping
+    resolved_wrap_peft = wrap_peft or getattr(engram_config, "wrap_peft", False)
+    resolved_train_mode = train_mode or getattr(engram_config, "train_mode", None)
+    if resolved_train_mode is None:
+        resolved_train_mode = (
+            "preserve_trainable" if resolved_wrap_peft else "engram_only"
         )
-    else:
-        # Explicit validation for TrainMode literal values
-        valid_modes = {"engram_only", "preserve_trainable", "full_finetune"}
-        if train_mode not in valid_modes:
-            raise ValueError(
-                f"Unsupported train_mode: {train_mode}. "
-                + f"Must be one of {valid_modes}"
-            )
-        resolved_train_mode = train_mode
-        if wrap_peft and resolved_train_mode != "preserve_trainable":
-            raise ValueError(
-                "wrap_peft=True is only compatible with "
-                + 'train_mode="preserve_trainable".'
-            )
+
+    # Explicit validation for TrainMode literal values
+    valid_modes = {"engram_only", "preserve_trainable", "full_finetune"}
+    if resolved_train_mode not in valid_modes:
+        raise ValueError(
+            f"Unsupported train_mode: {resolved_train_mode}. "
+            + f"Must be one of {valid_modes}"
+        )
+
+    if resolved_wrap_peft and resolved_train_mode != "preserve_trainable":
+        raise ValueError(
+            "wrap_peft=True is only compatible with "
+            + 'train_mode="preserve_trainable".'
+        )
+
+    # 0. Capture names of parameters that are trainable BEFORE any freezing logic
+    trainable_backbone_names: set[str] = set()
+    if resolved_train_mode == "preserve_trainable":
+        trainable_backbone_names = {
+            n for n, p in model.named_parameters() if p.requires_grad
+        }
+    elif resolved_train_mode == "full_finetune":
+        trainable_backbone_names = {n for n, _ in model.named_parameters()}
 
     if resolved_train_mode == "preserve_trainable":
         # Record parameters that were already trainable (e.g., from LoRA)
@@ -1079,8 +1091,18 @@ def get_engram_model(
     if not engram_config.enable_tokenizer_compression:
         engram_config.compressed_vocab_size = metadata.original_vocab_size
 
+    if hasattr(model, "peft_config"):
+        logger.info(
+            "[Engram-PEFT] Detected existing PEFT config (e.g. LoRA). "
+            + "Initializing composite adapter mode."
+        )
+
     engram_model = EngramModel(model, engram_config, tokenizer)
     engram_model.train_mode = resolved_train_mode
+    engram_model.trainable_backbone_names = trainable_backbone_names
+
+    # Attach hooks
+    engram_model.load_engram()
 
     # Note: Engram layers were instantiated and they inherently have requires_grad=True
     # by PyTorch default. Verify just in case:

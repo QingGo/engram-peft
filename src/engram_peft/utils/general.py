@@ -222,8 +222,9 @@ def get_trainable_param_groups(
     freeze_steps = getattr(model.config, "backbone_freeze_steps", 0)
     backbone_params = [
         param
-        for _, param in model.base_model.named_parameters()
-        if param.requires_grad or freeze_steps > 0
+        for name, param in model.base_model.named_parameters()
+        if param.requires_grad
+        or (freeze_steps > 0 and name in model.trainable_backbone_names)
     ]
     engram_sparse_params: list[torch.nn.Parameter] = []
     engram_dense_params: list[torch.nn.Parameter] = []

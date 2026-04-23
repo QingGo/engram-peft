@@ -71,8 +71,10 @@ class EngramTrainer(Trainer):
             print(
                 f"[Engram-PEFT] Adapter-First Mode: Freezing backbone for {freeze_steps} steps."
             )
-            for param in unwrapped.base_model.parameters():
-                param.requires_grad = False
+            # Only freeze the parameters that were originally intended to be trainable
+            for name, param in unwrapped.base_model.named_parameters():
+                if name in unwrapped.trainable_backbone_names:
+                    param.requires_grad = False
 
     def _capture_initial_weights(self) -> None:
         """Captures initial weights of Engram modules on CPU for drift calculation."""
@@ -226,8 +228,10 @@ class EngramTrainer(Trainer):
                 print(
                     f"\n[Engram-PEFT] Step {freeze_steps}: Unfreezing backbone for joint training."
                 )
-                for param in unwrapped.base_model.parameters():
-                    param.requires_grad = True
+                # Only unfreeze parameters that should be trainable according to the train_mode
+                for name, param in unwrapped.base_model.named_parameters():
+                    if name in unwrapped.trainable_backbone_names:
+                        param.requires_grad = True
 
         try:
             # Try with num_items_in_batch (Transformers 4.46+)
@@ -294,6 +298,8 @@ class EngramTrainer(Trainer):
     ) -> torch.Tensor | None:
         """Override _get_grad_norm to avoid SparseCPU NotImplementedError during logging."""
         if grad_norm is not None:
+            if torch.is_tensor(grad_norm):
+                return grad_norm.detach().clone()
             return torch.tensor(grad_norm)
 
         return self._compute_total_norm(cast("Any", model.parameters()))
