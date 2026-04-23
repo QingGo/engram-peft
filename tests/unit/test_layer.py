@@ -3,6 +3,8 @@ from unittest.mock import MagicMock
 
 import torch
 import torch.nn as nn
+import typeguard
+from jaxtyping import jaxtyped
 
 from engram_peft.compression import CompressedTokenizer
 from engram_peft.config import EngramConfig
@@ -10,6 +12,7 @@ from engram_peft.hashing import NgramHashMapping
 from engram_peft.layer import ContextAwareGating, EngramLayer, ShortConv
 
 
+@jaxtyped(typechecker=typeguard.typechecked)
 def test_shortconv_initialization() -> None:
     """测试用例 1：验证初始状态下输出等于输入 (卷积零初始化验证，L1距离 < 1e-6)"""
     hidden_size = 64
@@ -152,6 +155,7 @@ def test_cag_gradients() -> None:
         assert module.w_k[m].weight.grad is not None
 
 
+@jaxtyped(typechecker=typeguard.typechecked)
 def test_engram_layer_forward() -> None:
     """测试用例 9：验证完整EngramLayer的前向传播"""
     config = EngramConfig(

@@ -54,7 +54,10 @@ def test_create_engram_sft_trainer(mock_trainer_class):
     mock_trainer_class.assert_called_once()
     _, kwargs = mock_trainer_class.call_args
     assert kwargs["model"] == mock_model
-    assert kwargs["processing_class"] == mock_tokenizer
+    # Check either processing_class or tokenizer depending on TRL version
+    assert "processing_class" in kwargs or "tokenizer" in kwargs
+    data_key = "processing_class" if "processing_class" in kwargs else "tokenizer"
+    assert kwargs[data_key] == mock_tokenizer
     assert "data_collator" in kwargs
 
     from engram_peft.collator import EngramDataCollator

@@ -1,14 +1,16 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none
 import logging
 import os
 from typing import TYPE_CHECKING, Any, cast
 
 import torch
-from safetensors.torch import load_file, save_file
+
+from engram_peft.utils import safe_load, safe_load_file, safe_save, safe_save_file
 
 if TYPE_CHECKING:
     from engram_peft.model import EngramModel
 
-from engram_peft.protocols import HFModelProtocol
+from engram_peft.types import ModelProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -37,15 +39,15 @@ def save_pretrained_engram(
     if safe_serialization:
         weights_path = os.path.join(save_directory, ADAPTER_SAFE_NAME)
         # Ensure all tensors are on CPU and contiguous for safetensors
-        cpu_state_dict = {
+        cpu_state_dict: dict[str, torch.Tensor] = {
             k: v.cpu().contiguous() if torch.is_tensor(v) else v
             for k, v in state_dict.items()
         }
-        save_file(cpu_state_dict, weights_path, metadata={"format": "engram-peft"})
+        safe_save_file(cpu_state_dict, weights_path, metadata={"format": "engram-peft"})
         logger.info(f"Saved Engram weights to {weights_path}")
     else:
         weights_path = os.path.join(save_directory, ADAPTER_LEGACY_NAME)
-        torch.save(state_dict, weights_path)
+        safe_save(state_dict, weights_path)
         logger.info(f"Saved Engram weights (legacy format) to {weights_path}")
 
 
@@ -62,39 +64,40 @@ def load_engram_state_dict(
         legacy_path = os.path.join(path_or_dir, ADAPTER_LEGACY_NAME)
         if os.path.exists(safe_path):
             logger.info(f"Loading Engram weights from {safe_path}")
-            return cast("dict[str, torch.Tensor]", load_file(safe_path, device="cpu"))
+            return safe_load_file(safe_path)
         elif os.path.exists(legacy_path):
             logger.info(f"Loading Engram weights from {legacy_path} (legacy format)")
             return cast(
                 "dict[str, torch.Tensor]",
-                torch.load(legacy_path, map_location="cpu", weights_only=True),
+                safe_load(legacy_path),
             )
         else:
             raise FileNotFoundError(f"No Engram weight file found in {path_or_dir}")
 
     # It's a file path
     if path_or_dir.endswith(".safetensors"):
-        return cast("dict[str, torch.Tensor]", load_file(path_or_dir, device="cpu"))
+        return safe_load_file(path_or_dir)
     else:
-        # Fallback to torch.load (likely .pt)
+        # Fallback to safe_load (likely .pt)
         return cast(
             "dict[str, torch.Tensor]",
-            torch.load(path_or_dir, map_location="cpu", weights_only=True),
+            safe_load(path_or_dir),
         )
 
 
 def load_engram_weights(
     model: "EngramModel",
     engram_path: str,
+    strict: bool = False,
 ) -> None:
     """
     Loads Engram weights from a directory/file into the model.
     """
     try:
         state_dict = load_engram_state_dict(engram_path)
-        missing, unexpected = model.engram_layers.load_state_dict(
-            state_dict, strict=False
-        )
+        res = model.engram_layers.load_state_dict(state_dict, strict=strict)
+        missing: list[str] = list(cast("Any", res.missing_keys))
+        unexpected: list[str] = list(cast("Any", res.unexpected_keys))
         if missing:
             logger.warning(f"Missing keys during loading: {missing}")
         if unexpected:
@@ -117,15 +120,16 @@ def save_pretrained_unified(
 
     # 1. Identify and Save Base Model Adapters (PEFT Integration)
     # Use feature-detection to avoid hard dependency or circular import issues
-    if getattr(model.base_model, "_is_peft_model", False):
+    base_model = model.base_model
+    if getattr(base_model, "_is_peft_model", False):
         logger.info("Detecting PeftModel (LoRA). Saving base model adapters...")
-        if isinstance(model.base_model, HFModelProtocol):
-            model.base_model.save_pretrained(
+        if isinstance(base_model, ModelProtocol):
+            base_model.save_pretrained(
                 save_directory, safe_serialization=safe_serialization, **kwargs
             )
         else:
             # Fallback for PeftModel that doesn't strictly match Protocol but has the method
-            save_pretrained_func = getattr(model.base_model, "save_pretrained", None)
+            save_pretrained_func = getattr(base_model, "save_pretrained", None)
             if save_pretrained_func:
                 save_pretrained_func(
                     save_directory, safe_serialization=safe_serialization, **kwargs

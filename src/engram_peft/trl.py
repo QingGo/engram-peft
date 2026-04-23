@@ -1,12 +1,19 @@
-import logging
-from typing import Any
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none
+from __future__ import annotations
 
-import torch
-from torch.optim.optimizer import Optimizer
-from transformers import PreTrainedModel, PreTrainedTokenizerBase, TrainingArguments
+import logging
+from typing import TYPE_CHECKING, Any, cast, override
+
+if TYPE_CHECKING:
+    import torch
+    import torch.nn as nn
+    from torch.optim.optimizer import Optimizer
+
+    from engram_peft.types import TokenizerProtocol
+
+from transformers import PreTrainedModel, TrainingArguments
 from transformers.modeling_utils import unwrap_model
-from trl.trainer.sft_config import SFTConfig
-from trl.trainer.sft_trainer import SFTTrainer
+from trl import SFTConfig, SFTTrainer
 
 from engram_peft.collator import EngramDataCollator
 from engram_peft.model import EngramModel
@@ -48,8 +55,13 @@ def prepare_engram_for_sft(
         model.base_model.config, "use_cache"
     ):
         # Fallback for dynamic config
-        model.base_model.config.use_cache = False
+        config = model.base_model.config
+        if isinstance(config, PreTrainedModel):
+            config = config.config
+        object.__setattr__(config, "use_cache", False)
         logger.info("Disabled base model KV cache for SFT (dynamic).")
+    else:
+        logger.warning("Could not disable use_cache on base model config")
 
     # 2. Enable gradient checkpointing if requested
     if use_gradient_checkpointing:
@@ -73,6 +85,9 @@ class EngramCompatibleSFTTrainer(SFTTrainer):
     for `EngramModel` during initialization.
     """
 
+    optimizer_kwargs: dict[str, Any]
+    optimizer: Optimizer | None
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """
         Initializes the trainer with EngramModel compatibility checks.
@@ -82,12 +97,13 @@ class EngramCompatibleSFTTrainer(SFTTrainer):
         model = kwargs.get("model")
         if model is not None and not isinstance(model, EngramModel):
             logger.warning(
-                "Model passed to EngramCompatibleSFTTrainer is not an EngramModel. "
-                "The compatibility layer might not be necessary."
+                "Model passed to EngramCompatibleSFTTrainer is not an EngramModel. %s",
+                "The compatibility layer might not be necessary.",
             )
 
         super().__init__(*args, **kwargs)
 
+    @override
     def create_optimizer(self, model: Any = None) -> Optimizer:
         """
         Creates the MixedOptimizer for EngramModels to support sparse gradients.
@@ -96,7 +112,7 @@ class EngramCompatibleSFTTrainer(SFTTrainer):
             model_to_unwrap = model if model is not None else self.model
             if model_to_unwrap is None:
                 return super().create_optimizer()
-            unwrapped_model = unwrap_model(model_to_unwrap)
+            unwrapped_model = unwrap_model(cast("nn.Module", model_to_unwrap))
             if isinstance(unwrapped_model, EngramModel) and hasattr(
                 unwrapped_model, "create_optimizer"
             ):
@@ -106,8 +122,10 @@ class EngramCompatibleSFTTrainer(SFTTrainer):
                 )
             else:
                 self.optimizer = super().create_optimizer()
+        assert self.optimizer is not None
         return self.optimizer
 
+    @override
     def _clip_grad_norm(
         self, model: torch.nn.Module, max_norm: float | None = None
     ) -> torch.Tensor | None:
@@ -116,9 +134,11 @@ class EngramCompatibleSFTTrainer(SFTTrainer):
         Overrides the default behavior of transformers.Trainer.
         """
         if max_norm is None:
-            max_norm = self.args.max_grad_norm
+            # We must ensure max_norm is not None for comparison
+            _max_norm_val: float = self.args.max_grad_norm or 0.0
+            max_norm = _max_norm_val
 
-        if max_norm is None or max_norm <= 0:
+        if max_norm <= 0:
             return None
 
         unwrapped_model = unwrap_model(model)
@@ -153,7 +173,7 @@ class EngramCompatibleSFTTrainer(SFTTrainer):
 
 def create_engram_sft_trainer(
     model: EngramModel,
-    tokenizer: PreTrainedTokenizerBase,
+    tokenizer: TokenizerProtocol,
     train_dataset: Any,
     eval_dataset: Any | None = None,
     args: TrainingArguments | SFTConfig | None = None,
@@ -201,16 +221,27 @@ def create_engram_sft_trainer(
             args = SFTConfig(**args_dict)
         else:
             # Create a default SFTConfig
-            args = SFTConfig(output_dir="outputs/sft_output", max_length=max_seq_length)
+            args = SFTConfig("outputs/sft_output", max_length=max_seq_length)
 
     # 4. Instantiate EngramCompatibleSFTTrainer
     # This class supports sparse gradient clipping and is mandatory for EngramModel
-    return EngramCompatibleSFTTrainer(
-        model=model,
-        args=args,
-        data_collator=data_collator,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
-        processing_class=tokenizer,
-        **kwargs,
-    )
+    if hasattr(SFTTrainer, "processing_class"):
+        return EngramCompatibleSFTTrainer(
+            model=model,
+            args=args,
+            data_collator=data_collator,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            processing_class=tokenizer,
+            **kwargs,
+        )
+    else:
+        return EngramCompatibleSFTTrainer(
+            model=model,
+            args=args,
+            data_collator=data_collator,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            tokenizer=tokenizer,
+            **kwargs,
+        )

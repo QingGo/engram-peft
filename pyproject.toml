@@ -100,24 +100,62 @@ ignore = ["E501", "F722"]
 # PLC0415: import should be at the top-level (allowed for lazy loading in tests)
 "tests/*" = ["F811", "F401", "B011", "PLC0415"]
 
+
 [tool.basedpyright]
 include = ["src"]
-exclude = ["tests"]
+exclude = [
+    "tests",
+    "examples",
+    "src/engram_peft/inference_template.py",
+    "**/__pycache__",
+    ".venv",
+]
+
 typeCheckingMode = "standard"
 
-# Use Basedpyright-specific rules with string-based severity levels
-reportImplicitAny = "error"
-reportAny = "none"  # Transformers/PEFT stubs are too dynamic for reportAny: all
-reportUnusedImport = "error"
+# ----------------------------------------------------------------------
+# 核心严格规则
+# ----------------------------------------------------------------------
+reportUnknownVariableType = "warning"
+reportUnknownArgumentType = "warning"
+reportUnknownParameterType = "warning"
+reportUnknownLambdaType = "warning"
+reportMissingImports = "error"
+reportUndefinedVariable = "error"
+reportInvalidTypeVarUse = "error"
+reportCallInDefaultInitializer = "error"
+
+# ----------------------------------------------------------------------
+# 第三方库适配
+# ----------------------------------------------------------------------
+reportUnknownMemberType = "warning"       # transformers/peft 存根不完整
+reportMissingTypeStubs = "none"
+reportPrivateImportUsage = "none"         # PyTorch 存根将公开 API 误标记为私有
+
+# ----------------------------------------------------------------------
+# 代码质量提醒
+# ----------------------------------------------------------------------
+reportUnusedImport = "warning"
+reportUnusedVariable = "warning"
 reportUnusedParameter = "warning"
 reportUnnecessaryTypeIgnoreComment = "warning"
-reportUnreachableCode = "warning"
-reportMissingTypeStubs = "none"
-reportPrivateImportUsage = "none"
+reportImplicitStringConcatenation = "warning"
+reportUnnecessaryIsInstance = "warning"
+reportUnnecessaryCast = "warning"
+reportUnnecessaryComparison = "warning"
+reportAssertAlwaysTrue = "warning"
+reportSelfClsParameterName = "warning"
+reportImplicitOverride = "warning"
+reportUnannotatedClassAttribute = "warning"
 
+# ----------------------------------------------------------------------
+# 分级环境
+# ----------------------------------------------------------------------
 executionEnvironments = [
-  { root = "tests", reportArgumentType = "none" }
+    { root = "tests", reportUnknownVariableType = "none", reportUnknownMemberType = "none", reportUnknownArgumentType = "none" },
+    { root = "examples", reportUnknownVariableType = "warning", reportUnknownMemberType = "warning", reportUnknownArgumentType = "warning" },
 ]
+
 
 [dependency-groups]
 dev = [

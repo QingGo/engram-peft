@@ -157,7 +157,10 @@ def inference_demo(
     model = EngramModel.from_pretrained(base_model, ENGRAM_WEIGHTS_DIR)
 
     prompt = "Once upon a time, there was a little robot named"
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.base_model.device)
+    device = model.base_model.device
+    if not isinstance(device, torch.device | str):
+        device = str(device)
+    inputs = tokenizer(prompt, return_tensors="pt").to(device)
 
     print(f"\nPrompt: {prompt}")
 

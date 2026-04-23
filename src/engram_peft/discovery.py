@@ -1,12 +1,18 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import torch
 import torch.nn as nn
-from transformers import PreTrainedTokenizerBase
 
-from engram_peft.protocols import HFConfigProtocol, HFModelProtocol
+from engram_peft.types import (
+    ConfigProtocol,
+    HasComputeDtype,
+    ModelProtocol,
+    TokenizerProtocol,
+)
+from engram_peft.utils.general import get_submodule_by_path
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +64,23 @@ class ArchitectureResolver:
     """
 
     @staticmethod
+    def resolve_layer_id(
+        _module: nn.Module,
+        module_name: str,
+    ) -> int | None:
+        """
+        Helper to extract layer ID from a module name string.
+        """
+        parts = module_name.split(".")
+        for part in reversed(parts):
+            if part.isdigit():
+                return int(part)
+        return None
+
+    @staticmethod
     def resolve(
         model: nn.Module,
-        tokenizer: PreTrainedTokenizerBase | None = None,
+        tokenizer: TokenizerProtocol | None = None,
         config: Any | None = None,
     ) -> ResolvedMetadata:
         """
@@ -125,13 +145,13 @@ class ArchitectureResolver:
 
         # 2. model config
         base_config = None
-        if isinstance(model, HFModelProtocol):
+        if isinstance(model, ModelProtocol):
             base_config = model.config
         else:
             base_config = getattr(model, "config", None)
 
         if base_config is not None:
-            if isinstance(base_config, HFConfigProtocol):
+            if isinstance(base_config, ConfigProtocol):
                 return base_config.hidden_size, "model.config.hidden_size"
 
             # Check top level first for non-standard configs
@@ -149,7 +169,7 @@ class ArchitectureResolver:
             # Check nested text_config (common in multimodal models)
             text_config = getattr(base_config, "text_config", None)
             if text_config is not None:
-                if isinstance(text_config, HFConfigProtocol):
+                if isinstance(text_config, ConfigProtocol):
                     return (
                         text_config.hidden_size,
                         "model.config.text_config.hidden_size",
@@ -174,7 +194,7 @@ class ArchitectureResolver:
 
     @staticmethod
     def _resolve_original_vocab_size(
-        model: nn.Module, tokenizer: Any | None, config: Any | None
+        model: nn.Module, tokenizer: TokenizerProtocol | None, config: Any | None
     ) -> tuple[int, str]:
         # 1. explicit config
         if config is not None:
@@ -188,13 +208,13 @@ class ArchitectureResolver:
 
         # 3. model config
         base_config = None
-        if isinstance(model, HFModelProtocol):
+        if isinstance(model, ModelProtocol):
             base_config = model.config
         else:
             base_config = getattr(model, "config", None)
 
         if base_config is not None:
-            if isinstance(base_config, HFConfigProtocol):
+            if isinstance(base_config, ConfigProtocol):
                 return base_config.vocab_size, "model.config.vocab_size"
 
             # Check top level
@@ -205,7 +225,7 @@ class ArchitectureResolver:
             # Check nested text_config
             text_config = getattr(base_config, "text_config", None)
             if text_config is not None:
-                if isinstance(text_config, HFConfigProtocol):
+                if isinstance(text_config, ConfigProtocol):
                     return text_config.vocab_size, "model.config.text_config.vocab_size"
 
                 val = getattr(text_config, "vocab_size", None)
@@ -218,7 +238,7 @@ class ArchitectureResolver:
 
     @staticmethod
     def _resolve_pad_id(
-        model: nn.Module, tokenizer: Any | None, config: Any | None
+        model: nn.Module, tokenizer: TokenizerProtocol | None, config: Any | None
     ) -> tuple[int, str]:
         # 1. explicit config
         if config is not None:
@@ -227,21 +247,18 @@ class ArchitectureResolver:
                 return int(val), "EngramConfig.pad_id"
 
         # 2. Tokenizer
-        if (
-            tokenizer is not None
-            and getattr(tokenizer, "pad_token_id", None) is not None
-        ):
+        if tokenizer is not None and tokenizer.pad_token_id is not None:
             return int(tokenizer.pad_token_id), "tokenizer.pad_token_id"
 
         # 3. model config
         base_config = None
-        if isinstance(model, HFModelProtocol):
+        if isinstance(model, ModelProtocol):
             base_config = model.config
         else:
             base_config = getattr(model, "config", None)
 
         if base_config is not None:
-            if isinstance(base_config, HFConfigProtocol):
+            if isinstance(base_config, ConfigProtocol):
                 if base_config.pad_token_id is not None:
                     return int(base_config.pad_token_id), "model.config.pad_token_id"
 
@@ -253,7 +270,7 @@ class ArchitectureResolver:
             # Check nested text_config
             text_config = getattr(base_config, "text_config", None)
             if text_config is not None:
-                if isinstance(text_config, HFConfigProtocol):
+                if isinstance(text_config, ConfigProtocol):
                     if text_config.pad_token_id is not None:
                         return (
                             int(text_config.pad_token_id),
@@ -279,13 +296,12 @@ class ArchitectureResolver:
         ):
             path = config.layer_container_path
             try:
-                container = ArchitectureResolver.get_submodule_by_path(model, path)
+                container = get_submodule_by_path(model, path)
                 if isinstance(container, nn.ModuleList):
                     return path, "EngramConfig.layer_container_path"
 
                 raise ValueError(
-                    f"Explicit layer_container_path '{path}' exists but is not a nn.ModuleList "
-                    f"(found {type(container)})."
+                    f"Explicit layer_container_path '{path}' exists but is not a nn.ModuleList (found {type(container)})."
                 ) from None
             except AttributeError:
                 raise ValueError(
@@ -305,7 +321,7 @@ class ArchitectureResolver:
             paths = ARCH_LAYER_MAPPING[model_type]
             for path in paths:
                 try:
-                    container = ArchitectureResolver.get_submodule_by_path(model, path)
+                    container = get_submodule_by_path(model, path)
                     if isinstance(container, nn.ModuleList):
                         return path, f"Architecture Registry ({model_type})"
                 except (AttributeError, ValueError):
@@ -317,55 +333,22 @@ class ArchitectureResolver:
             return path, "Heuristic scanner"
 
         raise ValueError(
-            "Could not find transformer layers container (nn.ModuleList). "
-            "Please specify 'layer_container_path' in EngramConfig."
+            "Could not find transformer layers container (nn.ModuleList). Please specify 'layer_container_path' in EngramConfig."
         )
 
     @staticmethod
     def _get_model_type(model: nn.Module) -> str | None:
         base_config = None
-        if isinstance(model, HFModelProtocol):
+        if isinstance(model, ModelProtocol):
             base_config = model.config
         else:
             base_config = getattr(model, "config", None)
 
         if base_config is not None:
-            if isinstance(base_config, HFConfigProtocol):
+            if isinstance(base_config, ConfigProtocol):
                 return base_config.model_type
             return getattr(base_config, "model_type", None)
         return None
-
-    @staticmethod
-    def get_submodule_by_path(model: nn.Module, path: str) -> nn.Module:
-        """
-        Returns the submodule at the given dot-separated path.
-        Automatically traverses through common wrappers like PeftModel or EngramModel
-        if an attribute is missing on the wrapper but present in the base_model.
-        """
-        if not path:
-            return model
-        segments = path.split(".")
-        curr: Any = model
-        for seg in segments:
-            if hasattr(curr, seg):
-                curr = getattr(curr, seg)
-            else:
-                # Check for PEFT/Engram wrappers (nominal and structural)
-                base_model = getattr(curr, "base_model", None)
-                if isinstance(base_model, nn.Module) and hasattr(base_model, seg):
-                    curr = getattr(base_model, seg)
-                    continue
-
-                raise AttributeError(
-                    f"Module {type(curr).__name__} has no attribute {seg}. "
-                    "Traversal failed at this segment. If this is a wrapped model, "
-                    "ensure the path reflects the wrapped structure or update ArchitectureResolver."
-                )
-        if not isinstance(curr, nn.Module):
-            raise TypeError(
-                f"Path '{path}' did not resolve to an nn.Module (found {type(curr)})."
-            )
-        return curr
 
     @staticmethod
     def resolve_layer_dtype(
@@ -395,13 +378,11 @@ class ArchitectureResolver:
                     )
 
         # 2. BitsAndBytes compute_dtype detection
-        if hasattr(target_module, "compute_dtype"):
-            val = target_module.compute_dtype
-            if isinstance(val, torch.dtype):
-                return (
-                    val,
-                    f"Quantized compute_dtype ({target_module.__class__.__name__})",
-                )
+        if isinstance(target_module, HasComputeDtype):
+            return (
+                target_module.compute_dtype,
+                f"Quantized compute_dtype ({target_module.__class__.__name__})",
+            )
 
         # 3. Parameter Sampling
         try:
@@ -425,10 +406,12 @@ class ArchitectureResolver:
     def find_largest_module_list(model: nn.Module) -> str | None:
         """Heuristically finds the largest nn.ModuleList in the model tree."""
         candidates: list[tuple[str, int]] = []
+        # Explicit typing to resolve Unknown from torch.named_modules()
         for name, module in model.named_modules():
+            name = cast("str", name)
+            module = cast("nn.Module", module)
             if isinstance(module, torch.nn.ModuleList) and len(module) > 0:
-                if all(isinstance(m, torch.nn.Module) for m in module):
-                    candidates.append((name, len(module)))
+                candidates.append((name, len(module)))
         if not candidates:
             return None
         candidates.sort(key=lambda x: (x[1], -len(x[0])), reverse=True)

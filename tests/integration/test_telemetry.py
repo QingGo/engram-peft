@@ -1,20 +1,11 @@
-from typing import Any
+from typing import Any, cast, override
 from unittest.mock import MagicMock, patch
 
 import torch
 import torch.nn as nn
 from transformers import TrainingArguments
 
-from engram_peft import EngramConfig, EngramModel, EngramTrainer
-
-
-class MockEngramLayer(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        self.gating = MagicMock()
-        # Mocking last_gate as [B, L, M, 1]
-        # Half 1.0, half 0.0 -> mean 0.5, inactive_rate 0.5
-        self.gating.last_gate = torch.tensor([1.0, 0.0, 1.0, 0.0]).view(1, 4, 1, 1)
+from engram_peft import EngramConfig, EngramLayer, EngramModel, EngramTrainer
 
 
 def test_model_telemetry_stats() -> None:
@@ -32,10 +23,16 @@ def test_model_telemetry_stats() -> None:
     model = MagicMock(spec=EngramModel)
     model.config = config
 
-    # Manually set up some mock layers
-    model.engram_layers = nn.ModuleDict(
-        {"0": MockEngramLayer(), "1": MockEngramLayer()}
-    )
+    # 2. Setup mock layers that satisfy isinstance(layer, EngramLayer)
+    layer0 = MagicMock(spec=EngramLayer)
+    layer0.gating = MagicMock()
+    layer0.gating.last_gate = torch.tensor([1.0, 0.0, 1.0, 0.0]).view(1, 4, 1, 1)
+
+    layer1 = MagicMock(spec=EngramLayer)
+    layer1.gating = MagicMock()
+    layer1.gating.last_gate = torch.tensor([1.0, 0.0, 1.0, 0.0]).view(1, 4, 1, 1)
+
+    model.engram_layers = nn.ModuleDict({"0": layer0, "1": layer1})
 
     # Use the real get_telemetry_stats implementation
     stats = EngramModel.get_telemetry_stats(model)
@@ -52,6 +49,12 @@ def test_trainer_telemetry_collection(tmp_path: Any) -> None:
 
     # Inherit from EngramModel to pass isinstance checks reliably
     class MockModel(EngramModel):
+        config: EngramConfig
+        base_model: nn.Module
+        backbone_param: nn.Parameter
+        dense_param: nn.Parameter
+        sparse_param: nn.Parameter
+
         def __init__(self, config_obj: EngramConfig) -> None:
             # Skip real EngramModel.__init__
             nn.Module.__init__(self)
@@ -61,7 +64,8 @@ def test_trainer_telemetry_collection(tmp_path: Any) -> None:
             self.dense_param = nn.Parameter(torch.zeros(10))  # zero_rate should be 1.0
             self.sparse_param = nn.Parameter(torch.ones(10) * 0.5)
 
-        def get_telemetry_stats(self) -> dict:
+        @override
+        def get_telemetry_stats(self) -> dict[str, float]:
             return {"mock_gate": 123.0}
 
     model = MockModel(config)

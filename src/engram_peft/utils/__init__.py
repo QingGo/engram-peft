@@ -1,3 +1,15 @@
+from .compat import (
+    as_scalar,
+    safe_config_from_pretrained,
+    safe_from_numpy,
+    safe_load,
+    safe_load_file,
+    safe_model_from_pretrained,
+    safe_save,
+    safe_save_file,
+    safe_snapshot_download,
+    safe_tokenizer_from_pretrained,
+)
 from .config_utils import patch_config
 from .general import (
     MixedOptimizer,
@@ -24,4 +36,14 @@ __all__ = [
     "patch_config",
     "apply_peft_patches",
     "get_optimal_precision_config",
+    "safe_load_file",
+    "safe_save_file",
+    "safe_load",
+    "safe_save",
+    "safe_model_from_pretrained",
+    "safe_config_from_pretrained",
+    "safe_tokenizer_from_pretrained",
+    "safe_from_numpy",
+    "safe_snapshot_download",
+    "as_scalar",
 ]

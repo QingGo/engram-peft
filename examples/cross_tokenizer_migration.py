@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 
 from engram_peft.config import EngramConfig
+from engram_peft.layer import EngramLayer
 from engram_peft.model import get_engram_model
 
 
@@ -47,8 +48,11 @@ def main() -> None:
     src_model = get_engram_model(base_model, src_config)
 
     # Fill with identifiable weights
+    src_layer = src_model.engram_layers["0"]
+    if not isinstance(src_layer, EngramLayer):
+        raise TypeError("Expected EngramLayer")
     with torch.no_grad():
-        src_model.engram_layers["0"].multi_head_embedding.embedding.weight.fill_(7.7)
+        src_layer.multi_head_embedding.embedding.weight.fill_(7.7)
 
     src_model.save_pretrained(save_dir)
     print(f"Source model (Tokenizer A) saved to {save_dir}")
@@ -63,8 +67,11 @@ def main() -> None:
         enable_tokenizer_compression=False,
     )
     target_model = get_engram_model(base_model, target_config)
+    target_layer = target_model.engram_layers["0"]
+    if not isinstance(target_layer, EngramLayer):
+        raise TypeError("Expected EngramLayer")
     with torch.no_grad():
-        target_model.engram_layers["0"].multi_head_embedding.embedding.weight.zero_()
+        target_layer.multi_head_embedding.embedding.weight.zero_()
 
     print("Target model (Tokenizer B) initialized with zero weights.")
 
@@ -95,10 +102,8 @@ def main() -> None:
         target_model.remap_from_corpus(corpus_text, save_dir)
 
     # 4. Verification
-    target_emb = target_model.engram_layers[
-        "0"
-    ].multi_head_embedding.embedding.weight.data
-    remapped_indices = (target_emb == 7.7).any()
+    target_emb = target_layer.multi_head_embedding.embedding.weight.data
+    remapped_indices = torch.any(target_emb == 7.7).item()
     print(f"Weights successfully migrated across tokenizers: {remapped_indices}")
 
     # Cleanup

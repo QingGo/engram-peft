@@ -1,13 +1,17 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none
+from __future__ import annotations
+
 import dataclasses
 import os
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar, cast, final, override
 
-from transformers import PretrainedConfig
+from transformers import PretrainedConfig as PreTrainedConfig
 
 
 @dataclass(kw_only=True)
-class EngramConfig(PretrainedConfig):
+@final
+class EngramConfig(PreTrainedConfig):
     """Configuration class for Engram PEFT module.
 
     This class inherits from transformers.PretrainedConfig and uses python
@@ -15,13 +19,13 @@ class EngramConfig(PretrainedConfig):
     the specifications in the Engram paper Appendix A Table 5.
     """
 
-    model_type = "engram"
+    model_type: ClassVar[str] = "engram"
 
     engram_vocab_size_per_ngram: list[int] = field(
         default_factory=lambda: [1131200, 1131200],
         metadata={
             "help": "Total number of hash buckets for each N-gram size (e.g., [2, 3]). "
-            "Matches Engram paper Appendix A Table 5."
+            + "Matches Engram paper Appendix A Table 5."
         },
     )
     ngram_sizes: list[int] = field(
@@ -156,14 +160,14 @@ class EngramConfig(PretrainedConfig):
         default=None,
         metadata={
             "help": "Explicit data type for Engram parameters (e.g., 'float32', 'float16', 'bfloat16'). "
-            "If None, it will be automatically detected from the backbone's compute_dtype."
+            + "If None, it will be automatically detected from the backbone's compute_dtype."
         },
     )
     use_sparse_embeddings: bool = field(
         default=True,
         metadata={
             "help": "Whether to use sparse embeddings for Engram layers. Enabled by default for performance. "
-            "Note: Standard HF Trainers (SFTTrainer) do not support sparse gradients and require this to be False."
+            + "Note: Standard HF Trainers (SFTTrainer) do not support sparse gradients and require this to be False."
         },
     )
     engram_version: str = field(
@@ -201,49 +205,7 @@ class EngramConfig(PretrainedConfig):
         engram_version: str = "1.2.2",
         **kwargs: Any,
     ):
-        """Constructs EngramConfig.
-
-        Args:
-            engram_vocab_size_per_ngram (List[int], optional):
-                Total hash bucket capacity per N-gram size. Defaults to [1131200, 1131200].
-            ngram_sizes (List[int], optional):
-                Context window sizes for N-gram extraction. Defaults to [2, 3].
-            n_head_per_ngram (int, optional):
-                Hashing heads per N-gram. Defaults to 8.
-            embedding_dim (int, optional):
-                Internal dimension for Engram embeddings. Defaults to 1280.
-            enable_tokenizer_compression (bool, optional):
-                Enable V -> V' mapping to reduce entropy in token space. Defaults to True.
-            target_layers (List[int], optional):
-                Indices of transformer layers where Engram is injected. Defaults to [2, 15], 0-indexed.
-            hc_mult (int, optional):
-                Multiplier for hashing logic. Defaults to 4.
-            combine_mhc (bool, optional):
-                Summation of MHC features if True. Defaults to True.
-            conv_kernel_size (int, optional):
-                Kernel size for temporal conv block. Defaults to 4.
-            conv_dilation (int, optional):
-                Dilation rate for conv block. Matches max_ngram_size if None.
-            conv_zero_init (bool, optional):
-                Initialize conv as identity. Defaults to True.
-            gating_zero_init (bool, optional): Zero initialization for gates. Defaults to True.
-            learning_rate_multiplier (float, optional):
-                LR boost factor for engram params. Defaults to 5.0.
-            weight_decay (float, optional):
-                Weight decay. Defaults to 0.0.
-            tokenizer_name_or_path (str, optional):
-                [Recommended] Path/name of the tokenizer. If None, ArchitectureResolver
-                will attempt detection, but explicit path is safer for compression.
-            compressed_vocab_size (int, optional):
-                [Persistence] Resolved hashing vocab size. Automatically set after first run.
-            pad_id (int, optional):
-                [Auto-Detect] Token ID used for padding. If None, detected from model/tokenizer.
-            seed (int, optional):
-                Seed for bucket hashing. Defaults to 0.
-            hidden_size (int, optional):
-                [Auto-Detect] Dimensionality of the base model. If None, detected from model.config.
-            **kwargs: Extra arguments passed to PretrainedConfig.
-        """
+        """Constructs EngramConfig."""
         self.engram_vocab_size_per_ngram = (
             engram_vocab_size_per_ngram
             if engram_vocab_size_per_ngram is not None
@@ -287,15 +249,15 @@ class EngramConfig(PretrainedConfig):
             if not hasattr(self, k):
                 setattr(self, k, v)
 
+    @override
     @classmethod
-    def from_dict(cls, config_dict: dict[str, Any], **kwargs: Any) -> "EngramConfig":
+    def from_dict(cls, config_dict: dict[str, Any], **kwargs: Any) -> EngramConfig:
         """Instantiates an EngramConfig from a python dictionary."""
-        return super().from_dict(config_dict, **kwargs)
+        return cast("EngramConfig", super().from_dict(config_dict, **kwargs))
 
+    @override
     def to_dict(self) -> dict[str, Any]:
         """Serializes this instance to a Python dictionary."""
-        # PretrainedConfig.to_dict handles basic fields but we need to ensure
-        # all dataclass fields are included appropriately
         output = super().to_dict()
 
         # Override output with dataclass explicit values to capture our specific attributes
@@ -305,6 +267,7 @@ class EngramConfig(PretrainedConfig):
         output["model_type"] = self.model_type
         return output
 
+    @override
     @classmethod
     def from_pretrained(
         cls,
@@ -315,18 +278,22 @@ class EngramConfig(PretrainedConfig):
         token: str | bool | None = None,
         revision: str = "main",
         **kwargs: Any,
-    ) -> "EngramConfig":
+    ) -> EngramConfig:
         """Loads from JSON file/pretrained repo."""
-        return super().from_pretrained(
-            pretrained_model_name_or_path,
-            cache_dir=cache_dir,
-            force_download=force_download,
-            local_files_only=local_files_only,
-            token=token,
-            revision=revision,
-            **kwargs,
+        return cast(
+            "EngramConfig",
+            super().from_pretrained(
+                pretrained_model_name_or_path,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                local_files_only=local_files_only,
+                token=token,
+                revision=revision,
+                **kwargs,
+            ),
         )
 
+    @override
     def save_pretrained(
         self,
         save_directory: str | os.PathLike[Any],

@@ -1,26 +1,37 @@
 import importlib.resources
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, cast
+from typing import TYPE_CHECKING, Annotated, Any, TypedDict, cast
 
 import typer
 import yaml
-from datasets import load_dataset
 from peft import LoraConfig, get_peft_model
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    PreTrainedModel,
-    TrainingArguments,
-)
 
 from engram_peft.collator import EngramDataCollator
 from engram_peft.config import EngramConfig
 from engram_peft.model import TrainMode, get_engram_model
 from engram_peft.trainer import EngramTrainer
+from engram_peft.utils.compat import (
+    create_safe_training_args,
+    safe_causal_lm_from_pretrained,
+    safe_dataset_map,
+    safe_load_dataset,
+    safe_tokenizer_from_pretrained,
+    safe_trainer_train,
+)
 
 if TYPE_CHECKING:
-    import torch.nn as nn
+    from datasets import Dataset
+
+
+class CLIConfig(TypedDict, total=False):
+    model_name_or_path: str
+    engram_config: dict[str, Any]
+    lora_config: dict[str, Any] | None
+    training_args: dict[str, Any]
+    data_args: dict[str, Any]
+    train_mode: str
+
 
 app = typer.Typer(help="Engram-PEFT Command Line Interface")
 
@@ -137,7 +148,7 @@ def train(
     ] = None,
 ) -> None:
     """Trains an Engram-augmented model."""
-    config = {}
+    config: CLIConfig = {}
     if config_path:
         if not config_path.exists():
             typer.secho(
@@ -146,7 +157,7 @@ def train(
             )
             raise typer.Exit(code=1)
         with open(config_path) as f:
-            config = yaml.safe_load(f)
+            config = cast("CLIConfig", yaml.safe_load(f))
     elif model:
         config = {"model_name_or_path": model}
     else:
@@ -156,7 +167,7 @@ def train(
         raise typer.Exit(code=1)
 
     if overrides:
-        apply_overrides(config, overrides)
+        apply_overrides(cast("dict[str, Any]", config), overrides)
 
     model_name = config.get("model_name_or_path")
     if not model_name:
@@ -164,12 +175,17 @@ def train(
         raise typer.Exit(code=1)
 
     engram_dict = config.get("engram_config", {})
+    assert isinstance(engram_dict, dict)
     lora_dict = config.get("lora_config")
+    if lora_dict is not None:
+        assert isinstance(lora_dict, dict)
     training_dict = config.get("training_args", {})
+    assert isinstance(training_dict, dict)
     data_dict = config.get("data_args", {})
+    assert isinstance(data_dict, dict)
 
     typer.echo(f"[*] Loading tokenizer & model: {model_name}")
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    tokenizer = safe_tokenizer_from_pretrained(model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -177,7 +193,7 @@ def train(
     engram_config = EngramConfig(tokenizer_name_or_path=model_name, **engram_dict)
 
     # Explicitly type base_model to satisfy mypy
-    base_model: nn.Module = AutoModelForCausalLM.from_pretrained(
+    base_model = safe_causal_lm_from_pretrained(
         model_name, torch_dtype="auto", device_map="auto"
     )
 
@@ -188,8 +204,7 @@ def train(
         lora_config = LoraConfig(**lora_dict)
         # get_peft_model expects PreTrainedModel, so we cast the AutoModel result
         # and then cast the PeftModel result to keep base_model consistently typed
-        pm = cast("PreTrainedModel", base_model)
-        base_model = cast("PreTrainedModel", get_peft_model(pm, lora_config))
+        base_model = cast("Any", get_peft_model(cast("Any", base_model), lora_config))
         # Default to preserving LoRA trainable weights
         if train_mode is None:
             train_mode = "preserve_trainable"
@@ -209,7 +224,7 @@ def train(
         f"[*] Wrapping model with Engram layers (train_mode={resolved_train_mode})"
     )
     engram_model = get_engram_model(
-        base_model,
+        cast("Any", base_model),
         engram_config,
         tokenizer=tokenizer,
         train_mode=resolved_train_mode,
@@ -219,16 +234,34 @@ def train(
     ds_name = data_dict.get("dataset_name")
     if dataset_path:
         typer.echo(f"[*] Loading local dataset: {dataset_path}")
-        ext = Path(dataset_path).suffix[1:]
+        path_obj = Path(dataset_path)
+        suffix = path_obj.suffix
+        if not suffix:
+            # Fallback or error if no extension
+            ext = "json"  # Default to json if no extension, or we could error
+            typer.secho(
+                f"Warning: No file extension found for {dataset_path}, assuming {ext}",
+                fg=typer.colors.YELLOW,
+            )
+        else:
+            ext = suffix[1:]
+
         if ext == "jsonl":
             ext = "json"
-        dataset = load_dataset(ext, data_files=dataset_path, split="train")
+
+        split = data_dict.get("split", "train")
+        dataset = cast(
+            "Dataset", safe_load_dataset(ext, data_files=dataset_path, split=split)
+        )
     elif ds_name:
         typer.echo(f"[*] Loading Hugging Face dataset: {ds_name}")
-        dataset = load_dataset(
-            ds_name,
-            data_dict.get("dataset_config_name"),
-            split=data_dict.get("split", "train"),
+        dataset = cast(
+            "Dataset",
+            safe_load_dataset(
+                ds_name,
+                name=data_dict.get("dataset_config_name"),
+                split=data_dict.get("split", "train"),
+            ),
         )
     else:
         typer.secho("Error: No dataset specified.", fg=typer.colors.RED)
@@ -242,11 +275,12 @@ def train(
             max_length=data_dict.get("max_length", 512),
             padding=False,
         )
-        assert isinstance(tokenized, dict)
-        return tokenized
+        # BatchEncoding is dict-like, we cast to satisfy static analysis
+        return cast("dict[str, Any]", tokenized)
 
     typer.echo("[*] Tokenizing dataset")
-    tokenized_dataset = dataset.map(
+    tokenized_dataset = safe_dataset_map(
+        dataset,
         tokenize_function,
         batched=True,
         remove_columns=dataset.column_names,
@@ -266,7 +300,9 @@ def train(
     training_dict.setdefault("save_strategy", "no")
     training_dict.setdefault("logging_steps", 10)
 
-    training_args = TrainingArguments(output_dir=str(output_dir), **training_dict)
+    training_args = create_safe_training_args(
+        output_dir=str(output_dir), **training_dict
+    )
 
     trainer = EngramTrainer(
         model=engram_model,
@@ -276,7 +312,7 @@ def train(
     )
 
     typer.echo("[*] Starting training...")
-    trainer.train()
+    safe_trainer_train(trainer)
 
     typer.echo(f"[*] Saving adapter to {output_dir}")
     engram_model.save_pretrained(str(output_dir))

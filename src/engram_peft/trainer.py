@@ -1,4 +1,5 @@
-from typing import Any
+# pyright: reportUnknownMemberType=none, reportUnknownArgumentType=none, reportUnknownVariableType=none, reportUnusedParameter=none, reportUnnecessaryComparison=none
+from typing import Any, override
 
 import torch
 import torch.nn as nn
@@ -26,6 +27,13 @@ class EngramTrainer(Trainer):
     preferred choice when `use_sparse_embeddings=True` is set in the EngramConfig.
     """
 
+    optimizer_kwargs: dict[str, Any]
+    _initial_weights: dict[int, torch.Tensor]
+    _last_ce_loss: float
+    _last_entropy_loss: float
+    optimizer: Optimizer | None = None
+    lr_scheduler: torch.optim.lr_scheduler.LRScheduler | None = None
+
     def __init__(
         self,
         *args: Any,
@@ -34,10 +42,10 @@ class EngramTrainer(Trainer):
     ) -> None:
         super().__init__(*args, **kwargs)
         self.optimizer_kwargs = optimizer_kwargs or {}
-        self._initial_weights: dict[int, torch.Tensor] = {}
+        self._initial_weights = {}
         # Metrics for Fair Comparison
-        self._last_ce_loss: float = 0.0
-        self._last_entropy_loss: float = 0.0
+        self._last_ce_loss = 0.0
+        self._last_entropy_loss = 0.0
 
         if self.model is not None:
             self._handle_initial_freezing()
@@ -72,6 +80,7 @@ class EngramTrainer(Trainer):
                 for p in groups.get(group_name, []):
                     self._initial_weights[id(p)] = p.detach().cpu().clone()
 
+    @override
     def create_optimizer(self, model: Any = None) -> Optimizer:
         """
         Creates the MixedOptimizer if not provided.
@@ -90,8 +99,10 @@ class EngramTrainer(Trainer):
                 # Non-Engram models (e.g. plain HF models or LoRA baselines) should
                 # use the standard Transformers optimizer creation path.
                 self.optimizer = super().create_optimizer(model)
+        assert self.optimizer is not None
         return self.optimizer
 
+    @override
     def create_scheduler(
         self, num_training_steps: int, optimizer: Optimizer | None = None
     ) -> torch.optim.lr_scheduler.LRScheduler:
@@ -123,8 +134,10 @@ class EngramTrainer(Trainer):
                     num_training_steps=num_training_steps,
                     warmup_steps=self.args.get_warmup_steps(num_training_steps),
                 )
+        assert self.lr_scheduler is not None
         return self.lr_scheduler
 
+    @override
     def compute_loss(
         self,
         model: nn.Module,
@@ -181,6 +194,7 @@ class EngramTrainer(Trainer):
         """Computes the total gradient norm across dense and sparse parameters."""
         return compute_grad_norm(parameters)
 
+    @override
     def training_step(
         self,
         model: nn.Module,
@@ -205,10 +219,12 @@ class EngramTrainer(Trainer):
                     param.requires_grad = True
 
         try:
+            # Try with num_items_in_batch (Transformers 4.46+)
             loss = super().training_step(
                 model, inputs, num_items_in_batch=num_items_in_batch
             )
         except TypeError:
+            # Fallback for older versions
             loss = super().training_step(model, inputs)
 
         # Capture telemetry AFTER backward but BEFORE optimizer zero_grad/step finishes
@@ -219,6 +235,7 @@ class EngramTrainer(Trainer):
 
         return loss
 
+    @override
     def _clip_grad_norm(
         self, model: nn.Module, max_norm: float | None = None
     ) -> torch.Tensor | None:
@@ -230,6 +247,10 @@ class EngramTrainer(Trainer):
 
         unwrapped_model = unwrap_model(model)
         total_norm = self._compute_total_norm(model.parameters())
+
+        # Standard Transformers Trainer behavior: if no gradients, return None early
+        if total_norm is None:
+            return None
 
         use_per_group = (
             unwrapped_model.config.clip_grad_per_group
@@ -243,9 +264,6 @@ class EngramTrainer(Trainer):
             apply_group_wise_clipping(groups, max_norm)
         else:
             # Standard Global Norm Clipping
-            if total_norm is None:
-                return None
-
             clip_coef = max_norm / (total_norm + 1e-6)
             if clip_coef < 1.0:
                 for p in model.parameters():
@@ -257,6 +275,7 @@ class EngramTrainer(Trainer):
                             g.detach().mul_(clip_coef.to(g.device))
         return total_norm
 
+    @override
     def _get_grad_norm(
         self, model: nn.Module, grad_norm: float | None = None
     ) -> torch.Tensor | None:
@@ -298,6 +317,7 @@ class EngramTrainer(Trainer):
             last_entropy_loss=self._last_entropy_loss,
         )
 
+    @override
     def log(self, logs: dict[str, float], start_time: float | None = None) -> None:
         """Injects deep telemetry into the logs before they are sent to callbacks."""
         # Only collect telemetry if we are logging (i.e. at logging_steps)

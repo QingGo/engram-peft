@@ -63,8 +63,8 @@ try:
     from examples.benchmarks.persistence import BenchmarkResult
     from examples.benchmarks.plotting import plot_benchmark_comparison
 except ImportError:
-    BenchmarkResult = None  # type: ignore
-    plot_benchmark_comparison = None  # type: ignore
+    BenchmarkResult = None
+    plot_benchmark_comparison = None
 
 # Defaults
 DEFAULT_MODEL = "Qwen/Qwen3.5-4B"
@@ -273,12 +273,7 @@ def run_example(args: argparse.Namespace) -> None:
         lora_dropout=0.05,
         bias="none",
     )
-    if not isinstance(base_model, PreTrainedModel):
-        # We need the nominal type for get_peft_model
-        raise TypeError("base_model must be a PreTrainedModel for PEFT")
-    if not isinstance(base_model, PreTrainedModel):
-        # We need the nominal type for get_peft_model
-        raise TypeError("base_model must be a PreTrainedModel for PEFT")
+
     model: PeftModel | PeftMixedModel | EngramModel = get_peft_model(
         base_model, lora_config
     )

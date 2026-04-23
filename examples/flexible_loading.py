@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 
 from engram_peft.config import EngramConfig
+from engram_peft.layer import EngramLayer
 from engram_peft.model import get_engram_model
 
 
@@ -80,10 +81,15 @@ def main() -> None:
     )
 
     # 4. Verification
-    src_emb_0 = src_model.engram_layers["0"].multi_head_embedding.embedding.weight.data
-    target_emb_5 = target_model.engram_layers[
-        "5"
-    ].multi_head_embedding.embedding.weight.data
+    src_layer0 = src_model.engram_layers["0"]
+    target_layer5 = target_model.engram_layers["5"]
+    if not isinstance(src_layer0, EngramLayer) or not isinstance(
+        target_layer5, EngramLayer
+    ):
+        raise TypeError("Expected EngramLayer")
+
+    src_emb_0 = src_layer0.multi_head_embedding.embedding.weight.data
+    target_emb_5 = target_layer5.multi_head_embedding.embedding.weight.data
 
     # Check if weights were copied (first prime-sized block)
     src_p = src_model.hash_mapping.prime_tables[0][0][0]
@@ -91,8 +97,8 @@ def main() -> None:
     print(f"Embedding weights transfer (Layer 0->5) successful: {is_match}")
 
     # Check if gating is zero-init
-    gating_weight = target_model.engram_layers["5"].gating.w_v.weight
-    is_zero = torch.all(gating_weight == 0)
+    gating_weight = target_layer5.gating.w_v.weight
+    is_zero = torch.all(gating_weight == 0).item()
     print(f"Gating weights zero-initialized as requested: {is_zero}")
 
     # Cleanup

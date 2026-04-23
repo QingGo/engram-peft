@@ -44,12 +44,12 @@ class TestCLI(unittest.TestCase):
         )
         self.assertEqual(config["root_val"], 10)
 
-    @patch("engram_peft.cli.AutoTokenizer")
-    @patch("engram_peft.cli.AutoModelForCausalLM")
+    @patch("engram_peft.cli.safe_tokenizer_from_pretrained")
+    @patch("engram_peft.cli.safe_causal_lm_from_pretrained")
     @patch("engram_peft.cli.get_engram_model")
-    @patch("engram_peft.cli.load_dataset")
+    @patch("engram_peft.cli.safe_load_dataset")
     @patch("engram_peft.cli.EngramTrainer")
-    @patch("engram_peft.cli.TrainingArguments")
+    @patch("engram_peft.cli.create_safe_training_args")
     def test_train_logic(
         self,
         mock_train_args: Any,
@@ -60,8 +60,8 @@ class TestCLI(unittest.TestCase):
         mock_tokenizer: Any,
     ) -> None:
         # Setup mocks
-        mock_tokenizer.from_pretrained.return_value = MagicMock()
-        mock_model.from_pretrained.return_value = MagicMock()
+        mock_tokenizer.return_value = MagicMock()
+        mock_model.return_value = MagicMock()
         mock_ds.return_value = MagicMock()
 
         dummy_config = {
@@ -76,7 +76,7 @@ class TestCLI(unittest.TestCase):
             config_path = Path(f.name)
 
         def mock_get_engram_side_effect(
-            model: Any, config: Any, tokenizer: Any = None, **kwargs: Any
+            _model: Any, config: Any, _tokenizer: Any = None, **_kwargs: Any
         ) -> Any:
             # Simulate ArchitectureResolver/EngramModel side effects on config
             config.compressed_vocab_size = 1000
@@ -94,15 +94,15 @@ class TestCLI(unittest.TestCase):
                 )
 
             # Verify calls
-            mock_tokenizer.from_pretrained.assert_called_with("tiny-model")
-            mock_model.from_pretrained.assert_called()
+            mock_tokenizer.assert_called_with("tiny-model")
+            mock_model.assert_called()
             mock_get_engram.assert_called()
-            mock_ds.assert_called_with("dummy_ds", None, split="train")
+            mock_ds.assert_called_with("dummy_ds", name=None, split="train")
             mock_trainer.assert_called()
 
             # Check if override was applied inside the call
             mock_train_args.assert_called()
-            args, kwargs = mock_train_args.call_args
+            _args, kwargs = mock_train_args.call_args
             self.assertEqual(kwargs["output_dir"], "test_out")
             self.assertEqual(kwargs["learning_rate"], 2e-5)
 
@@ -119,16 +119,16 @@ class TestCLI(unittest.TestCase):
             self.assertIn("training_args:", content)
             self.assertIn("ngram_sizes:", content)
 
-    @patch("engram_peft.cli.AutoTokenizer")
-    @patch("engram_peft.cli.AutoModelForCausalLM")
+    @patch("engram_peft.cli.safe_tokenizer_from_pretrained")
+    @patch("engram_peft.cli.safe_causal_lm_from_pretrained")
     @patch("engram_peft.cli.get_engram_model")
-    @patch("engram_peft.cli.load_dataset")
+    @patch("engram_peft.cli.safe_load_dataset")
     @patch("engram_peft.cli.EngramDataCollator")
     @patch("engram_peft.cli.EngramTrainer")
     def test_train_with_model_and_local_dataset(
         self,
-        mock_trainer: Any,
-        mock_collator: Any,
+        _mock_trainer: Any,
+        _mock_collator: Any,
         mock_load_ds: Any,
         mock_get_model: Any,
         mock_model_cls: Any,
@@ -136,7 +136,7 @@ class TestCLI(unittest.TestCase):
     ) -> None:
         # Mocking returns
         mock_tokenizer = MagicMock()
-        mock_tok_cls.from_pretrained.return_value = mock_tokenizer
+        mock_tok_cls.return_value = mock_tokenizer
         mock_tokenizer.pad_token = None
 
         mock_dataset = MagicMock()
@@ -145,7 +145,7 @@ class TestCLI(unittest.TestCase):
 
         # We need to simulate EngramModel behavior on config for the collator check
         def mock_get_engram_side_effect(
-            model: Any, config: Any, tokenizer: Any = None, **kwargs: Any
+            _model: Any, config: Any, _tokenizer: Any = None, **_kwargs: Any
         ) -> Any:
             config.compressed_vocab_size = 1000
             config.pad_id = 0
@@ -177,7 +177,7 @@ class TestCLI(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
 
         # Verify model loading
-        mock_model_cls.from_pretrained.assert_called_once()
+        mock_model_cls.assert_called_once()
         # Verify dataset loading (local jsonl -> json)
         mock_load_ds.assert_called_once()
         args, kwargs = mock_load_ds.call_args

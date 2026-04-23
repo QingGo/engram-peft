@@ -1,4 +1,6 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none
 from dataclasses import dataclass, field
+from typing import cast
 
 import numpy as np
 import torch
@@ -23,12 +25,16 @@ class NgramHashMapping:
     pad_id: int = 2
     seed: int = 0
 
+    # Internal state fields (excluded from __init__)
+    all_multipliers: dict[int, np.ndarray] = field(init=False)
+    prime_tables: dict[int, list[list[int]]] = field(init=False)
+
     def __post_init__(self) -> None:
         if self.compressed_vocab_size <= 0:
             raise ValueError("compressed_vocab_size must be a positive integer.")
 
         self.max_ngram_size = max(self.ngram_sizes)
-        self.all_multipliers: dict[int, np.ndarray] = {}
+        self.all_multipliers = {}
 
         for layer_id in self.layer_ids:
             # Layer-specific seed
@@ -52,11 +58,13 @@ class NgramHashMapping:
 
     def find_next_prime(self, start: int, seen_primes: set[int]) -> int:
         """Finds the next unused global prime number strictly greater than start."""
-        p_val = nextprime(start)
-        p = start + 1 if p_val is None else int(p_val)
+        p_val = cast("int", nextprime(start))
+        assert isinstance(p_val, int)
+        p = p_val
         while p in seen_primes:
-            p_val = nextprime(p)
-            p = p + 1 if p_val is None else int(p_val)
+            p_val = cast("int", nextprime(p))
+            assert isinstance(p_val, int)
+            p = p_val
         return p
 
     def calculate_vocab_size_across_layers(self) -> dict[int, list[list[int]]]:
@@ -70,9 +78,9 @@ class NgramHashMapping:
         primes_across_layers: dict[int, list[list[int]]] = {}
 
         for layer_id in sorted(self.layer_ids):
-            layer_primes = []
+            layer_primes: list[list[int]] = []
             for i in range(len(self.ngram_sizes)):
-                head_primes = []
+                head_primes: list[int] = []
                 # Distribute the total bucket capacity among the heads
                 base_vocab_size = (
                     self.engram_vocab_size_per_ngram[i] // self.n_head_per_ngram
@@ -104,7 +112,7 @@ class NgramHashMapping:
 
         # 2. Extract sliding windows for all unique n-gram sizes
         # ngrams_cache: Dict[n_size, np.ndarray] of shape [batch_size, seq_len, n_size]
-        ngrams_cache = {}
+        ngrams_cache: dict[int, np.ndarray] = {}
         for n in set(self.ngram_sizes):
             view_shape = (batch_size, seq_len, n)
             strides = padded_tokens.strides + (padded_tokens.strides[-1],)
@@ -125,11 +133,11 @@ class NgramHashMapping:
 
             for i, n in enumerate(self.ngram_sizes):
                 # shape: [B, L, n]
-                ngrams = ngrams_cache[n]
+                ngrams: np.ndarray = ngrams_cache[n]
                 m = multipliers[:n]
 
                 # weighted: [B, L, n]
-                weighted = ngrams * m
+                weighted: np.ndarray = ngrams * m
 
                 # mix: [B, L]
                 # Using reduce for bitwise_xor for better performance

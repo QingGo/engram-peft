@@ -57,25 +57,19 @@ from engram_peft.protocols import HFModelProtocol
 from engram_peft.utils import apply_peft_patches
 from examples.benchmarks.data_utils import get_dataset_template
 
-# Try to import safetensors
-try:
-    from safetensors.torch import load_file as safe_load_file
-except ImportError:
-    safe_load_file = None  # type: ignore
-
 # Check for latest transformers features
 try:
     from transformers import FineGrainedFP8Config
 except ImportError:
-    FineGrainedFP8Config = None  # type: ignore
+    FineGrainedFP8Config = None
 
 # Try to import optional visualization components
 try:
     from examples.benchmarks.persistence import BenchmarkResult
     from examples.benchmarks.plotting import plot_benchmark_comparison
 except ImportError:
-    BenchmarkResult = None  # type: ignore
-    plot_benchmark_comparison = None  # type: ignore
+    BenchmarkResult = None
+    plot_benchmark_comparison = None
 
 # Defaults
 DEFAULT_MODEL = "mistralai/Ministral-3-3B-Instruct-2512"
@@ -378,13 +372,8 @@ def run_example(args: argparse.Namespace) -> None:
 
     print(f"Prompt: {prompt}")
     with torch.no_grad():
-        if isinstance(model, GenerativeProtocol):
-            gen_model: GenerativeProtocol = model
-            output = gen_model.generate(
-                **inputs, max_new_tokens=50, tokenizer=tokenizer
-            )
-        else:
-            raise TypeError("Model does not satisfy generative interface")
+        gen_model: GenerativeProtocol = model
+        output = gen_model.generate(**inputs, max_new_tokens=50, tokenizer=tokenizer)
     print(f"Response: {tokenizer.decode(output[0], skip_special_tokens=True)}")
 
     # 8. Reload and Verify

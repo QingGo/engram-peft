@@ -160,7 +160,7 @@ class BenchmarkEngine:
                 self.tokenizer,
                 self.eval_dataset,
                 batch_size=self.args.batch_size,
-                max_length=self.args.max_length,
+                _max_length=self.args.max_length,
             )
             self.results["base"] = BenchmarkResult(
                 method="base",

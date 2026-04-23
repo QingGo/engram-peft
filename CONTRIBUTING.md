@@ -8,8 +8,8 @@ All contributors (including AI Agents) should follow these layers of verificatio
 
 ### L1: Real-time Feedback (IDE)
 - **Tool**: Basedpyright
-- **Goal**: Catch hidden Any types and syntax bugs while typing.
-- **Config**: Enabled `reportImplicitAny` for zero-leakage type safety.
+- **Goal**: Catch internal logic errors and ensure type safety.
+- **Config**: Strict internal enforcement (Error level); Permissive external boundaries (Warning level).
 
 ### L2: Automated Pre-commit (Standardization)
 - **Tool**: Git Hooks (via `pre-commit`)
@@ -21,8 +21,8 @@ All contributors (including AI Agents) should follow these layers of verificatio
 ### L3: Deep Verification (Deep Logic)
 - **Tools**: Basedpyright & sprintest (Unit)
 - **Command**: `make type-check && make test-unit`
-- **Goal**: Ensure 100% type and shape safety in `src/` and verify core logic in <2 seconds.
-- **Philosophy**: Use `jaxtyping` for tensor shape validation to prevent dimension mismatches.
+- **Goal**: Ensure 100% type safety in core internal logic and verify algorithmic correctness.
+- **Philosophy**: Use `jaxtyping` for tensor shape validation. Zero tolerance for `errors`. All high-frequency 3rd-party library calls (Transformers/Datasets) must be routed through `src/engram_peft/utils/compat.py` for "type washing". `warnings` are only allowed in these designated "Boundary Files" via file-level pyright silencing configurations.
 
 ### L4: Integration & Regression (Full Fidelity)
 - **Tool**: sprintest (Integration)
@@ -41,8 +41,9 @@ All contributors (including AI Agents) should follow these layers of verificatio
 ## 📏 Coding Style
 - Follow PEP 8 (handled by Ruff).
 - Docstrings are encouraged for all public APIs.
-- Type hints and **jaxtyping** annotations are **mandatory** for all code in `src/`. 
-- Core layers and tensor operations must specify dimensions (e.g., `Float[Tensor, "batch seq_len dim"]`).
+- Type hints are mandatory for all code in `src/`.
+- **jaxtyping** annotations are **mandatory** for module boundaries and core tensor operations (e.g., `Float[Tensor, "batch seq_len dim"]`).
+- **IMPORTANT**: To avoid runtime overhead, you must use the dynamic decorator `from engram_peft.types import jaxtyped` instead of importing directly from `jaxtyping`. Runtime shape checking via `typeguard` is only enabled when `ENGRAM_DEBUG_SHAPES=1` is set in the environment.
 
 ---
 

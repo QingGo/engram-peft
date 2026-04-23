@@ -1,3 +1,6 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportUnknownParameterType=none
+from typing import Any, cast, final, override
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -6,8 +9,11 @@ from jaxtyping import Float, Int64
 from engram_peft.compression import CompressedTokenizer
 from engram_peft.config import EngramConfig
 from engram_peft.hashing import NgramHashMapping
+from engram_peft.types import jaxtyped
+from engram_peft.utils import safe_from_numpy
 
 
+@final
 class ShortConv(nn.Module):
     """
     ShortConv module as described in the Engram paper.
@@ -16,6 +22,14 @@ class ShortConv(nn.Module):
     Applies independent RMSNorm per branch, depthwise causal convolution,
     and optional SiLU activation, followed by a residual connection.
     """
+
+    hidden_size: int
+    kernel_size: int
+    dilation: int
+    hc_mult: int
+    activation: bool
+    norms: nn.ModuleList
+    conv: nn.Conv1d
 
     def __init__(
         self,
@@ -26,8 +40,9 @@ class ShortConv(nn.Module):
         hc_mult: int = 4,
         activation: bool = True,
         zero_init: bool = True,
+        **kwargs: Any,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         self.hidden_size = hidden_size
         self.kernel_size = kernel_size
         self.dilation = dilation
@@ -39,7 +54,7 @@ class ShortConv(nn.Module):
             [nn.RMSNorm(hidden_size, eps=norm_eps) for _ in range(hc_mult)]
         )
 
-        # 深度wise卷积 (groups=total_channels)
+        # Depthwise convolution (groups=total_channels)
         total_channels = hc_mult * hidden_size
         self.conv = nn.Conv1d(
             in_channels=total_channels,
@@ -63,6 +78,8 @@ class ShortConv(nn.Module):
             if self.conv.bias is not None:
                 nn.init.zeros_(self.conv.bias)
 
+    @jaxtyped
+    @override
     def forward(
         self, x: Float[torch.Tensor, "batch seq hc_mult hidden_dim"]
     ) -> Float[torch.Tensor, "batch seq hc_mult hidden_dim"]:
@@ -78,7 +95,7 @@ class ShortConv(nn.Module):
         batch_size, seq_len, hc_mult, hidden_size = x.shape
 
         # Step 1: Independent RMSNorm per branch
-        normed_branches = []
+        normed_branches: list[torch.Tensor] = []
         for i in range(hc_mult):
             normed_branches.append(self.norms[i](x[:, :, i, :]))
 
@@ -115,6 +132,7 @@ class ShortConv(nn.Module):
         return (out + x).to(x.dtype)
 
 
+@final
 class ContextAwareGating(nn.Module):
     """
     Context-Aware Gating module as described in Section 2.3 and 2.4 of the Engram paper.
@@ -123,6 +141,18 @@ class ContextAwareGating(nn.Module):
     Engram embeddings (e_t), and applies it to the value projection of the embeddings.
     """
 
+    config: EngramConfig
+    engram_hidden_size: int
+    hidden_size: int
+    hc_mult: int
+    w_v: nn.Linear
+    w_k: nn.ModuleList
+    norm_h: nn.ModuleList
+    norm_k: nn.ModuleList
+    last_gate: torch.Tensor | None
+    last_entropy: float
+    gating_entropy: torch.Tensor
+
     def __init__(
         self,
         config: EngramConfig,
@@ -130,19 +160,20 @@ class ContextAwareGating(nn.Module):
         hidden_size: int,
         hc_mult: int = 4,
         zero_init: bool = True,
+        **kwargs: Any,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         self.config = config
         self.engram_hidden_size = engram_hidden_size
         self.hidden_size = hidden_size
         self.hc_mult = hc_mult
 
-        # 步骤1：共享的Value投影
+        # Step 1: Shared Value projection
         self.w_v = nn.Linear(engram_hidden_size, hidden_size, bias=False)
         if zero_init:
             nn.init.zeros_(self.w_v.weight)
 
-        # 步骤2：分支特定的Key投影 W_K^(m)
+        # Step 2: Branch-specific Key projection W_K^(m)
         self.w_k = nn.ModuleList(
             [
                 nn.Linear(engram_hidden_size, hidden_size, bias=False)
@@ -150,12 +181,14 @@ class ContextAwareGating(nn.Module):
             ]
         )
 
-        # 步骤3：独立的 RMSNorm
+        # Step 3: Independent RMSNorm
         self.norm_h = nn.ModuleList([nn.RMSNorm(hidden_size) for _ in range(hc_mult)])
         self.norm_k = nn.ModuleList([nn.RMSNorm(hidden_size) for _ in range(hc_mult)])
-        self.last_gate: torch.Tensor | None = None
-        self.last_entropy: float = 0.0  # Default to zero
+        self.last_gate = None
+        self.last_entropy = 0.0  # Default to zero
 
+    @jaxtyped
+    @override
     def forward(
         self,
         embeddings: Float[torch.Tensor, "batch seq engram_hidden"],
@@ -171,23 +204,23 @@ class ContextAwareGating(nn.Module):
         Returns:
             torch.Tensor: gated_value of shape [batch_size, seq_len, hc_mult, hidden_size]
         """
-        # 步骤1：共享的Value投影
+        # Step 1: Shared Value projection
         value = self.w_v(embeddings)  # [B, L, D]
 
-        normed_keys_list = []
-        normed_queries_list = []
+        normed_keys_list: list[torch.Tensor] = []
+        normed_queries_list: list[torch.Tensor] = []
 
         for m in range(self.hc_mult):
-            # 步骤2：分支特定的Key投影
+            # Step 2: Branch-specific Key projection
             key_m = self.w_k[m](embeddings)
-            # 步骤3：对每个分支的key和hidden_states应用独立的RMSNorm
+            # Step 3: Independent RMSNorm per branch
             normed_keys_list.append(self.norm_k[m](key_m))
             normed_queries_list.append(self.norm_h[m](hidden_states[:, :, m, :]))
 
         normed_key = torch.stack(normed_keys_list, dim=2)  # [B, L, M, D]
         normed_query = torch.stack(normed_queries_list, dim=2)  # [B, L, M, D]
 
-        # 步骤4：计算门控
+        # Step 4: Compute gating signal
         gate = (normed_key * normed_query).sum(dim=-1) / (self.hidden_size**0.5)
         gate = gate.abs().clamp_min(1e-6).sqrt() * gate.sign()
         gate = gate.sigmoid().unsqueeze(-1)  # [B, L, M, 1]
@@ -205,7 +238,7 @@ class ContextAwareGating(nn.Module):
             with torch.no_grad():
                 self.last_entropy = self.gating_entropy.item()
 
-        # 步骤5：门控调制
+        # Step 5: Gating modulation
         gated_value = gate * value.unsqueeze(
             2
         )  # [B, L, M, 1] * [B, L, 1, D] -> [B, L, M, D]
@@ -213,16 +246,24 @@ class ContextAwareGating(nn.Module):
         return gated_value
 
 
+@final
 class MultiHeadEmbedding(nn.Module):
     """
     Concatenated embedding table for all hash heads across all N-gram sizes.
     Retrieves vectors from K independent virtual embedding tables using offset indices.
     """
 
+    offsets: torch.Tensor
+    embedding: nn.Embedding
+
     def __init__(
-        self, primes: list[int], embedding_dim_per_head: int, sparse: bool = True
+        self,
+        primes: list[int],
+        embedding_dim_per_head: int,
+        sparse: bool = True,
+        **kwargs: Any,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         offsets = [0]
         for p in primes[:-1]:
             offsets.append(offsets[-1] + p)
@@ -234,6 +275,8 @@ class MultiHeadEmbedding(nn.Module):
         )
         nn.init.normal_(self.embedding.weight, mean=0.0, std=0.02)
 
+    @jaxtyped
+    @override
     def forward(
         self, hash_indices: Int64[torch.Tensor, "batch seq total_heads"]
     ) -> Float[torch.Tensor, "batch seq total_heads dim_per_head"]:
@@ -249,6 +292,7 @@ class MultiHeadEmbedding(nn.Module):
         return self.embedding(shifted_indices)
 
 
+@final
 class EngramLayer(nn.Module):
     """
     Complete Engram Layer as described in Section 2.1-2.3 of the Engram paper.
@@ -260,12 +304,30 @@ class EngramLayer(nn.Module):
     5. Residual connection to Transformer Block hidden states
     """
 
+    config: EngramConfig
+    layer_id: int
+    compressor: CompressedTokenizer | None
+    ngram_sizes: list[int]
+    hash_heads: int
+    num_branches: int
+    kernel_size: int
+    dilation: int
+    hidden_dim: int
+    total_embedding_dim: int
+    embedding_dim_per_head: int
+    hash_mapping: NgramHashMapping
+    multi_head_embedding: MultiHeadEmbedding
+    gating: ContextAwareGating
+    short_conv: ShortConv
+    last_norm_ratio: float
+
     def __init__(
         self,
         config: EngramConfig,
         layer_id: int,
         primes: list[int],
         compressor: CompressedTokenizer | None = None,
+        **kwargs: Any,
     ):
         """
         Initialize the EngramLayer.
@@ -310,11 +372,11 @@ class EngramLayer(nn.Module):
         assert mapped_pad_id is not None
 
         self.hash_mapping = NgramHashMapping(
+            compressed_vocab_size=config.compressed_vocab_size,
             engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
             ngram_sizes=config.ngram_sizes,
             n_head_per_ngram=config.n_head_per_ngram,
             layer_ids=[layer_id],
-            compressed_vocab_size=config.compressed_vocab_size,
             pad_id=mapped_pad_id,
             seed=config.seed,
         )
@@ -344,7 +406,7 @@ class EngramLayer(nn.Module):
             activation=True,
             zero_init=config.conv_zero_init,
         )
-        self.last_norm_ratio: float = 0.0  # Default to zero
+        self.last_norm_ratio = 0.0  # Default to zero
 
     @property
     def value_proj(self) -> nn.Linear:
@@ -362,6 +424,8 @@ class EngramLayer(nn.Module):
     def norm2(self) -> nn.ModuleList:
         return self.gating.norm_h
 
+    @jaxtyped
+    @override
     def forward(
         self,
         input_ids: Int64[torch.Tensor, "batch seq"] | None = None,
@@ -401,7 +465,7 @@ class EngramLayer(nn.Module):
             # Step 1: Compress and hash
             c_ids = self.compressor.compress(input_ids)
             hashes_np = self.hash_mapping.hash(c_ids)[self.layer_id]
-            engram_hash_indices = torch.from_numpy(hashes_np).to(hidden_states.device)
+            engram_hash_indices = safe_from_numpy(hashes_np).to(hidden_states.device)
 
         # Step 1: Retrieve vectors from MultiHeadEmbedding and flatten
         all_embeddings = self.multi_head_embedding(engram_hash_indices)
@@ -434,11 +498,14 @@ class EngramLayer(nn.Module):
 
         if self.config.enable_telemetry:
             with torch.no_grad():
-                y_norm = torch.linalg.vector_norm(y.float(), ord=2)
-                h_norm = (
+                y_norm = cast(
+                    "torch.Tensor", torch.linalg.vector_norm(y.float(), ord=2)
+                )
+                h_norm = cast(
+                    "torch.Tensor",
                     torch.linalg.vector_norm(hidden_states.float(), ord=2)
                     if is_3d
-                    else torch.linalg.vector_norm(hidden_states_m.float(), ord=2)
+                    else torch.linalg.vector_norm(hidden_states_m.float(), ord=2),
                 )
                 self.last_norm_ratio = (y_norm / (h_norm + 1e-8)).item()
 

@@ -82,7 +82,7 @@ class TestHubIntegration(unittest.TestCase):
 
                 shutil.rmtree(expected_dir)
 
-    @patch("engram_peft.model.snapshot_download")
+    @patch("engram_peft.model.safe_snapshot_download")
     @patch("engram_peft.config.EngramConfig.from_pretrained")
     @patch("engram_peft.model.EngramModel.load_engram")
     def test_from_pretrained_hub(
@@ -117,7 +117,7 @@ class TestHubIntegration(unittest.TestCase):
             self.model.save_pretrained(tmp_dir)
 
             # Should load from local path directly
-            with patch("engram_peft.model.snapshot_download") as mock_snapshot:
+            with patch("engram_peft.model.safe_snapshot_download") as mock_snapshot:
                 model = EngramModel.from_pretrained(self.base_model, tmp_dir)
                 mock_snapshot.assert_not_called()
                 self.assertIsInstance(model, EngramModel)

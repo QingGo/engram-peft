@@ -1,20 +1,52 @@
+from collections.abc import Iterable, Iterator
 from typing import Any
 
 import pytest
+import torch
+import torch.nn as nn
 
 
 class MockTokenizer:
+    pad_token_id: int
+    eos_token_id: int
+    tokenizer_vocab_size: int
+    vocab: dict[str, int]
+
     def __init__(self) -> None:
         self.pad_token_id = 0
         self.eos_token_id = 1
         self.tokenizer_vocab_size = 129280  # from NgramHashMapping default
         self.vocab = {f"token_{i}": i for i in range(10)}
 
+    @property
+    def vocab_size(self) -> int:
+        return self.tokenizer_vocab_size
+
     def __len__(self) -> int:
         return 10
 
-    def decode(self, tids: list[int], **kwargs: Any) -> str:
-        return " ".join([f"token_{t}" for t in tids])
+    def __call__(self, text: str | list[str] | Any, **kwargs: Any) -> Any:
+        # Mock call for unit tests
+        import torch
+
+        if isinstance(text, str):
+            ids = [self.vocab.get(text, 0)]
+        else:
+            ids = [0]
+        return {"input_ids": torch.tensor([ids]), "attention_mask": torch.tensor([[1]])}
+
+    def encode(self, text: str | list[str] | Any, **kwargs: Any) -> list[int]:
+        return [0]
+
+    def decode(
+        self,
+        token_ids: list[int] | Any,
+        skip_special_tokens: bool = False,
+        **kwargs: Any,
+    ) -> str:
+        if isinstance(token_ids, torch.Tensor):
+            token_ids = token_ids.tolist()
+        return " ".join([f"token_{t}" for t in token_ids])
 
     def convert_ids_to_tokens(self, tid: int) -> str:
         return f"token_{tid}"

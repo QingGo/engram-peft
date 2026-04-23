@@ -59,8 +59,8 @@ try:
     from examples.benchmarks.persistence import BenchmarkResult
     from examples.benchmarks.plotting import plot_benchmark_comparison
 except ImportError:
-    BenchmarkResult = None  # type: ignore
-    plot_benchmark_comparison = None  # type: ignore
+    BenchmarkResult = None
+    plot_benchmark_comparison = None
 
 # Defaults
 DEFAULT_MODEL = "google/gemma-4-E2B-it"
@@ -265,8 +265,6 @@ def run_example(args: argparse.Namespace) -> None:
         lora_dropout=0.05,
         bias="none",
     )
-    if not isinstance(base_model, PreTrainedModel):
-        raise TypeError("base_model must be a PreTrainedModel for LoRA")
 
     model: PeftModel | PeftMixedModel | EngramModel = get_peft_model(
         base_model, lora_config
@@ -390,20 +388,17 @@ def run_example(args: argparse.Namespace) -> None:
         raise TypeError("tokenizer must be a PreTrainedTokenizerBase")
 
     with torch.no_grad():
-        if isinstance(model, GenerativeProtocol):
-            # Re-bind to force clean type binding and retain parameter checking
-            gen_model: GenerativeProtocol = model
-            output = gen_model.generate(
-                **inputs,
-                max_new_tokens=100,
-                max_length=None,
-                do_sample=True,
-                temperature=0.7,
-                stop_strings=["<end_of_turn>"],
-                tokenizer=tokenizer,
-            )
-        else:
-            raise TypeError("Model does not satisfy generative interface")
+        # Re-bind to force clean type binding and retain parameter checking
+        gen_model: GenerativeProtocol = model
+        output = gen_model.generate(
+            **inputs,
+            max_new_tokens=100,
+            max_length=None,
+            do_sample=True,
+            temperature=0.7,
+            stop_strings=["<end_of_turn>"],
+            tokenizer=tokenizer,
+        )
     print(f"Response: {tokenizer.decode(output[0], skip_special_tokens=True)}")
 
     # 8. Reload and Verify

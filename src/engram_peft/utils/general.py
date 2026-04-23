@@ -1,10 +1,13 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none
+from __future__ import annotations
+
 import math
-from collections.abc import Callable, Iterable, Mapping
 from typing import (
     TYPE_CHECKING,
     Any,
     cast,
     overload,
+    override,
 )
 
 import torch
@@ -18,14 +21,60 @@ from transformers import (
     DataCollatorForLanguageModeling,
     PreTrainedTokenizerBase,
     Trainer,
-    TrainingArguments,
+)
+
+from engram_peft.utils.compat import (
+    create_safe_training_args,
+    safe_cuda_is_available,
+    safe_cuda_is_bf16_supported,
+    safe_norm,
+    safe_stack,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable, Mapping
+
     from engram_peft import EngramModel
+    from engram_peft.types import (
+        OptimizerFactory,
+        OptimizerSpec,
+        SafeTrainingArguments,
+    )
 
 
-def get_optimal_precision_config() -> dict[str, Any]:
+def get_submodule_by_path(model: torch.nn.Module, path: str) -> torch.nn.Module:
+    """
+    Returns the submodule at the given dot-separated path.
+    Automatically traverses through common wrappers like PeftModel or EngramModel
+    if an attribute is missing on the wrapper but present in the base_model.
+    """
+    if not path:
+        return model
+    segments = path.split(".")
+    curr: Any = model
+    for seg in segments:
+        if hasattr(curr, seg):
+            curr = getattr(curr, seg)
+        else:
+            # Check for PEFT/Engram wrappers (nominal and structural)
+            base_model = getattr(curr, "base_model", None)
+            if isinstance(base_model, torch.nn.Module) and hasattr(base_model, seg):
+                curr = getattr(base_model, seg)
+                continue
+
+            raise AttributeError(
+                f"Module {type(curr).__name__} has no attribute {seg}. "
+                + "Traversal failed at this segment. If this is a wrapped model, "
+                + "ensure the path reflects the wrapped structure or update the utility."
+            )
+    if not isinstance(curr, torch.nn.Module):
+        raise TypeError(
+            f"Path '{path}' did not resolve to an nn.Module (found {type(curr)})."
+        )
+    return curr
+
+
+def get_optimal_precision_config() -> dict[str, bool]:
     """
     Returns the optimal precision configuration based on available hardware.
     Prefers bf16 on supported GPUs, otherwise falls back to fp16 if CUDA is available.
@@ -33,19 +82,15 @@ def get_optimal_precision_config() -> dict[str, Any]:
     Returns:
         dict[str, bool]: A dictionary containing 'bf16' and 'fp16' flags.
     """
-    is_cuda = torch.cuda.is_available()
+    is_cuda = safe_cuda_is_available()
     if not is_cuda:
         return {"bf16": False, "fp16": False}
 
-    supports_bf16 = torch.cuda.is_bf16_supported()
+    supports_bf16 = safe_cuda_is_bf16_supported()
     return {
         "bf16": supports_bf16,
         "fp16": not supports_bf16,
     }
-
-
-OptimizerFactory = Callable[[list[dict[str, Any]]], Optimizer]
-OptimizerSpec = str | type[Optimizer] | OptimizerFactory
 
 
 class MixedOptimizer(Optimizer):
@@ -55,10 +100,12 @@ class MixedOptimizer(Optimizer):
     parameters in a single Adam optimizer instance.
     """
 
+    optimizers: list[Optimizer]
+
     def __init__(self, optimizers: list[Optimizer]):
         self.optimizers = optimizers
         # Combine parameter groups for transparency and compatibility
-        param_groups = []
+        param_groups: list[dict[str, Any]] = []
         for _i, opt in enumerate(optimizers):
             param_groups.extend(opt.param_groups)
         # We call super().__init__ to ensure the base Optimizer class
@@ -75,6 +122,7 @@ class MixedOptimizer(Optimizer):
     @overload
     def step(self, closure: Callable[[], float]) -> float: ...
 
+    @override
     def step(self, closure: Callable[[], float] | None = None) -> float | None:
         """Performs a single optimization step, ensuring hyperparams are synced."""
         loss = None
@@ -110,15 +158,18 @@ class MixedOptimizer(Optimizer):
 
         return loss
 
+    @override
     def zero_grad(self, set_to_none: bool = True) -> None:
         """Clears the gradients of all optimized parameters."""
         for opt in self.optimizers:
             opt.zero_grad(set_to_none=set_to_none)
 
+    @override
     def state_dict(self) -> dict[str, Any]:
         """Returns the state of the optimizer as a dict."""
         return {"optimizers": [opt.state_dict() for opt in self.optimizers]}
 
+    @override
     def load_state_dict(self, state_dict: dict[str, Any]) -> None:
         """Loads the optimizer state."""
         for opt, sd in zip(self.optimizers, state_dict["optimizers"], strict=False):
@@ -135,10 +186,10 @@ class MixedOptimizer(Optimizer):
 
 
 _OPTIMIZER_REGISTRY: Mapping[str, OptimizerFactory] = {
-    "adam": lambda param_groups: Adam(param_groups),
-    "adamw": lambda param_groups: AdamW(param_groups),
-    "sgd": lambda param_groups: SGD(param_groups),
-    "sparse_adam": lambda param_groups: SparseAdam(param_groups),
+    "adam": lambda params, **kwargs: Adam(params, **kwargs),
+    "adamw": lambda params, **kwargs: AdamW(params, **kwargs),
+    "sgd": lambda params, **kwargs: SGD(params, **kwargs, lr=4e-4),
+    "sparse_adam": lambda params, **kwargs: SparseAdam(params, **kwargs),
 }
 
 
@@ -150,20 +201,19 @@ def _build_optimizer(
         if spec not in _OPTIMIZER_REGISTRY:
             raise ValueError(
                 f"Unknown optimizer '{spec}'. Available built-ins: "
-                f"{', '.join(sorted(_OPTIMIZER_REGISTRY))}"
+                + f"{', '.join(sorted(_OPTIMIZER_REGISTRY))}"
             )
         return _OPTIMIZER_REGISTRY[spec](param_groups)
 
     if isinstance(spec, type) and issubclass(spec, Optimizer):
-        optimizer_cls = cast("OptimizerFactory", spec)
-        return optimizer_cls(param_groups)
+        return cast("OptimizerFactory", spec)(param_groups)
 
     optimizer_factory = cast("OptimizerFactory", spec)
     return optimizer_factory(param_groups)
 
 
 def get_trainable_param_groups(
-    model: "EngramModel",
+    model: EngramModel,
 ) -> dict[str, list[torch.nn.Parameter]]:
     """
     Splits trainable parameters into backbone, Engram dense, and Engram sparse groups.
@@ -175,8 +225,8 @@ def get_trainable_param_groups(
         for _, param in model.base_model.named_parameters()
         if param.requires_grad or freeze_steps > 0
     ]
-    engram_sparse_params = []
-    engram_dense_params = []
+    engram_sparse_params: list[torch.nn.Parameter] = []
+    engram_dense_params: list[torch.nn.Parameter] = []
 
     for name, param in model.engram_layers.named_parameters():
         if not param.requires_grad:
@@ -194,7 +244,7 @@ def get_trainable_param_groups(
 
 
 def get_optimizer(
-    model: "EngramModel",
+    model: EngramModel,
     base_learning_rate: float = 4e-4,
     backbone_learning_rate: float | None = None,
     engram_dense_learning_rate: float | None = None,
@@ -379,7 +429,7 @@ def evaluate_model_loss(
     tokenizer: PreTrainedTokenizerBase,
     dataset: Any,
     batch_size: int = 8,
-    max_length: int = 128,
+    _max_length: int = 128,
     output_dir: str = "outputs/eval",
 ) -> float:
     """
@@ -396,17 +446,19 @@ def evaluate_model_loss(
     Returns:
         float: The calculated eval_loss.
     """
-    eval_args = TrainingArguments(
-        output_dir=output_dir,
-        per_device_eval_batch_size=batch_size,
-        report_to="none",
-        bf16=torch.cuda.is_available() and torch.cuda.is_bf16_supported(),
-        fp16=not (torch.cuda.is_available() and torch.cuda.is_bf16_supported())
-        and torch.cuda.is_available(),
-        dataloader_num_workers=0,  # Avoid overhead for quick eval
-        dataloader_pin_memory=True,
-        remove_unused_columns=True,
-    )
+
+    eval_args_dict: SafeTrainingArguments = {
+        "output_dir": output_dir,
+        "per_device_eval_batch_size": batch_size,
+        "report_to": "none",
+        "bf16": safe_cuda_is_available() and safe_cuda_is_bf16_supported(),
+        "fp16": not (safe_cuda_is_available() and safe_cuda_is_bf16_supported())
+        and safe_cuda_is_available(),
+        "dataloader_num_workers": 0,
+        "dataloader_pin_memory": True,
+        "remove_unused_columns": True,
+    }
+    eval_args = create_safe_training_args(eval_args_dict)
 
     # Use DataCollatorForLanguageModeling to ensure correct label shifting
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
@@ -419,12 +471,12 @@ def evaluate_model_loss(
     )
 
     metrics = trainer.evaluate()
-    return cast("float", metrics.get("eval_loss", 0.0))
+    return metrics.get("eval_loss", 0.0)
 
 
 def compute_grad_norm(parameters: Iterable[torch.nn.Parameter]) -> torch.Tensor | None:
     """Computes the total gradient norm across dense and sparse parameters."""
-    grads = []
+    grads: list[torch.Tensor] = []
     for p in parameters:
         if p.grad is not None:
             if p.grad.is_sparse:
@@ -438,8 +490,10 @@ def compute_grad_norm(parameters: Iterable[torch.nn.Parameter]) -> torch.Tensor 
     # Compute the global L2 norm
     device = grads[0].device
     # Ensure float32 for norm stability
-    norms = [torch.norm(g.detach().float(), 2).to(device) for g in grads]
-    return cast("torch.Tensor", torch.norm(torch.stack(norms), 2))
+    norms: list[torch.Tensor] = [
+        safe_norm(g.detach().float(), 2).to(device) for g in grads
+    ]
+    return safe_norm(safe_stack(norms), 2)
 
 
 def apply_group_wise_clipping(
@@ -476,7 +530,7 @@ def compute_telemetry_stats(
     """Computes parameter/gradient statistics and weight drift across groups."""
     stats: dict[str, float] = {}
     backbone_grad_norm = 0.0
-    engram_grads_list = []
+    engram_grads_list: list[float] = []
 
     for group_name, params in groups.items():
         if not params:
@@ -531,7 +585,7 @@ def compute_telemetry_stats(
                     pid = id(p)
                     if pid in initial_weights:
                         init_p = initial_weights[pid]
-                        total_drift += torch.norm(
+                        total_drift += safe_norm(
                             p.detach().cpu().float() - init_p.float(), 2
                         ).item()
                         drift_count += 1

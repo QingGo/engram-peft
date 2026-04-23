@@ -81,31 +81,25 @@ uv run env SPRINTEST_TARGET_PKG=engram_peft stest tests/unit --cov=src/engram_pe
 
 ---
 
-### 6.1 类型安全与维度校验 (Type & Shape Safety: Zero-Cast/Getattr/Ignore)
+### 6.1 类型安全与维度校验 (Type & Shape Safety: Internal Strict, External Permissive)
 
-本项目使用 **Basedpyright** 作为核心检查引擎，追求极高的静态类型检查准确率，严禁通过逃生舱规避类型错误。同时引入 **jaxtyping** 实现张量维度的静态与运行时双重校验。在处理复杂模型接口时，应遵循以下优先级：
+本项目使用 **Basedpyright** 作为核心检查引擎，遵循“内部严苛、外部包容”的渐进式类型安全策略。
 
-1.  **名义与结构双重保障 (Nominal-Structural Hybrid)**：
-    - **Mixin 继承优先**：对于核心类（如 `EngramModel`），应优先继承官方 Mixin（如 `GenerationMixin`）而非仅在 Protocol 中描述其方法。这能确保在调用 `generate` 等复杂方法时满足 `self` 的名义绑定要求。
-    - **Mixin 辅助协议**：在 `HFModelProtocol` 等协议中，应尽量组合官方的 Mixin 存根。
-2.  **现代化类型收窄 (Modern Type Narrowing)**：
-    - **协议重绑定 (Isolation)**：若 `isinstance` 收窄后仍报 `Invalid self argument`（常见于 Transformers Stub 缺陷），**必须将变量重新绑定到明确声明为专用 Protocol 类型的变量上**，以斩断来自上游库名义类型链的污染。
-    - **零 `getattr` 原则**：严禁使用 `getattr(obj, "method")` 规避方法检查。`getattr` 实际上是参数不可校验的 `cast`，应替换为“协议重绑定”后的直接调用。
-    - **PEP 604 规范**：优先使用 `isinstance(obj, X | Y)`。
-3.  **精细化协议 (Protocol Refinement)**：
-    - 避免定义过于宽泛的“万能协议”。应根据职责拆分为 `GenerativeProtocol`、`SaveableProtocol` 等小协议。
-    - **明确返回类型**：协议属性必须明确具体返回类型（如 `torch.device` 而非 `Any`），防止收窄失败。
-4.  **显式联合类型 (Explicit Union Types)**：
-    - 变量在不同生命周期具有不同类型时，必须显式声明联合类型：`model: PeftModel | EngramModel`。
-5.  **TypedDict 与配置管理**：
-    - 对于复杂的字典参数，应定义 `TypedDict`，避免 `dict[str, Any]` 导致的类型信息丢失。
-6.  **强制溯源与 Stubs 补全**：
-    - 严禁凭记忆猜测。若发现上游库定义有误（如 `tokenizers.Encoding` 缺失 `__len__`），应在本项目内定义修正后的 Protocol。可以通过 .venv 内的代码寻找对应定义。
-7.  **`cast` 的熔断与注释机制**：
-    - 仅在静态分析器已知 Bug 或 Stub 严重错误且无法通过重绑定解决时使用。使用时必须附带 `# type: ignore` 或 `cast` 原因注释。
-8.  **张量维度强制标注 (Jaxtyping Enforcement)**：
-    - 对于核心算子（如 `EngramLayer`）和权重转换逻辑，**必须**使用 `jaxtyping` 标注张量的维度（Shape）和数据类型（Dtype）。
-    - 示例：`def forward(self, x: Float[Tensor, "batch seq_len dim"]) -> Float[Tensor, "batch dim"]:`
+1.  **分级防御原则 (Tiered Defense)**：
+    - **内部代码 (Internal)**：`src/engram_peft` 内部逻辑必须保持 100% 类型安全，禁止 `Any` 泄漏。所有逻辑风险相关的规则（如 `reportUndefinedVariable`）设为 `error`。
+    - **外部边界 (External Boundaries)**：由于 `torch`、`transformers` 等三方库 Stub 不完整，允许在调用边界存在 `Unknown` 类型，相关规则（如 `reportUnknownMemberType`）设为 `warning`。**禁止为了消除 warning 而在业务逻辑中大量编写无意义的 `cast` 或 `ignore`**。
+2.  **隔离层模式 (Isolation/Compatibility Layer)**：
+    - 若某三方函数（如 `load_file`）在多处产生 `Unknown` 噪音，应在 `src/engram_peft/utils/compat.py` 中编写强类型的包装函数（Type-Safe Wrapper），在隔离层内使用 `cast` 将其“洗白”。
+3.  **现代化类型收窄 (Modern Type Narrowing)**：
+    - **协议重绑定 (Isolation)**：若 `isinstance` 收窄后仍报 `Invalid self argument`，必须将变量重新绑定到明确声明为专用 Protocol 类型的变量上。
+    - **零 `getattr` 原则**：严禁使用 `getattr(obj, "method")` 规避方法检查。
+4.  **张量维度标注 (Pragmatic Jaxtyping)**：
+    - 对于公有 API 边界与核心算子（如 `EngramLayer`），必须标注张量的维度。
+    - **零运行时开销**：禁止直接导入 `jaxtyping.jaxtyped`，必须使用自定义的动态装饰器 `from engram_peft.types import jaxtyped`。它在生产环境中是零开销的，只有在测试时设置 `ENGRAM_DEBUG_SHAPES=1` 才会开启 `typeguard` 检查。
+5.  **边界文件选择性屏蔽 (Selective Boundary Silencing)**：
+    - 对于主要负责对接三方库的文件（如 `trl.py`, `compat.py`, `weight_transfer.py`），应在文件头部使用 `# pyright: reportUnknownMemberType=none` 等指令屏蔽无法消除的 `Unknown` 噪音，确保全局 `type-check` 结果的可读性。
+6.  **显式覆盖声明 (Explicit Overrides)**：
+    - 在重写三方库或基类方法时，**必须**使用 `@override` 装饰器（PEP 698），以便在基类接口变动时能被静态分析工具立即发现。
 
 
 ---

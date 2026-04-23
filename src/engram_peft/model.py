@@ -1,17 +1,15 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none
+from __future__ import annotations
+
 import logging
 import os
 import tempfile
-from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast, override
 
-if TYPE_CHECKING:
-    from torch.utils.hooks import RemovableHandle
-
-import numpy as np
 import torch
 import torch.nn as nn
-from huggingface_hub import HfApi, snapshot_download
-from transformers import GenerationMixin, PreTrainedModel, PreTrainedTokenizerBase
+from huggingface_hub import HfApi
+from transformers import GenerationMixin, PreTrainedModel
 
 from engram_peft import saving
 from engram_peft.compression import CompressedTokenizer
@@ -19,19 +17,35 @@ from engram_peft.config import EngramConfig
 from engram_peft.discovery import ArchitectureResolver
 from engram_peft.hashing import NgramHashMapping
 from engram_peft.layer import EngramLayer
-from engram_peft.protocols import (
-    GenerativeProtocol,
-    HFModelProtocol,
+from engram_peft.types import (
+    EngramModelProtocol,
+    ModelProtocol,
     ModelWithTags,
     ToDictProtocol,
+    TokenizerProtocol,
+    jaxtyped,
 )
-from engram_peft.utils import get_optimizer, get_scheduler
+from engram_peft.utils import (
+    as_scalar,
+    get_optimizer,
+    get_scheduler,
+    safe_from_numpy,
+    safe_snapshot_download,
+)
+from engram_peft.utils.general import get_submodule_by_path
 from engram_peft.weight_transfer import (
     align_embedding_table,
     check_compatibility,
     get_layer_mapping,
     remap_weights_from_corpus,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    import numpy as np
+    from jaxtyping import Int, Int64
+    from torch.utils.hooks import RemovableHandle
 
 logger = logging.getLogger(__name__)
 
@@ -45,13 +59,24 @@ class EngramModel(nn.Module, GenerationMixin):
     Wrapper model that injects EngramLayer into a PreTrainedModel via forward hooks.
     """
 
-    _is_engram_model = True
+    _is_engram_model: bool = True
+    base_model: PreTrainedModel | nn.Module | ModelProtocol
+    train_mode: TrainMode
+    config: EngramConfig
+    compressor: CompressedTokenizer | None
+    hash_mapping: NgramHashMapping
+    active_adapter: str
+    peft_config: dict[str, EngramConfig]
+    adapters: nn.ModuleDict
+    _hook_handles: list[RemovableHandle]
+    _current_hash_indices: dict[int, np.ndarray] | torch.Tensor | None
+    _inference_token_buffer: torch.Tensor | None
 
     def __init__(
         self,
-        base_model: PreTrainedModel | nn.Module | HFModelProtocol,
+        base_model: nn.Module,
         config: EngramConfig,
-        tokenizer: PreTrainedTokenizerBase | None = None,
+        tokenizer: TokenizerProtocol | None = None,
     ) -> None:
         """
         Initialize the Engram model.
@@ -63,7 +88,7 @@ class EngramModel(nn.Module, GenerationMixin):
         """
         super().__init__()
         self.base_model = base_model
-        self.train_mode: TrainMode = "engram_only"
+        self.train_mode = "engram_only"
         # hidden_size is now an explicit field in EngramConfig.
         # It should be set correctly when the config is created.
         self.config = config
@@ -115,7 +140,7 @@ class EngramModel(nn.Module, GenerationMixin):
         # Initialize Engram layers for the default adapter
         default_layers = nn.ModuleDict()
         for layer_id in config.target_layers:
-            flat_primes = sum(self.hash_mapping.prime_tables[layer_id], [])
+            flat_primes: list[int] = sum(self.hash_mapping.prime_tables[layer_id], [])
             default_layers[str(layer_id)] = EngramLayer(
                 config=config,
                 layer_id=layer_id,
@@ -124,9 +149,9 @@ class EngramModel(nn.Module, GenerationMixin):
             )
         self.adapters["default"] = default_layers
 
-        self._hook_handles: list[RemovableHandle] = []
-        self._current_hash_indices: dict[int, np.ndarray] | torch.Tensor | None = None
-        self._inference_token_buffer: torch.Tensor | None = None
+        self._hook_handles = []
+        self._current_hash_indices = None
+        self._inference_token_buffer = None
         self._engram_enabled: bool = True
 
         # 4. Apply precision settings
@@ -135,10 +160,9 @@ class EngramModel(nn.Module, GenerationMixin):
         target_dtype = torch.float32
         source = "Default (float32)"
 
-        if isinstance(self.base_model, nn.Module):
-            target_dtype, source = ArchitectureResolver.resolve_layer_dtype(
-                self.base_model, config
-            )
+        target_dtype, source = ArchitectureResolver.resolve_layer_dtype(
+            self.base_model, config
+        )
 
         if config.engram_dtype is not None:
             self.adapters.to(target_dtype)
@@ -165,11 +189,12 @@ class EngramModel(nn.Module, GenerationMixin):
         Prints the number of trainable parameters in the model.
         """
         backbone_all = sum(
-            param.numel() for _, param in self.base_model.named_parameters()
+            param.numel()
+            for _, param in cast("nn.Module", self.base_model).named_parameters()
         )
         backbone_trainable = sum(
             param.numel()
-            for _, param in self.base_model.named_parameters()
+            for _, param in cast("nn.Module", self.base_model).named_parameters()
             if param.requires_grad
         )
         engram_all = sum(param.numel() for _, param in self.adapters.named_parameters())
@@ -183,18 +208,18 @@ class EngramModel(nn.Module, GenerationMixin):
 
         print(
             f"trainable params: {trainable_params:,} "
-            f"(backbone: {backbone_trainable:,}, engram: {engram_trainable:,}) || "
-            f"all params: {all_param:,} || "
-            f"trainable%: {100 * trainable_params / all_param:.4f}"
+            + f"(backbone: {backbone_trainable:,}, engram: {engram_trainable:,}) || "
+            + f"all params: {all_param:,} || "
+            + f"trainable%: {100 * trainable_params / all_param:.4f}"
         )
 
     def get_telemetry_stats(self) -> dict[str, float]:
         """
         Collects activation statistics and diagnostics from all active Engram layers.
         """
-        all_gates = []
-        all_entropies = []
-        all_norm_ratios = []
+        all_hidden_states: list[torch.Tensor] = []
+        all_self_attns: list[torch.Tensor] = []
+        all_cross_attns: list[torch.Tensor] = []
 
         for _, layer in self.engram_layers.items():
             if not isinstance(layer, EngramLayer):
@@ -204,21 +229,21 @@ class EngramModel(nn.Module, GenerationMixin):
             if hasattr(layer, "gating") and hasattr(layer.gating, "last_gate"):
                 gate = layer.gating.last_gate
                 if gate is not None:
-                    all_gates.append(gate.float().flatten())
+                    all_hidden_states.append(gate.float().flatten())
 
                 entropy = getattr(layer.gating, "last_entropy", None)
                 if entropy is not None:
-                    all_entropies.append(entropy)
+                    all_self_attns.append(entropy)
 
             # 2. Layer Diagnostics
             norm_ratio = getattr(layer, "last_norm_ratio", None)
             if norm_ratio is not None:
-                all_norm_ratios.append(norm_ratio)
+                all_cross_attns.append(norm_ratio)
 
-        if not all_gates:
+        if not all_hidden_states:
             return {}
 
-        concat_gates = torch.cat(all_gates)
+        concat_gates = torch.cat(all_hidden_states)
         # Statistics
         mean = concat_gates.mean().item()
         std = concat_gates.std().item()
@@ -236,19 +261,18 @@ class EngramModel(nn.Module, GenerationMixin):
             "gating/min": min_val,
             "gating/inactive_rate": inactive_rate,
         }
-        if all_entropies:
-            stats["gating/entropy"] = sum(all_entropies) / len(all_entropies)
-        if all_norm_ratios:
-            stats["diagnostics/contribution_ratio"] = sum(all_norm_ratios) / len(
-                all_norm_ratios
-            )
+        if all_self_attns:
+            avg_entropy = sum(all_self_attns) / len(all_self_attns)
+            stats["gating/entropy"] = as_scalar(avg_entropy)
+        if all_cross_attns:
+            avg_ratio = sum(all_cross_attns) / len(all_cross_attns)
+            stats["diagnostics/contribution_ratio"] = as_scalar(avg_ratio)
 
         return stats
 
     def get_total_gating_entropy(self) -> torch.Tensor:
         """
-        Aggregates the gating entropy tensors from all active layers.
-        Returns a scalar tensor (sum of entropies) for regularization.
+        Computes the average entropy across all gating layers.
         """
         entropies = []
         for _, layer in self.engram_layers.items():
@@ -263,6 +287,21 @@ class EngramModel(nn.Module, GenerationMixin):
             return torch.tensor(0.0, device=next(self.parameters()).device)
 
         return torch.stack(entropies).mean()
+
+    @property
+    def device(self) -> torch.device:
+        """The device of the base model."""
+        return next(self.base_model.parameters()).device
+
+    @property
+    def dtype(self) -> torch.dtype:
+        """The dtype of the base model."""
+        return next(self.base_model.parameters()).dtype
+
+    @property
+    def layer_id(self) -> int | None:
+        """EngramModel itself does not have a layer_id."""
+        return None
 
     @property
     def engram_layers(self) -> nn.ModuleDict:
@@ -330,17 +369,19 @@ class EngramModel(nn.Module, GenerationMixin):
                     "Could not detect transformer layers. Specify layer_container_path."
                 )
 
-        container = ArchitectureResolver.get_submodule_by_path(
-            self.base_model, container_path
+        container = get_submodule_by_path(
+            cast("nn.Module", self.base_model), container_path
         )
         if not isinstance(container, nn.ModuleList):
             raise ValueError(f"Path '{container_path}' is not a nn.ModuleList.")
         return container
 
-    def _create_pre_hook(self, layer_id: int) -> Callable[[nn.Module, tuple], tuple]:
+    def _create_pre_hook(
+        self, layer_id: int
+    ) -> Callable[[nn.Module, tuple[Any, ...]], tuple[Any, ...]]:
         """Creates a pre-forward hook for a specific layer."""
 
-        def pre_hook(module: nn.Module, args: tuple) -> tuple:
+        def pre_hook(_module: nn.Module, args: tuple[Any, ...]) -> tuple[Any, ...]:
             if not self._engram_enabled or self._current_hash_indices is None:
                 return args
 
@@ -361,7 +402,7 @@ class EngramModel(nn.Module, GenerationMixin):
                 if indices_np.shape[1] != curr_seq_len:
                     return args
 
-                engram_hash_indices = torch.from_numpy(indices_np).to(
+                engram_hash_indices = safe_from_numpy(indices_np).to(
                     hidden_states.device
                 )
             else:
@@ -398,12 +439,14 @@ class EngramModel(nn.Module, GenerationMixin):
 
         return pre_hook
 
-    def _create_model_pre_hook(self) -> Callable:
+    def _create_model_pre_hook(
+        self,
+    ) -> Callable[[nn.Module, tuple[Any, ...], dict[str, Any]], tuple[Any, ...] | None]:
         """Creates a pre-forward hook for the main base model to capture input_ids."""
 
         def model_pre_hook(
-            module: nn.Module, args: tuple, kwargs: dict
-        ) -> tuple | None:
+            _module: nn.Module, args: tuple[Any, ...], kwargs: dict[str, Any]
+        ) -> tuple[Any, ...] | None:
             if not self._engram_enabled:
                 return None
 
@@ -546,7 +589,7 @@ class EngramModel(nn.Module, GenerationMixin):
 
                     logger.info(
                         f"  - [Injected] Layer {layer_id} -> {module_class} "
-                        f"(device: {target_device}, dtype: {target_dtype}, source: {source})"
+                        + f"(device: {target_device}, dtype: {target_dtype}, source: {source})"
                     )
                 except (StopIteration, AttributeError):
                     pass
@@ -557,7 +600,7 @@ class EngramModel(nn.Module, GenerationMixin):
                 self._hook_handles.append(hook_handle)
                 logger.info(
                     f"  - [Injected] Layer {layer_id} -> {module_class} "
-                    f"(device: {target_device if target_device is not None else 'unknown'})"
+                    + f"(device: {target_device if target_device is not None else 'unknown'})"
                 )
 
         self._engram_enabled = True
@@ -569,12 +612,14 @@ class EngramModel(nn.Module, GenerationMixin):
         self._hook_handles = []
         self._engram_enabled = False
 
+    @jaxtyped
+    @override
     def forward(
         self,
-        input_ids: torch.Tensor | None = None,
-        labels: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        engram_hash_indices: torch.Tensor | None = None,
+        input_ids: Int[torch.Tensor, "batch seq"] | None = None,
+        labels: Int[torch.Tensor, "batch seq"] | None = None,
+        attention_mask: Int[torch.Tensor, "batch seq"] | None = None,
+        engram_hash_indices: Int64[torch.Tensor, "batch seq total_heads"] | None = None,
         **kwargs: Any,
     ) -> Any:
         """
@@ -598,11 +643,7 @@ class EngramModel(nn.Module, GenerationMixin):
                         c_ids = c_ids.cpu().numpy()
                     self._current_hash_indices = self.hash_mapping.hash(c_ids)
                 else:
-                    input_ids_np = (
-                        input_ids_to_hash.cpu().numpy()
-                        if isinstance(input_ids_to_hash, torch.Tensor)
-                        else input_ids_to_hash
-                    )
+                    input_ids_np = input_ids_to_hash.cpu().numpy()
                     self._current_hash_indices = self.hash_mapping.hash(input_ids_np)
 
         return self.base_model(
@@ -612,6 +653,7 @@ class EngramModel(nn.Module, GenerationMixin):
             **kwargs,
         )
 
+    @override
     def generate(self, *args: Any, **kwargs: Any) -> Any:
         """
         Delegates generation to the underlying base_model.
@@ -651,20 +693,39 @@ class EngramModel(nn.Module, GenerationMixin):
         if "max_new_tokens" in kwargs and "max_length" not in kwargs:
             kwargs["max_length"] = None
 
-        if isinstance(self.base_model, GenerativeProtocol):
+        if isinstance(self.base_model, ModelProtocol):
             return self.base_model.generate(*args, **kwargs)
+
+        # Fallback for models that don't strictly match Protocol but have the method
+        generate_func = getattr(self.base_model, "generate", None)
+        if generate_func:
+            return generate_func(*args, **kwargs)
 
         raise AttributeError("Base model does not have a 'generate' method.")
 
     def gradient_checkpointing_enable(self, **kwargs: Any) -> None:
         """Delegates gradient checkpointing enablement to the base model."""
-        if isinstance(self.base_model, HFModelProtocol):
-            self.base_model.gradient_checkpointing_enable(**kwargs)
+        base_model = self.base_model
+        if isinstance(base_model, ModelProtocol):
+            base_model.gradient_checkpointing_enable(
+                gradient_checkpointing_kwargs=kwargs
+            )
+        else:
+            # Fallback for models that don't strictly match Protocol but have the method
+            func = getattr(base_model, "gradient_checkpointing_enable", None)
+            if func:
+                func(**kwargs)
 
-    def gradient_checkpointing_disable(self, **kwargs: Any) -> None:
+    def gradient_checkpointing_disable(self) -> None:
         """Delegates gradient checkpointing disablement to the base model."""
-        if isinstance(self.base_model, HFModelProtocol):
-            self.base_model.gradient_checkpointing_disable(**kwargs)
+        base_model = self.base_model
+        if isinstance(base_model, ModelProtocol):
+            base_model.gradient_checkpointing_disable()
+        else:
+            # Fallback for models that don't strictly match Protocol but have the method
+            func = getattr(base_model, "gradient_checkpointing_disable", None)
+            if func:
+                func()
 
     def create_optimizer(
         self, base_learning_rate: float = 4e-4, **optimizer_kwargs: Any
@@ -753,9 +814,9 @@ class EngramModel(nn.Module, GenerationMixin):
         cls,
         base_model: PreTrainedModel | torch.nn.Module,
         engram_path: str,
-        tokenizer: PreTrainedTokenizerBase | None = None,
+        tokenizer: TokenizerProtocol | None = None,
         **kwargs: Any,
-    ) -> "EngramModel":
+    ) -> EngramModel:
         """
         Load an Engram model from a directory or Hugging Face Hub.
         """
@@ -766,13 +827,12 @@ class EngramModel(nn.Module, GenerationMixin):
         if not os.path.exists(engram_path):
             # Try to download from Hub
             try:
-                resolved_path = snapshot_download(
+                engram_path = safe_snapshot_download(
                     repo_id=engram_path,
                     token=token,
                     revision=revision,
                     library_name="engram-peft",
                 )
-                engram_path = resolved_path
             except Exception as e:
                 raise ValueError(
                     f"Could not find local path or Hub ID: {engram_path}. Error: {e}"
@@ -901,11 +961,14 @@ class EngramModel(nn.Module, GenerationMixin):
         src_config = EngramConfig.from_pretrained(os.path.dirname(source_config_path))
         src_state_dict = saving.load_engram_state_dict(checkpoint_path)
 
+        # Use structural re-binding to satisfy weight_transfer protocol
+        model_for_remap = cast("EngramModelProtocol", self)
+
         new_emb_weights = remap_weights_from_corpus(
-            self,
+            model_for_remap,
             src_state_dict,
             src_config,
-            corpus,
+            corpus=corpus,
             layer_mapping=layer_mapping,
             tokenizer=tokenizer,
             batch_size=batch_size,
@@ -920,8 +983,8 @@ class EngramModel(nn.Module, GenerationMixin):
 
 def get_engram_model(
     model: PreTrainedModel | nn.Module,
-    config: EngramConfig,
-    tokenizer: PreTrainedTokenizerBase | None = None,
+    config: EngramConfig | dict[str, Any],
+    tokenizer: TokenizerProtocol | None = None,
     wrap_peft: bool = False,
     train_mode: TrainMode | None = None,
     backbone_freeze_steps: int = 0,
@@ -945,12 +1008,13 @@ def get_engram_model(
     """
     if isinstance(config, dict):
         # Merge kwargs into dict if config is a dict
-        config.update(kwargs)
-        if "backbone_freeze_steps" not in config:
-            config["backbone_freeze_steps"] = backbone_freeze_steps
-        if "engram_dtype" not in config:
-            config["engram_dtype"] = engram_dtype
-        engram_config = EngramConfig(**config)
+        config_copy = config.copy()
+        config_copy.update(kwargs)
+        if "backbone_freeze_steps" not in config_copy:
+            config_copy["backbone_freeze_steps"] = backbone_freeze_steps
+        if "engram_dtype" not in config_copy:
+            config_copy["engram_dtype"] = engram_dtype
+        engram_config = EngramConfig(**config_copy)
     else:
         engram_config = config
         if backbone_freeze_steps > 0:
@@ -963,11 +1027,18 @@ def get_engram_model(
             "preserve_trainable" if wrap_peft else "engram_only"
         )
     else:
+        # Explicit validation for TrainMode literal values
+        valid_modes = {"engram_only", "preserve_trainable", "full_finetune"}
+        if train_mode not in valid_modes:
+            raise ValueError(
+                f"Unsupported train_mode: {train_mode}. "
+                + f"Must be one of {valid_modes}"
+            )
         resolved_train_mode = train_mode
         if wrap_peft and resolved_train_mode != "preserve_trainable":
             raise ValueError(
                 "wrap_peft=True is only compatible with "
-                'train_mode="preserve_trainable".'
+                + 'train_mode="preserve_trainable".'
             )
 
     if resolved_train_mode == "preserve_trainable":
@@ -983,22 +1054,20 @@ def get_engram_model(
     elif resolved_train_mode == "engram_only":
         # Standard vanilla model, freeze everything
         model.requires_grad_(False)
-    else:
-        raise ValueError(f"Unsupported train_mode: {resolved_train_mode}")
 
     # --- Auto-discovery and configuration synchronization ---
-    metadata = ArchitectureResolver.resolve(model, tokenizer, config)
+    metadata = ArchitectureResolver.resolve(model, tokenizer, engram_config)
 
     # Update config with resolved values to ensure persistence in save_pretrained
-    config.hidden_size = metadata.hidden_size
-    config.pad_id = metadata.pad_token_id
-    config.layer_container_path = metadata.layer_container_path
+    engram_config.hidden_size = metadata.hidden_size
+    engram_config.pad_id = metadata.pad_token_id
+    engram_config.layer_container_path = metadata.layer_container_path
 
     # If compression is disabled, the 'compressed' size is just the original vocab size
-    if not config.enable_tokenizer_compression:
-        config.compressed_vocab_size = metadata.original_vocab_size
+    if not engram_config.enable_tokenizer_compression:
+        engram_config.compressed_vocab_size = metadata.original_vocab_size
 
-    engram_model = EngramModel(model, config, tokenizer)
+    engram_model = EngramModel(model, engram_config, tokenizer)
     engram_model.train_mode = resolved_train_mode
 
     # Note: Engram layers were instantiated and they inherently have requires_grad=True

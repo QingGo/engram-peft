@@ -1,16 +1,28 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none
+from __future__ import annotations
+
 import logging
 import warnings
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import torch
+
+if TYPE_CHECKING:
+    from jaxtyping import Float
+
 from tqdm import tqdm
-from transformers import AutoTokenizer
 
 from engram_peft.compression import CompressedTokenizer
-from engram_peft.config import EngramConfig
 from engram_peft.hashing import NgramHashMapping
-from engram_peft.model import EngramModel
+from engram_peft.layer import EngramLayer
+from engram_peft.types import jaxtyped
+from engram_peft.utils import safe_tokenizer_from_pretrained
+from engram_peft.utils.compat import safe_from_numpy
+
+if TYPE_CHECKING:
+    from engram_peft.config import EngramConfig
+    from engram_peft.types import EngramModelProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -20,22 +32,22 @@ def check_compatibility(src_config: EngramConfig, target_config: EngramConfig) -
     if src_config.seed != target_config.seed:
         warnings.warn(
             f"Hash seeds mismatch (src={src_config.seed}, target={target_config.seed}). "
-            "Buckets will not align semantically. Direct transfer is NOT recommended "
-            "unless followed by corpus-based remapping.",
+            + "Buckets will not align semantically. Direct transfer is NOT recommended "
+            + "unless followed by corpus-based remapping.",
             stacklevel=2,
         )
 
     if src_config.tokenizer_name_or_path != target_config.tokenizer_name_or_path:
         warnings.warn(
-            f"Tokenizers mismatch ({src_config.tokenizer_name_or_path} vs {target_config.tokenizer_name_or_path}). "
-            "Buckets will not align semantically.",
+            f"Tokenizers mismatch ({src_config.tokenizer_name_or_path} vs "
+            + f"{target_config.tokenizer_name_or_path}). Buckets will not align semantically.",
             stacklevel=2,
         )
 
     if src_config.hidden_size != target_config.hidden_size:
         raise ValueError(
             f"Hidden size mismatch ({src_config.hidden_size} vs {target_config.hidden_size}). "
-            "Weights are structurally incompatible."
+            + "Weights are structurally incompatible."
         )
 
 
@@ -56,15 +68,16 @@ def get_layer_mapping(
     return mapping
 
 
+@jaxtyped
 def align_embedding_table(
-    src_weight: torch.Tensor,
+    src_weight: Float[torch.Tensor, "src_capacity dim"],
     src_config: EngramConfig,
     target_config: EngramConfig,
     src_layer_id: int,
     target_layer_id: int,
     target_mapper: NgramHashMapping,
     src_mapper: NgramHashMapping,
-) -> torch.Tensor:
+) -> Float[torch.Tensor, "target_capacity dim"]:
     """
     Slices and pads the embedding table between different configurations.
     Handles n-gram size changes and bucket capacity changes.
@@ -81,19 +94,21 @@ def align_embedding_table(
 
     if src_dim_per_head != target_dim_per_head:
         raise ValueError(
-            f"Embedding dim per head mismatch ({src_dim_per_head} vs {target_dim_per_head}). "
-            "Cannot align tables without re-projection."
+            f"Embedding dim per head mismatch ({src_dim_per_head} vs {target_dim_per_head}). %s"
+            % "Cannot align tables without re-projection."
         )
 
     # Calculate flat primes and offsets
-    src_flat_primes = sum(src_primes, [])
-    target_flat_primes = sum(target_primes, [])
+    src_flat_primes: list[int] = [p for head_primes in src_primes for p in head_primes]
+    target_flat_primes: list[int] = [
+        p for head_primes in target_primes for p in head_primes
+    ]
 
-    src_offsets = [0]
+    src_offsets: list[int] = [0]
     for p in src_flat_primes[:-1]:
         src_offsets.append(src_offsets[-1] + p)
 
-    target_offsets = [0]
+    target_offsets: list[int] = [0]
     for p in target_flat_primes[:-1]:
         target_offsets.append(target_offsets[-1] + p)
 
@@ -131,7 +146,7 @@ def align_embedding_table(
 
 
 def remap_weights_from_corpus(
-    target_model: torch.nn.Module,
+    target_model: EngramModelProtocol,
     src_state_dict: dict[str, torch.Tensor],
     src_config: EngramConfig,
     corpus: list[str] | list[int] | np.ndarray | torch.Tensor,
@@ -149,10 +164,10 @@ def remap_weights_from_corpus(
     """
     # Use local import to avoid circular dependency at module level
 
-    if not isinstance(target_model, EngramModel):
-        raise ValueError("target_model must be an EngramModel instance.")
-
-    target_config = target_model.config
+    # Use Protocol for structural access
+    model = target_model
+    # Cast config to EngramConfig for detailed attribute access
+    target_config = cast("EngramConfig", model.config)
     mapping = get_layer_mapping(
         src_config.target_layers, target_config.target_layers, layer_mapping
     )
@@ -168,7 +183,8 @@ def remap_weights_from_corpus(
             src_mapped_pad_id = src_compressor.map_id(src_config.pad_id)
         except Exception as e:
             logger.warning(
-                f"Could not load source compressor for pad_id mapping: {e}. Using raw pad_id."
+                "Could not load source compressor for pad_id mapping: %s. Using raw pad_id.",
+                e,
             )
 
     assert src_config.compressed_vocab_size is not None, (
@@ -199,10 +215,16 @@ def remap_weights_from_corpus(
     if isinstance(corpus, list) and len(corpus) > 0 and isinstance(corpus[0], str):
         # Case: Raw text corpus (Cross-Tokenizer)
         logger.info("Performing cross-tokenizer alignment using raw text corpus...")
-        src_tokenizer = AutoTokenizer.from_pretrained(src_config.tokenizer_name_or_path)
+        src_tokenizer_path = src_config.tokenizer_name_or_path or ""
+        src_tokenizer = safe_tokenizer_from_pretrained(src_tokenizer_path)
         # But since we are in a best-effort, we'll try to load it from config.
-        target_tokenizer = tokenizer or AutoTokenizer.from_pretrained(
-            target_config.tokenizer_name_or_path or src_config.tokenizer_name_or_path
+        target_tokenizer_path = (
+            target_config.tokenizer_name_or_path
+            or src_config.tokenizer_name_or_path
+            or ""
+        )
+        target_tokenizer = tokenizer or safe_tokenizer_from_pretrained(
+            target_tokenizer_path
         )
 
         for item in tqdm(corpus, desc="Processing text", disable=not show_progress):
@@ -240,18 +262,19 @@ def remap_weights_from_corpus(
         for i in range(0, tokens_np.shape[1], batch_size):
             batch = tokens_np[:, i : i + batch_size]
             src_hashes = src_mapper.hash(batch)
-            if target_model.compressor:
+
+            # Use local re-binding to satisfy basedpyright
+            t_model = target_model
+            if t_model.compressor:
                 # Get device safely from base_model
-                device = next(target_model.base_model.parameters()).device
-                c_ids = target_model.compressor.compress(
-                    torch.from_numpy(batch).to(device)
-                )
+                device = next(t_model.base_model.parameters()).device
+                c_ids = t_model.compressor.compress(safe_from_numpy(batch).to(device))
                 c_ids_np = (
                     c_ids.cpu().numpy() if isinstance(c_ids, torch.Tensor) else c_ids
                 )
-                target_hashes = target_model.hash_mapping.hash(c_ids_np)
+                target_hashes = t_model.hash_mapping.hash(c_ids_np)
             else:
-                target_hashes = target_model.hash_mapping.hash(batch)
+                target_hashes = t_model.hash_mapping.hash(batch)
 
             _update_index_maps(
                 index_maps,
@@ -271,16 +294,20 @@ def remap_weights_from_corpus(
         total_target_heads = (
             len(target_config.ngram_sizes) * target_config.n_head_per_ngram
         )
-        target_layer = target_model.engram_layers[str(target_id)]
+        target_layer = model.engram_layers[str(target_id)]
+        if not isinstance(target_layer, EngramLayer):
+            raise TypeError(f"Expected EngramLayer at layer {target_id}")
         target_emb_weight = (
             target_layer.multi_head_embedding.embedding.weight.data.clone()
         )
 
         # Target offsets
-        target_primes: list[int] = sum(
-            target_model.hash_mapping.prime_tables[target_id], []
-        )
-        target_offsets = [0]
+        target_primes: list[int] = [
+            p
+            for head_primes in model.hash_mapping.prime_tables[target_id]
+            for p in head_primes
+        ]
+        target_offsets: list[int] = [0]
         for p in target_primes[:-1]:
             target_offsets.append(target_offsets[-1] + p)
 
@@ -309,7 +336,7 @@ def _update_index_maps(
     target_hashes: dict[int, np.ndarray],
     src_state_dict: dict[str, torch.Tensor],
     src_mapper: NgramHashMapping,
-    target_config: EngramConfig,
+    _target_config: EngramConfig,
 ) -> None:
     """Helper to update index_maps from hashes."""
     for src_id, target_id in mapping.items():
@@ -320,8 +347,10 @@ def _update_index_maps(
         src_weight = src_state_dict[src_emb_key]
 
         # Find offsets for src
-        src_primes = sum(src_mapper.prime_tables[src_id], [])
-        src_offsets = [0]
+        src_primes: list[int] = [
+            p for head_primes in src_mapper.prime_tables[src_id] for p in head_primes
+        ]
+        src_offsets: list[int] = [0]
         for p in src_primes[:-1]:
             src_offsets.append(src_offsets[-1] + p)
 
@@ -357,7 +386,7 @@ def _get_aligned_hashes(
     src_tokenizer: Any,
     target_tokenizer: Any,
     src_mapper: NgramHashMapping,
-    target_model: "EngramModel",
+    target_model: EngramModelProtocol,
 ) -> tuple[dict[int, np.ndarray], dict[int, np.ndarray]]:
     """
     Tokenizes text with two tokenizers and aligns them using character offsets.
@@ -387,8 +416,8 @@ def _get_aligned_hashes(
 
     # We want to find a sequence of (src_token_idx, target_token_idx)
     # Since multiple characters map to one token, we sample at the END of each target token.
-    aligned_src_ids = []
-    aligned_target_ids = []
+    aligned_src_ids: list[int] = []
+    aligned_target_ids: list[int] = []
 
     for i, (_start, end) in enumerate(target_offsets):
         # Sample at the end of the target token
@@ -411,7 +440,7 @@ def _get_aligned_hashes(
     # Handle compressor for target if needed
     if target_model.compressor:
         device = next(target_model.base_model.parameters()).device
-        t_batch_torch = torch.from_numpy(target_batch).to(device)
+        t_batch_torch = safe_from_numpy(target_batch).to(device)
         c_ids = target_model.compressor.compress(t_batch_torch)
         c_ids_np = c_ids.cpu().numpy() if isinstance(c_ids, torch.Tensor) else c_ids
         target_hashes = target_model.hash_mapping.hash(c_ids_np)

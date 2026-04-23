@@ -160,3 +160,5 @@ wandb/
 t_*.py
 test_out/
 .sprintest/
+*.log
+*.txt

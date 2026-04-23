@@ -1,3 +1,4 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none
 import logging
 from typing import Any
 
@@ -45,13 +46,13 @@ def apply_peft_patches() -> None:
 
         # In PEFT, _create_new_module is a staticmethod, but we can replace it
         # with our function and wrap it back in staticmethod()
-        lora_model.LoraModel._create_new_module = staticmethod(  # type: ignore
+        lora_model.LoraModel._create_new_module = staticmethod(
             patched_create_new_module
         )
-        lora_model.LoraModel._is_engram_patched = True  # type: ignore
+        setattr(lora_model.LoraModel, "_is_engram_patched", True)  # noqa: B010
         logger.info("Successfully applied PEFT deep patches for custom layers.")
 
     except ImportError:
         pass
-    except Exception as e:
-        logger.warning(f"Failed to apply PEFT patches: {e}")
+    except Exception:
+        logger.exception("Failed to apply PEFT patches")

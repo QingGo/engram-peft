@@ -1,11 +1,18 @@
+from __future__ import annotations
+
 import json
+import logging
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import torch
 from tokenizers import Regex, normalizers
-from transformers import AutoTokenizer
+
+from engram_peft.utils import safe_from_numpy, safe_tokenizer_from_pretrained
+
+if TYPE_CHECKING:
+    from engram_peft.types import TokenizerProtocol
 
 
 class CompressedTokenizer:
@@ -15,11 +22,19 @@ class CompressedTokenizer:
     Aligned with the official Engram demo implementation.
     """
 
+    tokenizer_name_or_path: str | None
+    tokenizer: TokenizerProtocol
+    vocab_size: int
+    normalizer: Any
+    mapping: dict[int, int]
+    compressed_vocab_size: int
+    lookup: torch.Tensor
+
     def __init__(
         self,
         tokenizer_name_or_path: str | None = None,
         trust_remote_code: bool = True,
-        tokenizer: Any = None,
+        tokenizer: TokenizerProtocol | None = None,
     ) -> None:
         """
         Initialize the CompressedTokenizer.
@@ -33,10 +48,10 @@ class CompressedTokenizer:
         # Allow passing an existing path (e.g. locally) or load from HF
         if tokenizer is not None:
             self.tokenizer = tokenizer
-            self.vocab_size = len(self.tokenizer)
+            self.vocab_size = self.tokenizer.vocab_size
             # We still need the normalizer
             self.normalizer = self._get_default_normalizer()
-            self.mapping: dict[int, int] = {}
+            self.mapping = {}
             self.compressed_vocab_size = 0
             self.lookup = torch.empty(0)
             self._build_lookup_table()
@@ -44,10 +59,10 @@ class CompressedTokenizer:
             if not os.path.isdir(tokenizer_name_or_path) or not os.path.exists(
                 os.path.join(tokenizer_name_or_path, "compression_config.json")
             ):
-                self.tokenizer = AutoTokenizer.from_pretrained(
+                self.tokenizer = safe_tokenizer_from_pretrained(
                     tokenizer_name_or_path, trust_remote_code=trust_remote_code
                 )
-                self.vocab_size = len(self.tokenizer)
+                self.vocab_size = self.tokenizer.vocab_size
                 self.normalizer = self._get_default_normalizer()
                 self.mapping = {}
                 self.compressed_vocab_size = 0
@@ -84,10 +99,17 @@ class CompressedTokenizer:
         new_tokens: list[str] = []
 
         for tid in range(self.vocab_size):
-            text = str(self.tokenizer.decode([tid], skip_special_tokens=False))
+            # Basedpyright: tokenizer.decode returns str
+            text = self.tokenizer.decode([tid], skip_special_tokens=False)
 
             if "\ufffd" in text:
-                key = str(self.tokenizer.convert_ids_to_tokens(tid))
+                # Fallback to convert_ids_to_tokens if decode fails (structural fallback)
+                # Note: Most HF tokenizers have convert_ids_to_tokens but it's not in Protocol
+                # We use hasattr for safety
+                if hasattr(self.tokenizer, "convert_ids_to_tokens"):
+                    key = str(self.tokenizer.convert_ids_to_tokens(tid))
+                else:
+                    key = text
             else:
                 norm = str(self.normalizer.normalize_str(text))
                 key = norm if norm else text
@@ -108,7 +130,7 @@ class CompressedTokenizer:
         self.lookup = torch.tensor(mapping_list, dtype=torch.long)
 
     def map_ids(
-        self, input_ids: torch.Tensor | np.ndarray[Any, Any]
+        self, input_ids: torch.Tensor | np.ndarray[Any, Any] | list[Any]
     ) -> torch.Tensor | np.ndarray[Any, Any]:
         """
         Maps a sequence of original token IDs to canonical (compressed) IDs.
@@ -116,13 +138,16 @@ class CompressedTokenizer:
         """
         is_numpy = isinstance(input_ids, np.ndarray)
         if is_numpy:
-            tensor_ids = torch.from_numpy(input_ids).to(torch.long)
+            tensor_ids = safe_from_numpy(input_ids).to(torch.long)
         else:
-            tensor_ids = (
-                input_ids
-                if isinstance(input_ids, torch.Tensor)
-                else torch.as_tensor(input_ids)
-            )
+            # Fallback for torch.Tensor, list, tuple, or other array-like objects
+            if isinstance(input_ids, list | tuple) and len(input_ids) > 100000:
+                logging.getLogger(__name__).warning(
+                    f"Processing a large {type(input_ids).__name__} of size {len(input_ids)}. "
+                    + "Converting large lists to tensors can be slow. "
+                    + "Consider passing a torch.Tensor or np.ndarray directly."
+                )
+            tensor_ids = torch.as_tensor(input_ids).to(torch.long)
 
         if self.lookup.device != tensor_ids.device:
             self.lookup = self.lookup.to(tensor_ids.device)
@@ -165,7 +190,7 @@ class CompressedTokenizer:
         Save the mapping table to a JSON file.
         """
         os.makedirs(save_directory, exist_ok=True)
-        config = {
+        config: dict[str, Any] = {
             "tokenizer_name_or_path": self.tokenizer_name_or_path,
             "compressed_vocab_size": self.compressed_vocab_size,
             "vocab_size": self.vocab_size,
@@ -175,13 +200,13 @@ class CompressedTokenizer:
             json.dump(config, f, indent=4)
 
     @classmethod
-    def from_pretrained(cls, save_directory: str) -> "CompressedTokenizer":
+    def from_pretrained(cls, save_directory: str) -> CompressedTokenizer:
         """
         Load a CompressedTokenizer from a saved directory.
         """
         config_path = os.path.join(save_directory, "compression_config.json")
         with open(config_path) as f:
-            config = json.load(f)
+            config: dict[str, Any] = json.load(f)
 
         # Initialize bypassing huggingface downloads
         instance = cls.__new__(cls)

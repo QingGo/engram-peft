@@ -1,11 +1,15 @@
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportUnknownParameterType=none
 from typing import Any, cast
 
 import torch
-from transformers import DataCollatorForLanguageModeling, PreTrainedTokenizerBase
+from transformers import DataCollatorForLanguageModeling
+from typing_extensions import override
 
 from engram_peft.compression import CompressedTokenizer
 from engram_peft.config import EngramConfig
 from engram_peft.hashing import NgramHashMapping
+from engram_peft.types import TokenizerProtocol
+from engram_peft.utils import safe_from_numpy
 
 
 class EngramDataCollator(DataCollatorForLanguageModeling):
@@ -18,12 +22,17 @@ class EngramDataCollator(DataCollatorForLanguageModeling):
     is performed on the CPU during data loading to minimize GPU idle time.
     """
 
+    config: EngramConfig
+    compressor: CompressedTokenizer | None
+    hash_mapping: NgramHashMapping
+
     def __init__(
         self,
-        tokenizer: PreTrainedTokenizerBase,
+        tokenizer: TokenizerProtocol,
         config: EngramConfig,
         compressor: CompressedTokenizer | None = None,
         mlm: bool = False,
+        mlm_probability: float = 0.15,
         **kwargs: Any,
     ) -> None:
         """
@@ -36,7 +45,14 @@ class EngramDataCollator(DataCollatorForLanguageModeling):
             mlm: Whether to use masked language modeling.
             **kwargs: Additional arguments for DataCollatorForLanguageModeling.
         """
-        super().__init__(tokenizer=tokenizer, mlm=mlm, **kwargs)
+        # DataCollatorForLanguageModeling requires a nominal PreTrainedTokenizerBase
+        # for its internal logic, so we cast to Any at the boundary.
+        super().__init__(
+            tokenizer=cast("Any", tokenizer),
+            mlm=mlm,
+            mlm_probability=mlm_probability,
+            **kwargs,
+        )
         self.config = config
         self.compressor = compressor
 
@@ -60,14 +76,15 @@ class EngramDataCollator(DataCollatorForLanguageModeling):
             seed=config.seed,
         )
 
+    @override
     def __call__(
-        self, examples: Any, return_tensors: str | None = None
+        self, features: list[dict[str, Any]], return_tensors: str | None = None
     ) -> dict[str, Any]:
         """
         Processes a batch of examples and adds precomputed engram hash indices.
 
         Args:
-            examples: List of tokenized examples from the dataset.
+            features: List of tokenized examples from the dataset.
             return_tensors: The type of tensors to return.
 
         Returns:
@@ -76,17 +93,19 @@ class EngramDataCollator(DataCollatorForLanguageModeling):
         """
         # Step 1: Call parent to get basic LM batch (handles padding, labels, etc.)
         batch = cast(
-            "dict[str, Any]", super().__call__(examples, return_tensors=return_tensors)
+            "dict[str, Any]", super().__call__(features, return_tensors=return_tensors)
         )
-        input_ids = batch["input_ids"]
+        input_ids = cast("torch.Tensor", batch["input_ids"])
 
         # Step 1.5: Explicitly mask padding in labels (critical for training stability)
         if "labels" in batch and self.tokenizer.pad_token_id is not None:
-            batch["labels"][batch["input_ids"] == self.tokenizer.pad_token_id] = -100
+            pad_id = self.tokenizer.pad_token_id
+            if isinstance(pad_id, int):
+                batch["labels"][input_ids == pad_id] = -100
 
         # Step 2: Handle tokenizer compression if enabled and compressor is provided
         # If config says compression is enabled but no compressor is provided,
-        # we fallback to raw IDs but warning might be useful. The prompt suggests:
+        # we fallback to raw IDs
         if self.compressor is not None:
             hash_input_ids = self.compressor.compress(input_ids)
         else:
@@ -98,11 +117,11 @@ class EngramDataCollator(DataCollatorForLanguageModeling):
         hashes_dict = self.hash_mapping.hash(hash_input_ids)
 
         # Step 4: Consolidate indices into a single tensor [B, L, num_layers, total_heads]
-        layer_hashes = []
+        layer_hashes: list[torch.Tensor] = []
         for layer_id in self.config.target_layers:
             h = hashes_dict[layer_id]
             # h is a numpy array on CPU
-            layer_hashes.append(torch.from_numpy(h))
+            layer_hashes.append(safe_from_numpy(h))
 
         # Stack along a new dimension for target layers
         # Result shape: [batch_size, seq_len, num_target_layers, total_heads]
