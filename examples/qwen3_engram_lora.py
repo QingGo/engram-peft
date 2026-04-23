@@ -55,6 +55,7 @@ from engram_peft import (
     get_engram_model,
 )
 from engram_peft.utils import apply_peft_patches
+from engram_peft.utils.compat import wash_model, wash_tokenizer
 
 # Ensure benchmarks are importable
 sys.path.append(os.getcwd())
@@ -271,6 +272,9 @@ def run_example(args: argparse.Namespace) -> None:
         bias="none",
     )
 
+    if not isinstance(base_model, PreTrainedModel):
+        raise TypeError("base_model must be a PreTrainedModel for LoRA")
+
     model: PeftModel | PeftMixedModel | EngramModel = get_peft_model(
         base_model, lora_config
     )
@@ -289,7 +293,7 @@ def run_example(args: argparse.Namespace) -> None:
         backbone_freeze_steps=0,
     )
     # get_engram_model handles text_config and vocab_size automatically!
-    model = get_engram_model(model, engram_config, tokenizer=tokenizer)
+    model = get_engram_model(model, engram_config, tokenizer=wash_tokenizer(tokenizer))
 
     # 4. Prepare Dataset
     print("Preparing Alpaca subsets (train + eval)...")
@@ -321,7 +325,9 @@ def run_example(args: argparse.Namespace) -> None:
     if not isinstance(engram_config_obj, EngramConfig):
         raise TypeError("Model config is not an EngramConfig")
 
-    data_collator = EngramDataCollator(tokenizer=tokenizer, config=engram_config_obj)
+    data_collator = EngramDataCollator(
+        tokenizer=wash_tokenizer(tokenizer), config=engram_config_obj
+    )
 
     trainer = EngramTrainer(
         model=model,
@@ -414,19 +420,16 @@ def run_example(args: argparse.Namespace) -> None:
 
     print(f"Prompt: {prompt}")
     with torch.no_grad():
-        if isinstance(model, ModelProtocol):
-            gen_model: ModelProtocol = model
-            output = gen_model.generate(
-                **inputs,
-                max_new_tokens=200,
-                max_length=None,
-                do_sample=True,
-                temperature=0.7,
-                stop_strings=["<think>", "</think>", "<|im_end|>"],
-                tokenizer=tokenizer,
-            )
-        else:
-            raise TypeError("Model does not satisfy generative interface")
+        gen_model = wash_model(model)
+        output = gen_model.generate(
+            **inputs,
+            max_new_tokens=200,
+            max_length=None,
+            do_sample=True,
+            temperature=0.7,
+            stop_strings=["<think>", "</think>", "<|im_end|>"],
+            tokenizer=tokenizer,
+        )
     original_resp = tokenizer.decode(output[0][input_len:], skip_special_tokens=True)
     print(f"Response: {original_resp}")
 
@@ -435,13 +438,19 @@ def run_example(args: argparse.Namespace) -> None:
     # To fully verify, we should be able to load both LoRA and Engram back
     try:
         # 1. Load LoRA part onto a fresh base model (or reuse base_model for efficiency)
+        if not isinstance(base_model, torch.nn.Module):
+            raise TypeError("base_model must be a torch.nn.Module for reloading")
+
         reloaded_peft = PeftModel.from_pretrained(
             base_model, OUTPUT_DIR, trust_remote_code=True
         )
 
         # 2. Re-wrap with Engram using the class method which is cleaner
+        if not isinstance(reloaded_peft, torch.nn.Module):
+            raise TypeError("reloaded_peft must be a torch.nn.Module")
+
         reloaded_model = EngramModel.from_pretrained(
-            reloaded_peft, OUTPUT_DIR, tokenizer=tokenizer
+            reloaded_peft, OUTPUT_DIR, tokenizer=wash_tokenizer(tokenizer)
         )
 
         print("Inference with Fully Reloaded Model (LoRA + Engram):")

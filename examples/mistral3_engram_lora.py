@@ -54,6 +54,7 @@ from engram_peft import (
     get_engram_model,
 )
 from engram_peft.utils import apply_peft_patches
+from engram_peft.utils.compat import wash_model, wash_tokenizer
 from examples.benchmarks.data_utils import get_dataset_template
 
 # Check for latest transformers features
@@ -264,7 +265,7 @@ def run_example(args: argparse.Namespace) -> None:
         backbone_freeze_steps=0,
     )
     # get_engram_model handles architecture-specific patching automatically!
-    model = get_engram_model(model, engram_config, tokenizer=tokenizer)
+    model = get_engram_model(model, engram_config, tokenizer=wash_tokenizer(tokenizer))
 
     # 4. Prepare Dataset
     print("Preparing Alpaca subsets (train + eval)...")
@@ -296,7 +297,9 @@ def run_example(args: argparse.Namespace) -> None:
     if not isinstance(engram_config_obj, EngramConfig):
         raise TypeError("Model config is not an EngramConfig")
 
-    data_collator = EngramDataCollator(tokenizer=tokenizer, config=engram_config_obj)
+    data_collator = EngramDataCollator(
+        tokenizer=wash_tokenizer(tokenizer), config=engram_config_obj
+    )
 
     trainer = EngramTrainer(
         model=model,
@@ -371,7 +374,7 @@ def run_example(args: argparse.Namespace) -> None:
 
     print(f"Prompt: {prompt}")
     with torch.no_grad():
-        gen_model: ModelProtocol = model
+        gen_model = wash_model(model)
         output = gen_model.generate(**inputs, max_new_tokens=50, tokenizer=tokenizer)
     print(f"Response: {tokenizer.decode(output[0], skip_special_tokens=True)}")
 
@@ -388,7 +391,7 @@ def run_example(args: argparse.Namespace) -> None:
 
         # 2. Re-wrap with Engram using the class method which is cleaner
         reloaded_model = EngramModel.from_pretrained(
-            reloaded_peft, OUTPUT_DIR, tokenizer=tokenizer
+            reloaded_peft, OUTPUT_DIR, tokenizer=wash_tokenizer(tokenizer)
         )
 
         print("Inference with Fully Reloaded Model (LoRA + Engram):")

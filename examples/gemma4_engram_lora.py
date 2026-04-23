@@ -16,9 +16,9 @@ import os
 import sys
 import traceback
 from collections.abc import Iterable
-from typing import Any
+from typing import Any, cast
 
-from engram_peft.types import ModelProtocol, SizedEncoding
+from engram_peft.types import ModelProtocol, SafeTrainingArguments, SizedEncoding
 
 # Add the project root to sys.path to allow absolute imports from the 'examples' package
 # when running the script directly.
@@ -36,7 +36,6 @@ from transformers import (
     BitsAndBytesConfig,
     PreTrainedModel,
     PreTrainedTokenizerBase,
-    TrainingArguments,
     set_seed,
 )
 
@@ -50,6 +49,11 @@ from engram_peft import (
 from engram_peft.utils import (
     apply_peft_patches,
     get_optimal_precision_config,
+)
+from engram_peft.utils.compat import (
+    create_safe_training_args,
+    wash_model,
+    wash_tokenizer,
 )
 from examples.benchmarks.data_utils import get_dataset_template
 
@@ -265,6 +269,9 @@ def run_example(args: argparse.Namespace) -> None:
         bias="none",
     )
 
+    if not isinstance(base_model, PreTrainedModel):
+        raise TypeError("base_model must be a PreTrainedModel for LoRA")
+
     model: PeftModel | PeftMixedModel | EngramModel = get_peft_model(
         base_model, lora_config
     )
@@ -281,7 +288,10 @@ def run_example(args: argparse.Namespace) -> None:
     )
 
     model = get_engram_model(
-        model, engram_config, tokenizer=tokenizer, train_mode="preserve_trainable"
+        model,
+        engram_config,
+        tokenizer=wash_tokenizer(tokenizer),
+        train_mode="preserve_trainable",
     )
     model.print_trainable_parameters()
 
@@ -290,23 +300,25 @@ def run_example(args: argparse.Namespace) -> None:
     datasets = prepare_alpaca_dataset(tokenizer)
 
     # 5. Training
-    training_args = TrainingArguments(
-        output_dir=OUTPUT_DIR,
-        per_device_train_batch_size=args.batch_size,
-        gradient_accumulation_steps=4,
-        max_steps=args.max_steps,
-        learning_rate=args.lr,
-        logging_steps=args.logging_steps,
-        eval_strategy="steps" if "eval" in datasets else "no",
-        eval_steps=args.eval_steps,
-        per_device_eval_batch_size=1,
-        prediction_loss_only=True,
-        save_strategy="no",
-        **get_optimal_precision_config(),
-        gradient_checkpointing=True,
-        gradient_checkpointing_kwargs={"use_reentrant": False},
-        report_to="none",
-        remove_unused_columns=True,
+    precision_config = get_optimal_precision_config()
+    training_args_dict = {
+        "output_dir": OUTPUT_DIR,
+        "per_device_train_batch_size": args.batch_size,
+        "gradient_accumulation_steps": 4,
+        "max_steps": args.max_steps,
+        "learning_rate": args.lr,
+        "logging_steps": args.logging_steps,
+        "eval_strategy": "steps" if "eval" in datasets else "no",
+        "eval_steps": args.eval_steps,
+        "per_device_eval_batch_size": 1,
+        "remove_unused_columns": True,
+        "report_to": "none",
+        "bf16": precision_config.get("bf16", False),
+        "fp16": precision_config.get("fp16", False),
+    }
+
+    training_args = create_safe_training_args(
+        cast("SafeTrainingArguments", training_args_dict)
     )
 
     # 4. Prepare Trainer
@@ -318,7 +330,9 @@ def run_example(args: argparse.Namespace) -> None:
     if not isinstance(engram_config_obj, EngramConfig):
         raise TypeError("Model config is not an EngramConfig")
 
-    data_collator = EngramDataCollator(tokenizer=tokenizer, config=engram_config_obj)
+    data_collator = EngramDataCollator(
+        tokenizer=wash_tokenizer(tokenizer), config=engram_config_obj
+    )
 
     trainer = EngramTrainer(
         model=model,
@@ -383,12 +397,8 @@ def run_example(args: argparse.Namespace) -> None:
     inputs = tokenizer(prompt, return_tensors="pt").to(model.base_model.device)
 
     print(f"Prompt: {prompt}")
-    if not isinstance(tokenizer, PreTrainedTokenizerBase):
-        raise TypeError("tokenizer must be a PreTrainedTokenizerBase")
-
     with torch.no_grad():
-        # Re-bind to force clean type binding and retain parameter checking
-        gen_model: ModelProtocol = model
+        gen_model = wash_model(model)
         output = gen_model.generate(
             **inputs,
             max_new_tokens=100,
@@ -405,13 +415,19 @@ def run_example(args: argparse.Namespace) -> None:
     # To fully verify, we should be able to load both LoRA and Engram back
     try:
         # 1. Load LoRA part onto a fresh base model (or reuse base_model for efficiency)
+        if not isinstance(base_model, torch.nn.Module):
+            raise TypeError("base_model must be a torch.nn.Module for reloading")
+
         reloaded_peft = PeftModel.from_pretrained(
             base_model, OUTPUT_DIR, trust_remote_code=True
         )
 
         # 2. Re-wrap with Engram using the class method which is cleaner
+        if not isinstance(reloaded_peft, torch.nn.Module):
+            raise TypeError("reloaded_peft must be a torch.nn.Module")
+
         reloaded_model = EngramModel.from_pretrained(
-            reloaded_peft, OUTPUT_DIR, tokenizer=tokenizer
+            reloaded_peft, OUTPUT_DIR, tokenizer=wash_tokenizer(tokenizer)
         )
 
         print("Inference with Fully Reloaded Model (LoRA + Engram):")

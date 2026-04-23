@@ -110,6 +110,10 @@ exclude = [
     ".venv",
 ]
 
+# Add examples to the Python search path so that relative imports work
+extraPaths = ["."]
+
+
 typeCheckingMode = "standard"
 
 # ----------------------------------------------------------------------

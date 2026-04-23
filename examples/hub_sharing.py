@@ -28,6 +28,7 @@ from transformers import (
 )
 
 from engram_peft import EngramConfig, EngramModel, get_engram_model
+from engram_peft.utils.compat import wash_tokenizer
 
 
 def main():
@@ -76,7 +77,7 @@ def main():
     model = get_engram_model(
         base_model,
         config,
-        tokenizer,
+        wash_tokenizer(tokenizer),
         train_mode="engram_only",
     )
 
@@ -100,7 +101,7 @@ def main():
     # We can use EngramModel.from_pretrained with the Hub ID directly.
     # It will download the files to your cache and then load them.
     reloaded_model = EngramModel.from_pretrained(
-        base_model, args.repo_id, tokenizer=tokenizer
+        base_model, args.repo_id, tokenizer=wash_tokenizer(tokenizer)
     )
 
     print("Successfully reloaded model from Hub!")

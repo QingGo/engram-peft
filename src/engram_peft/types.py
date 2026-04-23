@@ -293,50 +293,17 @@ class TokenizerProtocol(Protocol):
     @property
     def vocab_size(self) -> int: ...
 
-    @property
-    def pad_token_id(self) -> int | None: ...
+    # Attributes instead of properties for better stub compatibility
+    pad_token_id: int | None
+    pad_token: str | None
+    eos_token: str | None
 
-    @property
-    def pad_token(self) -> str | None: ...
+    def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
 
-    @pad_token.setter
-    def pad_token(self, value: str | None) -> None: ...
+    def encode(self, *args: Any, **kwargs: Any) -> list[int] | Any: ...
 
-    @property
-    def eos_token(self) -> str | None: ...
-
-    def __call__(
-        self,
-        text: str | list[str] | Any,
-        text_pair: str | list[str] | Any | None = None,
-        text_target: str | list[str] | Any | None = None,
-        text_pair_target: str | list[str] | Any | None = None,
-        truncation: bool = False,
-        max_length: int | None = None,
-        padding: bool | str = False,
-        return_tensors: str | None = None,
-        **kwargs: Any,
-    ) -> Any: ...
-
-    def encode(
-        self,
-        text: str | list[str] | Any,
-        text_pair: str | list[str] | Any | None = None,
-        text_target: str | list[str] | Any | None = None,
-        text_pair_target: str | list[str] | Any | None = None,
-        add_special_tokens: bool = True,
-        **kwargs: Any,
-    ) -> list[int] | Any: ...
-
-    def decode(
-        self,
-        token_ids: list[int] | Any,
-        skip_special_tokens: bool = False,
-        **kwargs: Any,
-    ) -> str | Any: ...
+    def decode(self, *args: Any, **kwargs: Any) -> str | Any: ...
 
     def convert_ids_to_tokens(
-        self,
-        ids: int | list[int] | Any,
-        skip_special_tokens: bool = False,
+        self, *args: Any, **kwargs: Any
     ) -> str | list[str] | Any: ...

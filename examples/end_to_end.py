@@ -39,6 +39,7 @@ from engram_peft import (
     get_optimizer,
     get_scheduler,
 )
+from engram_peft.utils.compat import wash_tokenizer
 
 MODEL_NAME = "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T"
 OUTPUT_DIR = "outputs/engram_standard"
@@ -97,14 +98,17 @@ def train_engram(
     )
 
     print("Injecting Engram layers and freezing base model...")
+    if not isinstance(base_model, PreTrainedModel):
+        raise TypeError("base_model must be a PreTrainedModel")
+
     model = get_engram_model(
         base_model,
         config,
-        tokenizer,
+        wash_tokenizer(tokenizer),
         train_mode="engram_only",
     )
 
-    collator = EngramDataCollator(tokenizer=tokenizer, config=config)
+    collator = EngramDataCollator(tokenizer=wash_tokenizer(tokenizer), config=config)
     optimizer = get_optimizer(model, base_learning_rate=4e-4)
     scheduler = get_scheduler(
         optimizer, num_training_steps=args.max_steps, warmup_steps=10
@@ -154,6 +158,9 @@ def inference_demo(
 
     # Load trained Engram onto the base model
     print(f"Loading trained Engram from {ENGRAM_WEIGHTS_DIR}")
+    if not isinstance(base_model, torch.nn.Module):
+        raise TypeError("base_model must be a torch.nn.Module")
+
     model = EngramModel.from_pretrained(base_model, ENGRAM_WEIGHTS_DIR)
 
     prompt = "Once upon a time, there was a little robot named"

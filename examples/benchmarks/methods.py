@@ -19,6 +19,7 @@ from engram_peft import (
     get_engram_model,
 )
 from engram_peft.types import ModelProtocol, PeftUnloadable
+from engram_peft.utils.compat import wash_tokenizer
 
 # Configure logging to see Engram injection logs
 logging.basicConfig(level=logging.WARNING, format="%(message)s")
@@ -168,7 +169,9 @@ def train_engram(
         if hasattr(config, k):
             setattr(config, k, v)
 
-    model = get_engram_model(base_model, config, tokenizer)
+    if not isinstance(base_model, PreTrainedModel):
+        raise TypeError("base_model must be a PreTrainedModel")
+    model = get_engram_model(base_model, config, wash_tokenizer(tokenizer))
     model.print_trainable_parameters()
 
     warmup_steps = int(args.max_steps * 0.03)
@@ -200,7 +203,7 @@ def train_engram(
         if hasattr(training_args, k):
             setattr(training_args, k, v)
 
-    collator = EngramDataCollator(tokenizer=tokenizer, config=config)
+    collator = EngramDataCollator(tokenizer=wash_tokenizer(tokenizer), config=config)
     trainer = EngramTrainer(
         model=model,
         args=training_args,
@@ -330,10 +333,12 @@ def train_lora_engram(
         if hasattr(config, k):
             setattr(config, k, v)
 
+    if not isinstance(lora_model, torch.nn.Module):
+        raise TypeError("lora_model must be a torch.nn.Module")
     model = get_engram_model(
         lora_model,
         config,
-        tokenizer,
+        wash_tokenizer(tokenizer),
         train_mode="preserve_trainable",
     )
     model.print_trainable_parameters()
@@ -367,7 +372,7 @@ def train_lora_engram(
         if hasattr(training_args, k):
             setattr(training_args, k, v)
 
-    collator = EngramDataCollator(tokenizer=tokenizer, config=config)
+    collator = EngramDataCollator(tokenizer=wash_tokenizer(tokenizer), config=config)
     trainer = EngramTrainer(
         model=model,
         args=training_args,
@@ -380,8 +385,6 @@ def train_lora_engram(
     metrics = extract_trainer_metrics(trainer, train_result)
 
     model.save_pretrained("outputs/benchmarks/lora_engram_weights")
-    if isinstance(model.base_model, ModelProtocol):
-        model.base_model.save_pretrained("outputs/benchmarks/lora_engram_weights")
     model.unload_engram()
     if isinstance(lora_model, PeftUnloadable):
         lora_model.unload()
@@ -425,10 +428,12 @@ def train_full_finetune_engram(
 
     if not isinstance(base_model, PreTrainedModel | torch.nn.Module):
         raise TypeError("base_model must be a Module for Engram injection")
+    if not isinstance(base_model, PreTrainedModel):
+        raise TypeError("base_model must be a PreTrainedModel")
     model = get_engram_model(
         base_model,
         config,
-        tokenizer,
+        wash_tokenizer(tokenizer),
         train_mode="full_finetune",
     )
     model.print_trainable_parameters()
@@ -462,7 +467,7 @@ def train_full_finetune_engram(
         if hasattr(training_args, k):
             setattr(training_args, k, v)
 
-    collator = EngramDataCollator(tokenizer=tokenizer, config=config)
+    collator = EngramDataCollator(tokenizer=wash_tokenizer(tokenizer), config=config)
     trainer = EngramTrainer(
         model=model,
         args=training_args,
@@ -483,7 +488,10 @@ def train_full_finetune_engram(
     metrics = extract_trainer_metrics(trainer, train_result)
 
     model.save_pretrained("outputs/benchmarks/full_ft_engram_weights")
-    # Save finetuned backbone to a subfolder to avoid config.json collision
+    # Base model saving is now handled by EngramModel.save_pretrained()
+    # via save_pretrained_unified if detecting a need to save backbone.
+    # However, for full finetune, we might want to be explicit about saving the backbone
+    # to a subfolder if we don't want it to merge with Engram artifacts.
     if isinstance(model.base_model, ModelProtocol):
         model.base_model.save_pretrained(
             "outputs/benchmarks/full_ft_engram_weights/base_model"

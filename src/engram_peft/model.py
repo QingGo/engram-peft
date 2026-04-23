@@ -716,16 +716,22 @@ class EngramModel(nn.Module, GenerationMixin):
             if func:
                 func(**kwargs)
 
-    def gradient_checkpointing_disable(self) -> None:
+    def gradient_checkpointing_disable(self, **kwargs: Any) -> None:
         """Delegates gradient checkpointing disablement to the base model."""
         base_model = self.base_model
         if isinstance(base_model, ModelProtocol):
-            base_model.gradient_checkpointing_disable()
+            base_model.gradient_checkpointing_disable(**kwargs)
         else:
             # Fallback for models that don't strictly match Protocol but have the method
             func = getattr(base_model, "gradient_checkpointing_disable", None)
             if func:
-                func()
+                func(**kwargs)
+
+    def tie_weights(self) -> None:
+        """Delegates weight tying to the base model."""
+        tie_fn = getattr(self.base_model, "tie_weights", None)
+        if callable(tie_fn):
+            tie_fn()
 
     def create_optimizer(
         self, base_learning_rate: float = 4e-4, **optimizer_kwargs: Any

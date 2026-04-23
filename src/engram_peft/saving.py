@@ -10,7 +10,6 @@ from engram_peft.utils import safe_load, safe_load_file, safe_save, safe_save_fi
 if TYPE_CHECKING:
     from engram_peft.model import EngramModel
 
-from engram_peft.types import ModelProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -121,19 +120,23 @@ def save_pretrained_unified(
     # 1. Identify and Save Base Model Adapters (PEFT Integration)
     # Use feature-detection to avoid hard dependency or circular import issues
     base_model = model.base_model
-    if getattr(base_model, "_is_peft_model", False):
+    # Detect PeftModel by checking for common attributes
+    is_peft = getattr(base_model, "_is_peft_model", False) or hasattr(
+        base_model, "peft_config"
+    )
+
+    if is_peft:
         logger.info("Detecting PeftModel (LoRA). Saving base model adapters...")
-        if isinstance(base_model, ModelProtocol):
-            base_model.save_pretrained(
+        # Direct check for save_pretrained method to be more robust than Protocol check
+        save_pretrained_func = getattr(base_model, "save_pretrained", None)
+        if callable(save_pretrained_func):
+            save_pretrained_func(
                 save_directory, safe_serialization=safe_serialization, **kwargs
             )
         else:
-            # Fallback for PeftModel that doesn't strictly match Protocol but has the method
-            save_pretrained_func = getattr(base_model, "save_pretrained", None)
-            if save_pretrained_func:
-                save_pretrained_func(
-                    save_directory, safe_serialization=safe_serialization, **kwargs
-                )
+            logger.warning(
+                "Detected PEFT model but 'save_pretrained' method is not available or callable."
+            )
 
     # 2. Save Engram Artifacts
     save_pretrained_engram(model, save_directory, safe_serialization=safe_serialization)

@@ -293,3 +293,19 @@ def get_batch_size(tensor: torch.Tensor) -> int:
 def get_seq_len(tensor: torch.Tensor) -> int:
     """Returns the sequence length (dimension 1) of a tensor."""
     return get_dim(tensor, 1)
+
+
+def wash_tokenizer(tokenizer: Any) -> TokenizerProtocol:
+    """
+    Casts a tokenizer to TokenizerProtocol to 'wash' type errors
+    caused by incomplete third-party stubs.
+    """
+    return cast("TokenizerProtocol", tokenizer)
+
+
+def wash_model(model: Any) -> ModelProtocol:
+    """
+    Casts a model to ModelProtocol to 'wash' type errors
+    caused by complex inheritance or incomplete stubs.
+    """
+    return cast("ModelProtocol", model)

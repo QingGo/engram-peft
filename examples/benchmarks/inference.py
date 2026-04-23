@@ -8,6 +8,7 @@ from transformers import AutoModelForCausalLM, PreTrainedModel, PreTrainedTokeni
 
 from engram_peft import EngramLayer, EngramModel
 from engram_peft.types import ModelProtocol, PeftUnloadable
+from engram_peft.utils.compat import wash_tokenizer
 
 
 def demo_base_model(
@@ -59,7 +60,11 @@ def demo_engram(
     path: str = "outputs/benchmarks/engram_weights",
 ) -> None:
     print(f"Generating with Engram ({path})...")
-    model = EngramModel.from_pretrained(base_model, path, tokenizer=tokenizer)
+    if not isinstance(base_model, torch.nn.Module):
+        raise TypeError("base_model must be a torch.nn.Module")
+    model = EngramModel.from_pretrained(
+        base_model, path, tokenizer=wash_tokenizer(tokenizer)
+    )
     with torch.no_grad():
         out = model.generate(
             **inputs, max_new_tokens=40, max_length=None, do_sample=False
@@ -89,9 +94,15 @@ def demo_lora_engram(
 ) -> None:
     print(f"Generating with LoRA + Engram ({path})...")
     # Load LoRA first
+    if not isinstance(base_model, torch.nn.Module):
+        raise TypeError("base_model must be a torch.nn.Module")
     lora_model = PeftModel.from_pretrained(base_model, path)
     # Load Engram wrapper
-    combined_model = EngramModel.from_pretrained(lora_model, path, tokenizer=tokenizer)
+    if not isinstance(lora_model, torch.nn.Module):
+        raise TypeError("lora_model must be a torch.nn.Module")
+    combined_model = EngramModel.from_pretrained(
+        lora_model, path, tokenizer=wash_tokenizer(tokenizer)
+    )
     with torch.no_grad():
         out = combined_model.generate(
             **inputs, max_new_tokens=40, max_length=None, do_sample=False
@@ -140,10 +151,14 @@ def demo_full_finetune_engram(
     # Load finetuned base model from subfolder
     sub_path = f"{path}/base_model"
     ft_base_model = AutoModelForCausalLM.from_pretrained(
-        sub_path, torch_dtype=base_model.dtype, device_map="auto"
+        sub_path, dtype=base_model.dtype, device_map="auto"
     )
     # Load Engram wrapper
-    model = EngramModel.from_pretrained(ft_base_model, path, tokenizer=tokenizer)
+    if not isinstance(ft_base_model, torch.nn.Module):
+        raise TypeError("ft_base_model must be a torch.nn.Module")
+    model = EngramModel.from_pretrained(
+        ft_base_model, path, tokenizer=wash_tokenizer(tokenizer)
+    )
     with torch.no_grad():
         out = model.generate(
             **inputs, max_new_tokens=40, max_length=None, do_sample=False

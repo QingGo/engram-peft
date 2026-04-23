@@ -41,6 +41,7 @@ from engram_peft import (
     get_optimizer,
     get_scheduler,
 )
+from engram_peft.utils.compat import wash_tokenizer
 
 # 1. Constants & Device Detection
 MODEL_NAME = "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T"
@@ -275,7 +276,7 @@ def train_engram() -> tuple[EngramModel, PreTrainedTokenizer, EngramConfig]:
     model = get_engram_model(
         base_model,
         engram_config,
-        tokenizer,
+        wash_tokenizer(tokenizer),
         train_mode="engram_only",
     )
 
@@ -300,7 +301,9 @@ def train_engram() -> tuple[EngramModel, PreTrainedTokenizer, EngramConfig]:
     )
 
     # Components
-    collator = EngramDataCollator(tokenizer=tokenizer, config=engram_config)
+    collator = EngramDataCollator(
+        tokenizer=wash_tokenizer(tokenizer), config=engram_config
+    )
     optimizer = get_optimizer(model, base_learning_rate=4e-4)
     scheduler = get_scheduler(optimizer, num_training_steps=100, warmup_steps=10)
 

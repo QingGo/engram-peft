@@ -24,35 +24,67 @@ from examples.benchmarks.persistence import BenchmarkResult, ResultManager
 class Logger:
     """Tee logger to write to both stdout and a file."""
 
+    encoding: str
+    mode: str
+    name: str
+    terminal: Any
+    log: Any
+
     def __init__(self, filename: str):
         self.terminal = sys.stdout
         self.log = open(filename, "w", encoding="utf-8")
+        # Ensure we have common file attributes for compatibility
+        self.encoding = getattr(self.terminal, "encoding", "utf-8")
+        self.mode = "w"
+        self.name = filename
 
     def write(self, message: str) -> None:
         self.terminal.write(message)
         self.log.write(message)
         self.log.flush()
 
+    def isatty(self) -> bool:
+        """Check if the terminal is a TTY."""
+        return hasattr(self.terminal, "isatty") and self.terminal.isatty()
+
     def flush(self) -> None:
+        """Flush both the terminal and the log file."""
         self.terminal.flush()
         self.log.flush()
 
+    def __getattr__(self, name: str) -> Any:
+        """Forward any other attributes to the terminal object."""
+        return getattr(self.terminal, name)
+
 
 class BenchmarkEngine:
+    model_name: str
+    args: Any
+    result_manager: ResultManager
+    tokenizer: PreTrainedTokenizerBase
+    wandb_enabled: bool
+    train_dataset: Any
+    eval_dataset: Any
+    base_model: PreTrainedModel | None
+    is_dirty: bool
+    results: dict[str, BenchmarkResult]
+
     def __init__(self, model_name: str, args: Any):
         self.model_name = model_name
         self.args = args
         self.result_manager = ResultManager()
-        self.tokenizer: PreTrainedTokenizerBase = AutoTokenizer.from_pretrained(
-            model_name
-        )
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        if not isinstance(tokenizer, PreTrainedTokenizerBase):
+            raise TypeError("Expected PreTrainedTokenizerBase")
+        self.tokenizer = tokenizer
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
         # Setup Logging
         os.makedirs("outputs/benchmarks", exist_ok=True)
         log_path = os.path.join(
-            "outputs/benchmarks", f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+            "outputs/benchmarks",
+            f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
         )
         sys.stdout = Logger(log_path)
         sys.stderr = sys.stdout
@@ -63,8 +95,6 @@ class BenchmarkEngine:
         if args.wandb and wandb is None:
             print("Warning: wandb is not installed. Tracking disabled.")
 
-        self.train_dataset: Any
-        self.eval_dataset: Any
         self.train_dataset, self.eval_dataset = prepare_dataset(
             self.tokenizer,
             subset_size=args.subset,
@@ -73,9 +103,9 @@ class BenchmarkEngine:
             num_proc=args.num_workers,
         )
 
-        self.base_model: PreTrainedModel | None = None
+        self.base_model = None
         self.is_dirty = False
-        self.results: dict[str, BenchmarkResult] = {}
+        self.results = {}
 
     def load_model(self) -> PreTrainedModel:
         print(f"Loading Base Model: {self.model_name}...")
@@ -240,8 +270,8 @@ class BenchmarkEngine:
             metrics = result.metrics
             print(
                 f"{method.capitalize():<20} | "
-                f"{metrics.get('peak_memory_gb', 0):<15.2f} | "
-                f"{metrics.get('avg_time_per_step', 0):<18.4f} | "
-                f"{metrics.get('eval_loss', 0):.4f}"
+                + f"{metrics.get('peak_memory_gb', 0):<15.2f} | "
+                + f"{metrics.get('avg_time_per_step', 0):<18.4f} | "
+                + f"{metrics.get('eval_loss', 0):.4f}"
             )
         print("=" * 65 + "\n")
