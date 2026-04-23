@@ -332,8 +332,6 @@ def train_lora_engram(
         else None,
         pad_id=tokenizer.pad_token_id if isinstance(tokenizer.pad_token_id, int) else 0,
         learning_rate_multiplier=15.0,
-        backbone_freeze_steps=10,
-        weight_decay=0.01,
     )
     # Apply overrides to engram config
     for k, v in overrides.items():

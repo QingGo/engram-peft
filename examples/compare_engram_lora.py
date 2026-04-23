@@ -45,7 +45,7 @@ from examples.benchmarks.plotting import plot_benchmark_comparison
 def main() -> None:
     parser = argparse.ArgumentParser(description="Engram Benchmarking Suite")
     parser.add_argument("--max_steps", type=int, default=50)
-    parser.add_argument("--batch_size", type=int, default=8)
+    parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--subset", type=int, default=1000)
     parser.add_argument("--grad_accum", type=int, default=2)
     parser.add_argument("--num_workers", type=int, default=4)
