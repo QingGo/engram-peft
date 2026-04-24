@@ -47,6 +47,8 @@ def test_trainer_save_delegates_to_engram_model():
         trainer = EngramTrainer.__new__(EngramTrainer)
         trainer.args = args
         trainer.model = mock_engram
+        trainer.accelerator = MagicMock()
+        trainer.accelerator.unwrap_model.return_value = mock_engram
         trainer.processing_class = None
         trainer.data_collator = None
 

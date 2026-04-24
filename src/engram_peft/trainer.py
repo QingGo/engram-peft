@@ -25,6 +25,30 @@ from engram_peft.utils import (
 from engram_peft.utils.compat import get_config_attr, wash_model
 
 
+def _is_deepspeed_enabled(args: Any) -> bool:
+    """Check if DeepSpeed is configured in the training arguments."""
+    return getattr(args, "deepspeed", None) is not None
+
+
+def _warn_deepspeed_sparse(model: Any, args: Any) -> None:
+    """Warn if DeepSpeed is used with sparse embeddings (incompatible)."""
+    if not _is_deepspeed_enabled(args) or model is None:
+        return
+    try:
+        unwrapped = unwrap_model(model)
+    except Exception:
+        return
+    if not isinstance(unwrapped, EngramModel):
+        return
+    if get_config_attr(unwrapped.config, "use_sparse_embeddings"):
+        print(
+            "[Engram-PEFT] Warning: DeepSpeed is enabled but use_sparse_embeddings=True. "
+            + "DeepSpeed does not support sparse gradients. Set use_sparse_embeddings=False "
+            + "in EngramConfig and ensure use_sparse_embeddings is disabled. "
+            + "The MixedOptimizer will be skipped; a standard AdamW optimizer will be used instead."
+        )
+
+
 class EngramTrainer(Trainer):
     """
     Custom Trainer that handles sparse gradient clipping and norm calculation.
@@ -33,6 +57,11 @@ class EngramTrainer(Trainer):
     used in SFTTrainer) does not support SparseCPU/SparseCUDA tensors. This trainer
     overrides the clipping logic to correctly handle sparse parameters, making it the
     preferred choice when `use_sparse_embeddings=True` is set in the EngramConfig.
+
+    .. note::
+        When DeepSpeed is enabled, the custom MixedOptimizer is skipped because
+        DeepSpeed manages its own optimizer internally. SparseAdam is not compatible
+        with DeepSpeed; set ``use_sparse_embeddings=False`` in EngramConfig.
     """
 
     optimizer_kwargs: dict[str, Any]
@@ -58,6 +87,7 @@ class EngramTrainer(Trainer):
         if self.model is not None:
             self._handle_initial_freezing()
             self._capture_initial_weights()
+            _warn_deepspeed_sparse(self.model, self.args)
 
     def _handle_initial_freezing(self) -> None:
         """Initially freezes the backbone if backbone_freeze_steps > 0."""
@@ -102,20 +132,31 @@ class EngramTrainer(Trainer):
     def create_optimizer(self, model: Any = None) -> Optimizer:
         """
         Creates the MixedOptimizer if not provided.
+
+        When DeepSpeed is enabled, the MixedOptimizer is skipped because DeepSpeed
+        manages its own optimizer internally. A standard optimizer is created instead.
         """
         if self.optimizer is None:
-            # Check if model has the helper
-
-            model = wash_model(self.model)
-            if isinstance(model, EngramModel) and hasattr(model, "create_optimizer"):
-                self.optimizer = model.create_optimizer(
-                    base_learning_rate=self.args.learning_rate,
-                    **self.optimizer_kwargs,
+            if _is_deepspeed_enabled(self.args):
+                print(
+                    "[Engram-PEFT] DeepSpeed detected: skipping MixedOptimizer. "
+                    + "DeepSpeed will manage the optimizer internally. "
+                    + "Set use_sparse_embeddings=False in EngramConfig for compatibility."
                 )
-            else:
-                # Non-Engram models (e.g. plain HF models or LoRA baselines) should
-                # use the standard Transformers optimizer creation path.
                 self.optimizer = super().create_optimizer(model)
+            else:
+                model = wash_model(self.model)
+                if isinstance(model, EngramModel) and hasattr(
+                    model, "create_optimizer"
+                ):
+                    self.optimizer = model.create_optimizer(
+                        base_learning_rate=self.args.learning_rate,
+                        **self.optimizer_kwargs,
+                    )
+                else:
+                    # Non-Engram models (e.g. plain HF models or LoRA baselines) should
+                    # use the standard Transformers optimizer creation path.
+                    self.optimizer = super().create_optimizer(model)
         assert self.optimizer is not None
         return self.optimizer
 
@@ -356,14 +397,18 @@ class EngramTrainer(Trainer):
         """
         Override _save to delegate to EngramModel.save_pretrained() when the model
         is an EngramModel, avoiding safetensors shared-tensor errors from weight tying.
+
+        Unwraps the model first (DDP / DeepSpeed wrapper) before checking isinstance,
+        so the custom save path is used in distributed training too.
         """
         if output_dir is None:
             output_dir = self.args.output_dir
         dir_path: str = cast("str", output_dir)
         os.makedirs(dir_path, exist_ok=True)
 
-        if isinstance(self.model, EngramModel):
-            self.model.save_pretrained(dir_path)
+        unwrapped = self.accelerator.unwrap_model(self.model)
+        if isinstance(unwrapped, EngramModel):
+            unwrapped.save_pretrained(dir_path)
             if self.processing_class is not None:
                 self.processing_class.save_pretrained(dir_path)
             elif self.data_collator is not None:

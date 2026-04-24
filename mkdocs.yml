@@ -73,4 +73,5 @@ nav:
   - API Reference: docs/api.md
   - Paper Alignment: docs/paper_alignment.md
   - Comparison Analysis (LoRA vs Engram): docs/compare_engram_lora_analysis.md
+  - Distributed Training: docs/distributed.md
   - Change Log: docs/fix_record.md

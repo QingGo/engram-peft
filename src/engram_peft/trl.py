@@ -18,6 +18,7 @@ from trl import SFTConfig, SFTTrainer
 
 from engram_peft.collator import EngramDataCollator
 from engram_peft.model import EngramModel
+from engram_peft.trainer import _is_deepspeed_enabled, _warn_deepspeed_sparse
 from engram_peft.utils import (
     apply_group_wise_clipping,
     compute_grad_norm,
@@ -103,26 +104,39 @@ class EngramCompatibleSFTTrainer(SFTTrainer):
             )
 
         super().__init__(*args, **kwargs)
+        if model is not None:
+            _warn_deepspeed_sparse(model, getattr(self, "args", None))
 
     @override
     def create_optimizer(self, model: Any = None) -> Optimizer:
         """
         Creates the MixedOptimizer for EngramModels to support sparse gradients.
+
+        When DeepSpeed is enabled, the MixedOptimizer is skipped because DeepSpeed
+        manages its own optimizer internally.
         """
         if self.optimizer is None:
-            model_to_unwrap = model if model is not None else self.model
-            if model_to_unwrap is None:
-                return super().create_optimizer()
-            unwrapped_model = unwrap_model(cast("nn.Module", model_to_unwrap))
-            if isinstance(unwrapped_model, EngramModel) and hasattr(
-                unwrapped_model, "create_optimizer"
-            ):
-                self.optimizer = unwrapped_model.create_optimizer(
-                    base_learning_rate=self.args.learning_rate,
-                    **self.optimizer_kwargs,
+            if _is_deepspeed_enabled(self.args):
+                print(
+                    "[Engram-PEFT] DeepSpeed detected in EngramCompatibleSFTTrainer: "
+                    + "skipping MixedOptimizer. DeepSpeed will manage the optimizer. "
+                    + "Set use_sparse_embeddings=False in EngramConfig for compatibility."
                 )
+                self.optimizer = super().create_optimizer(model)
             else:
-                self.optimizer = super().create_optimizer()
+                model_to_unwrap = model if model is not None else self.model
+                if model_to_unwrap is None:
+                    return super().create_optimizer()
+                unwrapped_model = unwrap_model(cast("nn.Module", model_to_unwrap))
+                if isinstance(unwrapped_model, EngramModel) and hasattr(
+                    unwrapped_model, "create_optimizer"
+                ):
+                    self.optimizer = unwrapped_model.create_optimizer(
+                        base_learning_rate=self.args.learning_rate,
+                        **self.optimizer_kwargs,
+                    )
+                else:
+                    self.optimizer = super().create_optimizer()
         assert self.optimizer is not None
         return self.optimizer
 

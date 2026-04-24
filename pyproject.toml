@@ -167,6 +167,10 @@ executionEnvironments = [
 
 
 [dependency-groups]
+# Install: uv sync --group dev --group deepspeed
+deepspeed = [
+    "deepspeed>=0.15.0",
+]
 dev = [
     "datasets>=4.8.4",
     "matplotlib>=3.10.8",
@@ -190,7 +194,7 @@ dev = [
     "types-pyyaml>=6.0.12.20260408",
     "ipython>=8.39.0",
     "ipytest>=0.14.2",
-    "sprintest>=1.1.0",
+    "sprintest>=1.1.1",
     "bitsandbytes>=0.49.2",
     "basedpyright",
 ]
