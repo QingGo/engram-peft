@@ -20,7 +20,7 @@ import os
 import sys
 import traceback
 from collections.abc import Iterable
-from typing import Any, cast
+from typing import Any
 
 from engram_peft.types import ModelProtocol, SafeTrainingArguments, SizedEncoding
 
@@ -294,33 +294,34 @@ def run_example(args: argparse.Namespace) -> None:
     )
     model.print_trainable_parameters()
 
+    # Enable gradient checkpointing to reduce memory (~50% reduction for Gemma-4)
+    model.gradient_checkpointing_enable()
+
     # 4. Prepare Dataset
-    print("Preparing Alpaca subsets (train + eval)...")
+    print("Preparing Alpaca subset...")
     datasets = prepare_alpaca_dataset(tokenizer)
 
-    # 5. Training
+    # 5. Training Arguments
     precision_config = get_optimal_precision_config()
-    training_args_dict = {
-        "output_dir": OUTPUT_DIR,
+    training_args_dict: SafeTrainingArguments = {
+        "output_dir": str(OUTPUT_DIR),
         "per_device_train_batch_size": args.batch_size,
+        "per_device_eval_batch_size": 1,
         "gradient_accumulation_steps": 4,
         "max_steps": args.max_steps,
         "learning_rate": args.lr,
         "logging_steps": args.logging_steps,
-        "eval_strategy": "steps" if "eval" in datasets else "no",
+        "evaluation_strategy": "steps" if "eval" in datasets else "no",
         "eval_steps": args.eval_steps,
-        "per_device_eval_batch_size": 1,
         "remove_unused_columns": True,
         "report_to": "none",
         "bf16": precision_config.get("bf16", False),
         "fp16": precision_config.get("fp16", False),
     }
 
-    training_args = create_safe_training_args(
-        cast("SafeTrainingArguments", training_args_dict)
-    )
+    training_args = create_safe_training_args(training_args_dict)
 
-    # 4. Prepare Trainer
+    # 6. Prepare Trainer
     print("Preparing Trainer...")
 
     # Use the library's data collator which now handles padding masking automatically!
@@ -392,6 +393,9 @@ def run_example(args: argparse.Namespace) -> None:
     model.save_pretrained_engram(OUTPUT_DIR)
 
     # 7. Inference Demo (Original Model)
+    # Gradient checkpointing must be disabled before inference; it conflicts with
+    # KV cache during generation and causes repeated/garbled output.
+    model.gradient_checkpointing_disable()
     print("\n>>> Inference Demo (Original Model)")
     prompt = "<start_of_turn>user\nTell me a short fact about the moon.<end_of_turn>\n<start_of_turn>model\n"
     # Use hasattr to get the device safely
@@ -417,15 +421,16 @@ def run_example(args: argparse.Namespace) -> None:
 
     # 8. Reload and Verify
     print("\n>>> Reloading Model for Verification")
-    # To fully verify, we should be able to load both LoRA and Engram back
+    # Unload original engram hooks from base_model to prevent double registration
+    model.unload_engram()
     try:
-        # 1. Load LoRA part onto a fresh base model (or reuse base_model for efficiency)
+        # 1. Load LoRA part onto the base model
 
         reloaded_peft = PeftModel.from_pretrained(
             base_model, OUTPUT_DIR, trust_remote_code=True
         )
 
-        # 2. Re-wrap with Engram using the class method which is cleaner
+        # 2. Re-wrap with Engram using the class method
 
         reloaded_model = EngramModel.from_pretrained(
             reloaded_peft, OUTPUT_DIR, tokenizer=wash_tokenizer(tokenizer)
