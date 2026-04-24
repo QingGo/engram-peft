@@ -339,6 +339,25 @@
   
   
     <li class="md-tabs__item">
+      <a href="docs/distributed/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Distributed Training
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
       <a href="docs/fix_record.md" class="md-tabs__link">
         
   
@@ -663,6 +682,33 @@
   
   
     <li class="md-nav__item">
+      <a href="docs/distributed/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distributed Training
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="docs/fix_record.md" class="md-nav__link">
         
   
@@ -801,6 +847,15 @@ uv<span class="w"> </span>sync<span class="w"> </span>--all-groups
 <span class="c1"># Using pip</span>
 pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[dev]&quot;</span>
 </code></pre></div>
+<p><strong>NPU (Ascend) Support</strong>: For training on Huawei Ascend NPU, install <code>torch-npu</code>:
+<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>torch-npu<span class="w"> </span>--index-url<span class="w"> </span>https://repo.huaweicloud.com/repository/pypi/simple
+</code></pre></div>
+Engram-PEFT automatically detects NPU availability and switches all AMP settings accordingly. On NPU, <code>bfloat16</code> is generally not supported — use <code>engram_dtype="float16"</code> in your <code>EngramConfig</code>.</p>
+<p>For <strong>distributed training on NPU</strong> (<code>torchrun</code> DDP, <strong>DeepSpeed ZeRO‑1/2</strong>), use the built-in backend detection:
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">engram_peft.utils.device</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_distributed_backend</span>
+<span class="n">backend</span> <span class="o">=</span> <span class="n">get_distributed_backend</span><span class="p">()</span>  <span class="c1"># &quot;hccl&quot; on NPU, &quot;nccl&quot; on CUDA</span>
+</code></pre></div>
+See <a href="docs/tutorial/#distributed-training-on-npu-ddp">NPU Distributed Training</a> in the docs for details.</p>
 <h3 id="5-minute-example">5-Minute Example</h3>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoModelForCausalLM</span><span class="p">,</span> <span class="n">AutoTokenizer</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">engram_peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">EngramConfig</span><span class="p">,</span> <span class="n">get_engram_model</span>
@@ -919,6 +974,8 @@ engram-peft<span class="w"> </span>config-template<span class="w"> </span>--outp
 <li><strong>Hugging Face Hub Integration</strong>: Support for pushing adapters via <code>push_to_hub</code> and loading directly from Hub IDs via <code>from_pretrained</code>, fully aligned with the PEFT ecosystem.</li>
 <li><strong>TRL &amp; SFTTrainer Compatibility</strong>: Native <code>EngramCompatibleSFTTrainer</code> that handles model preparation, hash precomputation, and <strong>sparse gradient clipping</strong> automatically for seamless instruction tuning.</li>
 <li><strong>Quantization Support</strong>: Native compatibility with <strong>bitsandbytes (4-bit/8-bit)</strong> and <strong>GPTQ</strong> models. Smart dtype detection ensures Engram layers automatically align with the backbone's <code>compute_dtype</code>.</li>
+<li><strong>Unified Device Backend</strong>: Automatic detection and support for <strong>CUDA</strong>, <strong>NPU (Ascend)</strong>, and <strong>CPU</strong>, with unified AMP, GradScaler, and distributed backend detection (<code>get_distributed_backend()</code> returns <code>"hccl"</code> on NPU, <code>"nccl"</code> on CUDA).</li>
+<li><strong>Distributed Training (DDP &amp; DeepSpeed)</strong>: Full compatibility with <code>torchrun</code> (DDP) and <strong>DeepSpeed ZeRO-1/2</strong> on both CUDA and NPU. Distributed sparse embeddings are supported under DDP; DeepSetup mode automatically falls back to dense embeddings for ZeRO optimizer compatibility.</li>
 </ul>
 <hr />
 <h2 id="documentation">📖 Documentation</h2>

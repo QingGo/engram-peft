@@ -341,6 +341,25 @@
   
   
     <li class="md-tabs__item">
+      <a href="../docs/distributed/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Distributed Training
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
       <a href="../docs/fix_record.md" class="md-tabs__link">
         
   
@@ -665,6 +684,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../docs/distributed/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distributed Training
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../docs/fix_record.md" class="md-nav__link">
         
   
@@ -803,6 +849,15 @@ uv<span class="w"> </span>sync<span class="w"> </span>--all-groups
 <span class="c1"># 使用 pip</span>
 pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[dev]&quot;</span>
 </code></pre></div>
+<p><strong>NPU (昇腾) 支持</strong>：如需在华为昇腾 NPU 上训练，请安装 <code>torch-npu</code>：
+<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>torch-npu<span class="w"> </span>--index-url<span class="w"> </span>https://repo.huaweicloud.com/repository/pypi/simple
+</code></pre></div>
+Engram-PEFT 会自动检测 NPU 可用性并切换 AMP 设置。NPU 上通常不支持 <code>bfloat16</code>——请在 <code>EngramConfig</code> 中设置 <code>engram_dtype="float16"</code>。</p>
+<p><strong>NPU 分布式训练</strong>（<code>torchrun</code> DDP、<strong>DeepSpeed ZeRO‑1/2</strong>）使用内置的后端检测：
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">engram_peft.utils.device</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_distributed_backend</span>
+<span class="n">backend</span> <span class="o">=</span> <span class="n">get_distributed_backend</span><span class="p">()</span>  <span class="c1"># NPU 返回 &quot;hccl&quot;，CUDA 返回 &quot;nccl&quot;</span>
+</code></pre></div>
+详见文档 <a href="../docs/tutorial/#distributed-training-on-npu-ddp">NPU 分布式训练</a>。</p>
 <h3 id="5">5 分钟上手示例</h3>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoModelForCausalLM</span><span class="p">,</span> <span class="n">AutoTokenizer</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">engram_peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">EngramConfig</span><span class="p">,</span> <span class="n">get_engram_model</span>
@@ -921,6 +976,8 @@ engram-peft<span class="w"> </span>config-template<span class="w"> </span>--outp
 <li><strong>Hugging Face Hub 集成</strong>：支持通过 <code>push_to_hub</code> 上传适配器，并通过 <code>from_pretrained</code> 直接从 Hub ID 加载，与 PEFT 生态深度对齐。</li>
 <li><strong>TRL &amp; SFTTrainer 兼容性</strong>：原生提供 <code>EngramCompatibleSFTTrainer</code>，自动处理模型准备、哈希预计算及<strong>稀疏梯度裁剪</strong>，实现无缝的指令微调。</li>
 <li><strong>量化支持</strong>：原生兼容 <strong>bitsandbytes (4-bit/8-bit)</strong> 和 <strong>GPTQ</strong> 模型。智能 dtype 检测确保 Engram 层自动与主干网络的 <code>compute_dtype</code> 对齐。</li>
+<li><strong>统一设备后端</strong>：自动检测并支持 <strong>CUDA</strong>、<strong>NPU（昇腾）</strong> 和 <strong>CPU</strong>，提供统一的 AMP、GradScaler 和分布式后端检测（<code>get_distributed_backend()</code> 对 NPU 返回 <code>"hccl"</code>，对 CUDA 返回 <code>"nccl"</code>）。</li>
+<li><strong>分布式训练（DDP &amp; DeepSpeed）</strong>：完全兼容 <code>torchrun</code>（DDP）和 <strong>DeepSpeed ZeRO-1/2</strong>，同时支持 CUDA 和 NPU。DDP 下支持分布式稀疏 Embedding；DeepSpeed 模式下自动回退为稠密 Embedding 以兼容 ZeRO 优化器。</li>
 </ul>
 <hr />
 <h2 id="_5">📖 文档</h2>
