@@ -37,7 +37,7 @@ This script is used to benchmark Engram against other training methods like LoRA
 uv run python examples/compare_engram_lora.py --methods lora engram
 
 # Compare all available methods
-uv run python examples/compare_engram_lora.py --all
+uv run python examples/compare_engram_lora.py --all --max_steps 50 --batch_size 16 --subset 10000
 
 # Hyperparameter Sweep: Compare different clipping strategies for Engram
 uv run python examples/compare_engram_lora.py --methods engram:clip_grad_per_layer=False engram:clip_grad_per_layer=True
@@ -112,7 +112,59 @@ engram-peft train --config examples/config.yaml --overrides "training_args.learn
 
 ---
 
-## 7. Mainstream Model Templates (Training + Inference)
+## 7. Hugging Face Hub Sharing: `hub_sharing.py`
+
+Demonstrates how to push a trained Engram adapter to the Hugging Face Hub and reload it directly from a Hub repository ID.
+
+### Features
+- **Upload**: Push a complete Engram adapter (config + weights) to the Hub.
+- **Reload**: Load an adapter from a remote repository by its ID.
+- **No Repository Creation Needed**: `push_to_hub` auto-creates the remote repository if it doesn't exist.
+
+### Running the Example
+```bash
+# Login first
+hf auth login
+
+# Push and reload
+uv run python examples/hub_sharing.py --repo_id "your-username/tinyllama-engram-test"
+```
+
+---
+
+## 8. Quantization Support: `quantization_example.py`
+
+Shows how to inject Engram layers into a 4-bit quantized backbone (bitsandbytes) while maintaining correct computation precision.
+
+### Features
+- **Quantized Backbone**: Loads a model with `BitsAndBytesConfig` (4-bit NF4).
+- **Full-Precision Engram**: Keeps Engram embedding tables in FP32/BF16 for gradient stability.
+- **End-to-End Training**: Runs sparse training steps with gradient checkpointing and CPU-offloaded mixed optimizer.
+
+### Running the Example
+```bash
+uv run python examples/quantization_example.py --model_id TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T
+```
+
+---
+
+## 9. TRL SFT Integration: `trl_sft_example.py`
+
+Demonstrates how to use Engram-PEFT with `trl`'s `SFTTrainer` for supervised fine-tuning.
+
+### Features
+- **Seamless Integration**: Uses `create_engram_sft_trainer(...)` to wrap the standard SFT pipeline.
+- **Dataset Flexibility**: Works with any format trl accepts (instruction-style datasets).
+- **Minimal Boilerplate**: Handles Engram injection, optimizer setup, and training loop automatically.
+
+### Running the Example
+```bash
+uv run python examples/trl_sft_example.py
+```
+
+---
+
+## 10. Mainstream Model Templates (Training + Inference)
 
 These scripts provide ready-to-use templates for the latest mainstream models in the ecosystem. They demonstrate combined **LoRA + Engram** fine-tuning on the Alpaca instruction dataset.
 
@@ -141,7 +193,7 @@ uv run python examples/gemma4_engram_lora.py --lr 1e-4
 
 ---
 
-## 🛠 Prerequisites
+## 11. 🛠 Prerequisites
 
 The examples require additional libraries (`matplotlib`, `seaborn`, `pandas`, `peft`, `datasets`, `bitsandbytes`, `accelerate`) which are included in the project's dev dependencies.
 

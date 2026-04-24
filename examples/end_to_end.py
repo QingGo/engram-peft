@@ -14,6 +14,9 @@ uv run python examples/end_to_end.py --max_steps 50 --batch_size 4 --num_workers
 ```
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import argparse
 import copy
 import os

@@ -1,5 +1,9 @@
 from .compat import (
+    as_dict,
+    as_module,
     as_scalar,
+    as_tensor_dict,
+    iter_parameters,
     safe_config_from_pretrained,
     safe_from_numpy,
     safe_load,
@@ -46,4 +50,8 @@ __all__ = [
     "safe_from_numpy",
     "safe_snapshot_download",
     "as_scalar",
+    "as_module",
+    "as_dict",
+    "as_tensor_dict",
+    "iter_parameters",
 ]

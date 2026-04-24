@@ -26,6 +26,9 @@ Usage:
     uv run python examples/compare_engram_lora.py --plot_only --files file1.json file2.json
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import argparse
 import json
 import os

@@ -14,6 +14,9 @@ Usage:
 
 from __future__ import annotations
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
 import time
 from typing import Any, ClassVar, cast, override
@@ -27,6 +30,7 @@ from transformers import (
     PretrainedConfig,
     PreTrainedModel,
     PreTrainedTokenizer,
+    PreTrainedTokenizerFast,
     TrainingArguments,
     set_seed,
 )
@@ -264,12 +268,12 @@ class SimpleTransformer(PreTrainedModel, GenerationMixin):
 
 
 # 3. Main Logic Functions
-def train_engram() -> tuple[EngramModel, PreTrainedTokenizer, EngramConfig]:
+def train_engram() -> tuple[EngramModel, PreTrainedTokenizer | PreTrainedTokenizerFast, EngramConfig]:
     print("\n>>> Stage 1: Initializing Tiny Model & Engram")
 
     # Load Tokenizer (using GPT2 as base)
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    assert isinstance(tokenizer, PreTrainedTokenizer)
+    assert isinstance(tokenizer, (PreTrainedTokenizer, PreTrainedTokenizerFast))
     tokenizer.pad_token = (
         tokenizer.eos_token if tokenizer.pad_token is None else tokenizer.pad_token
     )
@@ -319,8 +323,7 @@ def train_engram() -> tuple[EngramModel, PreTrainedTokenizer, EngramConfig]:
         tokenized = tokenizer(
             examples["text"], truncation=True, max_length=128, padding="max_length"
         )
-        assert isinstance(tokenized, dict)
-        return tokenized
+        return dict(tokenized)
 
     data_list = []
     for i, item in enumerate(dataset):
@@ -370,7 +373,7 @@ def train_engram() -> tuple[EngramModel, PreTrainedTokenizer, EngramConfig]:
     return model, tokenizer, engram_config
 
 
-def inference_demo(tokenizer: PreTrainedTokenizer, config: EngramConfig) -> None:
+def inference_demo(tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast, config: EngramConfig) -> None:
     print("\n>>> Stage 2: Inference & Visualization")
 
     # Clean Base Model

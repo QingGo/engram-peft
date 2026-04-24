@@ -9,6 +9,7 @@ import torch.nn as nn
 from engram_peft.types import (
     ConfigProtocol,
     HasComputeDtype,
+    MinimalConfigProtocol,
     ModelProtocol,
     TokenizerProtocol,
 )
@@ -349,7 +350,7 @@ class ArchitectureResolver:
             base_config = get_config_attr(model, "config")
 
         if base_config is not None:
-            if isinstance(base_config, ConfigProtocol):
+            if isinstance(base_config, MinimalConfigProtocol):
                 return base_config.model_type
             return get_config_attr(base_config, "model_type")
         return None

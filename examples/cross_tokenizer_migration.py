@@ -1,4 +1,8 @@
 # pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportUnknownParameterType=none
+
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
 import shutil
 from types import SimpleNamespace

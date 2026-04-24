@@ -99,13 +99,24 @@ class SizedEncoding(Iterable[int], Sized, Protocol):
 
 
 @runtime_checkable
-class ConfigProtocol(Protocol):
+class MinimalConfigProtocol(Protocol):
     """
-    Protocol for Hugging Face-style configuration objects.
-    Covers common fields used across transformers and engram-peft.
+    Minimal configuration protocol requiring only model_type.
+    Compatible with PeftConfig and other lightweight config objects
+    that do not expose the full HF config interface.
     """
 
     model_type: str
+
+
+@runtime_checkable
+class ConfigProtocol(MinimalConfigProtocol, Protocol):
+    """
+    Protocol for Hugging Face-style configuration objects.
+    Covers common fields used across transformers and engram-peft.
+    Inherits from MinimalConfigProtocol for dual-level isinstance checks.
+    """
+
     vocab_size: int
     hidden_size: int
     num_hidden_layers: int

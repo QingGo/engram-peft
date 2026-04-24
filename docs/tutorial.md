@@ -27,7 +27,7 @@ config = EngramConfig(
 )
 
 # 3. Inject & Freeze
-base_model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16)
+base_model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16)
 model = get_engram_model(
     base_model,
     config,
@@ -411,8 +411,8 @@ lora_config = LoraConfig(
 )
 peft_model = get_peft_model(base_model, lora_config)
 
-# 2. Apply Engram (use wrap_peft=True to preserve LoRA's trainable state)
-engram_model = get_engram_model(peft_model, config, wrap_peft=True)
+# 2. Apply Engram (use train_mode="preserve_trainable" to preserve LoRA's trainable state)
+engram_model = get_engram_model(peft_model, config, train_mode="preserve_trainable")
 ```
 
 ### Important Notes

@@ -9,6 +9,9 @@ Usage:
     uv run python examples/quantization_example.py --model_id TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import argparse
 from typing import Any, cast
 

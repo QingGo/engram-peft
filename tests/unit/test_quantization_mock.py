@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 
 from engram_peft import EngramConfig, EngramModel, get_engram_model
+from engram_peft.discovery import ArchitectureResolver
 
 
 class MockQuantizedLayer(nn.Module):
@@ -44,26 +45,56 @@ class TestQuantizationDtypeDetection(unittest.TestCase):
         self.patcher.stop()
 
     def test_automatic_compute_dtype_detection(self):
-        # Config targeting both layers
-        config = EngramConfig(
-            target_layers=[0, 1],
+        """
+        Tests resolve_layer_dtype directly for all three priority steps:
+          Step 1: Explicit config override
+          Step 2: BitsAndBytes compute_dtype detection on quantized layers
+          Step 3: Parameter sampling on normal layers
+        """
+        # --- Step 2: Quantized layer with compute_dtype ---
+        quantized_layer = MockQuantizedLayer(compute_dtype=torch.bfloat16)
+        detected_dtype, source = ArchitectureResolver.resolve_layer_dtype(
+            quantized_layer, config=None
+        )
+        self.assertEqual(
+            detected_dtype,
+            torch.bfloat16,
+            f"Expected bfloat16 from quantized layer, got {detected_dtype} "
+            f"(source: {source})",
+        )
+        self.assertIn("compute_dtype", source)
+
+        # --- Step 3: Parameter sampling for normal linear layer (default float32) ---
+        linear_layer = nn.Linear(10, 10)
+        detected_dtype2, source2 = ArchitectureResolver.resolve_layer_dtype(
+            linear_layer, config=None
+        )
+        self.assertEqual(
+            detected_dtype2,
+            torch.float32,
+            f"Expected float32 from linear layer, got {detected_dtype2} "
+            f"(source: {source2})",
+        )
+        self.assertIn("Parameter sample", source2)
+
+        # --- Step 1: Explicit config override takes priority ---
+        explicit_config = EngramConfig(
+            target_layers=[0],
             embedding_dim=16,
             n_head_per_ngram=2,
+            engram_dtype="float16",
             enable_tokenizer_compression=False,
         )
-
-        # Initialize EngramModel
-        model = get_engram_model(self.base_model, config)
-
-        # Check layer 0 (Quantized)
-        engram_layer0 = model.engram_layers["0"]
-        # Should be bfloat16 (detected from compute_dtype)
-        self.assertEqual(next(engram_layer0.parameters()).dtype, torch.bfloat16)
-
-        # Check layer 1 (Normal)
-        engram_layer1 = model.engram_layers["1"]
-        # Should be float32 (default for nn.Linear in this mock)
-        self.assertEqual(next(engram_layer1.parameters()).dtype, torch.float32)
+        detected_dtype3, source3 = ArchitectureResolver.resolve_layer_dtype(
+            linear_layer, config=explicit_config
+        )
+        self.assertEqual(
+            detected_dtype3,
+            torch.float16,
+            f"Expected float16 from explicit config, got {detected_dtype3} "
+            f"(source: {source3})",
+        )
+        self.assertIn("Explicit config", source3)
 
     def test_explicit_engram_dtype_override(self):
         # Config with explicit float16

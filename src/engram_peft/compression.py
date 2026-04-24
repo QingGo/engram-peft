@@ -152,10 +152,10 @@ class CompressedTokenizer:
         if self.lookup.device != tensor_ids.device:
             self.lookup = self.lookup.to(tensor_ids.device)
 
-        # 1. Create a mask for valid (non-negative) IDs
-        mask = tensor_ids >= 0
+        # 1. Create a mask for valid (non-negative) IDs that are within lookup range
+        mask = (tensor_ids >= 0) & (tensor_ids < len(self.lookup))
 
-        # 2. Clone input to preserve values in negative positions
+        # 2. Clone input to preserve values in negative or out-of-range positions
         compressed = tensor_ids.clone()
 
         # 3. Only perform lookup for valid IDs

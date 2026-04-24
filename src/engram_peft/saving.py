@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import torch
 
-from engram_peft.utils import safe_load, safe_load_file, safe_save, safe_save_file
+from engram_peft.utils import as_tensor_dict, safe_load, safe_load_file, safe_save, safe_save_file
 
 if TYPE_CHECKING:
     from engram_peft.model import EngramModel
@@ -66,10 +66,7 @@ def load_engram_state_dict(
             return safe_load_file(safe_path)
         elif os.path.exists(legacy_path):
             logger.info(f"Loading Engram weights from {legacy_path} (legacy format)")
-            return cast(
-                "dict[str, torch.Tensor]",
-                safe_load(legacy_path),
-            )
+            return as_tensor_dict(safe_load(legacy_path))
         else:
             raise FileNotFoundError(f"No Engram weight file found in {path_or_dir}")
 
@@ -78,10 +75,7 @@ def load_engram_state_dict(
         return safe_load_file(path_or_dir)
     else:
         # Fallback to safe_load (likely .pt)
-        return cast(
-            "dict[str, torch.Tensor]",
-            safe_load(path_or_dir),
-        )
+        return as_tensor_dict(safe_load(path_or_dir))
 
 
 def load_engram_weights(
@@ -95,8 +89,8 @@ def load_engram_weights(
     try:
         state_dict = load_engram_state_dict(engram_path)
         res = model.engram_layers.load_state_dict(state_dict, strict=strict)
-        missing: list[str] = list(cast("Any", res.missing_keys))
-        unexpected: list[str] = list(cast("Any", res.unexpected_keys))
+        missing: list[str] = list(cast("list[str]", res.missing_keys))
+        unexpected: list[str] = list(cast("list[str]", res.unexpected_keys))
         if missing:
             logger.warning(f"Missing keys during loading: {missing}")
         if unexpected:

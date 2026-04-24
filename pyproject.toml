@@ -23,6 +23,7 @@ dependencies = [
     "bitsandbytes>=0.49.2",
     "jaxtyping",
     "typeguard",
+    "python-dotenv>=1.0.0",
 ]
 
 [project.scripts]
@@ -119,6 +120,7 @@ typeCheckingMode = "standard"
 # ----------------------------------------------------------------------
 # 核心严格规则
 # ----------------------------------------------------------------------
+reportIncompatibleMethodOverride = "error"
 reportUnknownVariableType = "warning"
 reportUnknownArgumentType = "warning"
 reportUnknownParameterType = "warning"

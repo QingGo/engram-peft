@@ -19,7 +19,7 @@ from transformers import (
 
 if TYPE_CHECKING:
     import os
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
     from datasets import Dataset
     from torch import Tensor
@@ -298,6 +298,37 @@ def get_batch_size(tensor: torch.Tensor) -> int:
 def get_seq_len(tensor: torch.Tensor) -> int:
     """Returns the sequence length (dimension 1) of a tensor."""
     return get_dim(tensor, 1)
+
+
+def as_module(obj: Any) -> nn.Module:
+    """
+    Narrows an object to nn.Module for type safety.
+    Replaces raw ``cast("nn.Module", obj)`` patterns in business code.
+    """
+    return cast("nn.Module", obj)
+
+
+def as_model(obj: Any) -> ModelProtocol:
+    """
+    Narrows an object to ModelProtocol for type safety.
+    Replaces raw ``cast("ModelProtocol", obj)`` patterns in business code.
+    """
+    return cast("ModelProtocol", obj)
+
+
+def as_dict(obj: Any) -> dict[str, Any]:
+    """Narrows an object to dict[str, Any] for type safety."""
+    return cast("dict[str, Any]", obj)
+
+
+def as_tensor_dict(obj: Any) -> dict[str, torch.Tensor]:
+    """Narrows an object to dict[str, torch.Tensor] for type safety."""
+    return cast("dict[str, torch.Tensor]", obj)
+
+
+def iter_parameters(model: nn.Module) -> Iterator[nn.Parameter]:
+    """Type-safe iterator over model parameters."""
+    return model.parameters()
 
 
 def wash_tokenizer(tokenizer: Any) -> TokenizerProtocol:

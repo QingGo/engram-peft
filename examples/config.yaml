@@ -1,7 +1,7 @@
 # Minimal example configuration for engram-peft train
 # To get a full, documented template, run: engram-peft config-template --output full_config.yaml
 
-model_name_or_path: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+model_name_or_path: "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T"
 
 engram_config:
   target_layers: [2, 15]  # Inject into matching layers

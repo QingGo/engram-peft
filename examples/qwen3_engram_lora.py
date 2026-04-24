@@ -20,6 +20,9 @@ import traceback
 from collections.abc import Iterable
 from typing import Any
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from engram_peft.types import ModelProtocol, SizedEncoding
 
 # Add the project root to sys.path to allow absolute imports from the 'examples' package
@@ -139,6 +142,11 @@ def prepare_alpaca_dataset(
 
 
 def run_example(args: argparse.Namespace) -> None:
+    # Load environment variables from .env file if it exists (e.g. HF_TOKEN)
+    dotenv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    if os.path.isfile(dotenv_path):
+        logging.info(f"Environment variables loaded from {dotenv_path}")
+
     # 0. Apply PEFT deep patches
     apply_peft_patches()
 
@@ -373,9 +381,11 @@ def run_example(args: argparse.Namespace) -> None:
     print(f"Saving combined adapters to {OUTPUT_DIR}")
     # Explicitly save LoRA adapters first to ensure adapter_config.json exists
     # Use the Protocol for saving/generating to avoid strange mypy attribute errors
-    if isinstance(model.base_model, ModelProtocol):
+    if hasattr(model.base_model, "save_pretrained"):
         print("Saving LoRA adapters...")
-        model.base_model.save_pretrained(OUTPUT_DIR)
+        model.base_model.save_pretrained(OUTPUT_DIR)  # type: ignore[operator]
+    else:
+        print("Warning: model.base_model does not have save_pretrained; LoRA adapter saving skipped.")
 
     # Save Engram adapters separately for maximum robustness
     print("Saving Engram adapters...")
@@ -396,10 +406,10 @@ def run_example(args: argparse.Namespace) -> None:
     if not isinstance(tokenizer, PreTrainedTokenizerBase):
         raise TypeError("tokenizer must be a PreTrainedTokenizerBase")
 
-    # Use the Protocol to get the device cleanly
+    # Use hasattr to get the device cleanly (works with PeftModel, PreTrainedModel, etc.)
     target_device: torch.device | str
-    if isinstance(model.base_model, ModelProtocol):
-        target_device = model.base_model.device
+    if hasattr(model.base_model, "device"):
+        target_device = model.base_model.device  # type: ignore[assignment]
     else:
         target_device = "cuda"
     inputs = tokenizer(prompt, return_tensors="pt").to(target_device)

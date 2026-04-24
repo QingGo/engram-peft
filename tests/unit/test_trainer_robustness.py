@@ -1,9 +1,11 @@
+import tempfile
 from unittest.mock import MagicMock, patch
 
 import torch
 import torch.nn as nn
 from transformers import TrainingArguments
 
+from engram_peft.model import EngramModel
 from engram_peft.trainer import EngramTrainer
 
 
@@ -34,6 +36,36 @@ def test_trainer_clip_grad_norm_robustness():
     with patch.object(EngramTrainer, "_compute_total_norm", return_value=None):
         norm = trainer._clip_grad_norm(model, max_norm=1.0)
         assert norm is None
+
+
+def test_trainer_save_delegates_to_engram_model():
+    """_save should delegate to EngramModel.save_pretrained when model is EngramModel."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        args = TrainingArguments(output_dir=tmpdir)
+        mock_engram = MagicMock(spec=EngramModel)
+        # Bypass the heavy Trainer.__init__ by constructing directly
+        trainer = EngramTrainer.__new__(EngramTrainer)
+        trainer.args = args
+        trainer.model = mock_engram
+        trainer.processing_class = None
+        trainer.data_collator = None
+
+        trainer._save(tmpdir)
+        mock_engram.save_pretrained.assert_called_once_with(tmpdir)
+
+
+def test_trainer_save_falls_back_to_super():
+    """_save should fall through to super()._save when model is not EngramModel."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        args = TrainingArguments(output_dir=tmpdir)
+        model = nn.Linear(10, 10)
+        trainer = EngramTrainer(model=model, args=args)
+
+        # For non-EngramModel, parent _save calls safetensors.torch.save_file
+        with patch("safetensors.torch.save_file") as mock_safe:
+            with patch.object(model, "state_dict", return_value={}):
+                trainer._save(tmpdir)
+                mock_safe.assert_called_once()
 
 
 def test_trainer_clip_grad_norm_use_per_group_consistency():

@@ -154,6 +154,7 @@ demo/
 outputs/*
 docs/fix_record.md
 docs/note.md
+docs/plan.md
 scripts/
 wandb/
 .agent_memory.md
@@ -162,3 +163,5 @@ test_out/
 .sprintest/
 *.log
 *.txt
+my_experiment.yaml
+.env

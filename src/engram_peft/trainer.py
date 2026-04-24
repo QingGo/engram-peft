@@ -1,25 +1,29 @@
 # trainer.py
 # pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none
-from typing import TYPE_CHECKING, Any, cast, override
+import os
+from collections.abc import Iterable
+from typing import Any, cast, override
 
 import torch
 import torch.nn as nn
 from torch.optim.optimizer import Optimizer
 from transformers import Trainer
 from transformers.modeling_utils import unwrap_model
+from transformers.trainer import TRAINING_ARGS_NAME
 
 from engram_peft.model import EngramModel
 from engram_peft.utils import (
     apply_group_wise_clipping,
+    as_dict,
+    as_module,
     compute_grad_norm,
     compute_telemetry_stats,
     get_scheduler,
     get_trainable_param_groups,
+    iter_parameters,
 )
 from engram_peft.utils.compat import get_config_attr, wash_model
 
-if TYPE_CHECKING:
-    from collections.abc import Iterable
 
 
 class EngramTrainer(Trainer):
@@ -60,7 +64,7 @@ class EngramTrainer(Trainer):
         """Initially freezes the backbone if backbone_freeze_steps > 0."""
         if self.model is None:
             return
-        unwrapped = unwrap_model(cast("Any", self.model))
+        unwrapped = unwrap_model(as_module(self.model))
         if not isinstance(unwrapped, EngramModel):
             return
 
@@ -72,15 +76,19 @@ class EngramTrainer(Trainer):
                 f"[Engram-PEFT] Adapter-First Mode: Freezing backbone for {freeze_steps} steps."
             )
             # Only freeze the parameters that were originally intended to be trainable
-            for name, param in unwrapped.base_model.named_parameters():
-                if name in unwrapped.trainable_backbone_names:
-                    param.requires_grad = False
+            trainable_backbone_names: set[str] | None = getattr(
+                unwrapped, "trainable_backbone_names", None
+            )
+            if trainable_backbone_names is not None:
+                for name, param in unwrapped.base_model.named_parameters():
+                    if name in trainable_backbone_names:
+                        param.requires_grad = False
 
     def _capture_initial_weights(self) -> None:
         """Captures initial weights of Engram modules on CPU for drift calculation."""
         if self.model is None:
             return
-        unwrapped = unwrap_model(cast("Any", self.model))
+        unwrapped = unwrap_model(as_module(self.model))
         if isinstance(unwrapped, EngramModel) and get_config_attr(
             unwrapped.config, "enable_telemetry"
         ):
@@ -130,7 +138,7 @@ class EngramTrainer(Trainer):
             if optimizer is None:
                 optimizer = self.create_optimizer()
 
-            model = cast("Any", self.model)
+            model = wash_model(self.model)
             if isinstance(model, EngramModel) and hasattr(model, "create_scheduler"):
                 self.lr_scheduler = model.create_scheduler(
                     optimizer,
@@ -197,11 +205,11 @@ class EngramTrainer(Trainer):
             if not isinstance(ce_outputs, dict):
                 # Fallback for older transformers or unexpected return types
                 return (total_loss, {"ce_outputs": ce_outputs})
-            return (total_loss, cast("dict[str, Any]", ce_outputs))
+            return (total_loss, as_dict(ce_outputs))
 
         return total_loss
 
-    def _compute_total_norm(self, parameters: Any) -> torch.Tensor | None:
+    def _compute_total_norm(self, parameters: Iterable[nn.Parameter]) -> torch.Tensor | None:
         """Computes the total gradient norm across dense and sparse parameters."""
         return compute_grad_norm(parameters)
 
@@ -219,7 +227,7 @@ class EngramTrainer(Trainer):
             return super().training_step(
                 model, inputs, num_items_in_batch=num_items_in_batch
             )
-        unwrapped = unwrap_model(cast("Any", self.model))
+        unwrapped = unwrap_model(as_module(self.model))
         if isinstance(unwrapped, EngramModel):
             freeze_steps = int(
                 get_config_attr(unwrapped.config, "backbone_freeze_steps") or 0
@@ -283,7 +291,7 @@ class EngramTrainer(Trainer):
                 total_norm + 1e-6
             )
             if clip_coef < 1.0:
-                for p in cast("Iterable[nn.Parameter]", model.parameters()):
+                for p in iter_parameters(model):
                     if p.grad is not None:
                         g = p.grad
                         if g.is_sparse:
@@ -302,13 +310,13 @@ class EngramTrainer(Trainer):
                 return grad_norm.detach().clone()
             return torch.tensor(grad_norm)
 
-        return self._compute_total_norm(cast("Any", model.parameters()))
+        return self._compute_total_norm(iter_parameters(model))
 
     def _collect_telemetry(self) -> dict[str, float]:
         """Performs deep telemetry collection across parameter groups."""
         if self.model is None:
             return {}
-        unwrapped = unwrap_model(cast("Any", self.model))
+        unwrapped = unwrap_model(as_module(self.model))
         if not isinstance(unwrapped, EngramModel) or not get_config_attr(
             unwrapped.config, "enable_telemetry"
         ):
@@ -339,3 +347,27 @@ class EngramTrainer(Trainer):
         extra_stats = self._collect_telemetry()
         logs.update(extra_stats)
         super().log(logs, start_time=start_time)
+
+    @override
+    def _save(self, output_dir: str | None = None, state_dict: dict[str, Any] | None = None) -> None:
+        """
+        Override _save to delegate to EngramModel.save_pretrained() when the model
+        is an EngramModel, avoiding safetensors shared-tensor errors from weight tying.
+        """
+        if output_dir is None:
+            output_dir = self.args.output_dir
+        dir_path: str = cast("str", output_dir)
+        os.makedirs(dir_path, exist_ok=True)
+
+        if isinstance(self.model, EngramModel):
+            self.model.save_pretrained(dir_path)
+            if self.processing_class is not None:
+                self.processing_class.save_pretrained(dir_path)
+            elif self.data_collator is not None:
+                tokenizer = getattr(self.data_collator, "tokenizer", None)
+                if tokenizer is not None:
+                    tokenizer.save_pretrained(dir_path)
+            torch.save(self.args, os.path.join(dir_path, TRAINING_ARGS_NAME))
+            return
+
+        super()._save(dir_path, state_dict=state_dict)

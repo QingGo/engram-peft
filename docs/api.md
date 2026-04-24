@@ -182,25 +182,66 @@ A customized `SFTTrainer` that provides native support for Engram's sparse gradi
 
 Prepares an `EngramModel` for SFT by disabling `use_cache`, enabling gradient checkpointing, and ensuring the model is in training mode.
 
+### `create_engram_sft_trainer`
+`engram_peft.trl.create_engram_sft_trainer(model, tokenizer, train_dataset, eval_dataset=None, args=None, **kwargs)`
+
+High-level factory function that creates an `EngramCompatibleSFTTrainer` pre-configured for Engram models. It automatically handles model preparation, sets up the `EngramDataCollator`, and supports the SFTConfig migration for `trl>=1.2.0`.
+
+**Args:**
+- `model` (`EngramModel`): The Engram model instance.
+- `tokenizer`: The tokenizer instance.
+- `train_dataset`: The training dataset.
+- `eval_dataset` (optional): Evaluation dataset.
+- `args` (`TrainingArguments` or `SFTConfig`, optional): Training configuration.
+- `**kwargs`: Additional arguments passed to `SFTTrainer`.
+
+**Example Usage:**
+```python
+from engram_peft import create_engram_sft_trainer
+
+trainer = create_engram_sft_trainer(
+    model=model,
+    tokenizer=tokenizer,
+    train_dataset=dataset,
+    args=sft_config,
+)
+trainer.train()
+```
+
 ---
 
 ## Optimization
 
 ### `get_optimizer`
-`engram_peft.utils.get_optimizer(model, base_learning_rate=4e-4, ...)`
+`engram_peft.utils.get_optimizer(model, base_learning_rate=4e-4, backbone_learning_rate=None, engram_dense_learning_rate=None, engram_sparse_learning_rate=None, backbone_weight_decay=None, engram_dense_weight_decay=None, engram_sparse_weight_decay=0.0, backbone_optimizer=None, engram_dense_optimizer="adam", engram_sparse_optimizer="sparse_adam")`
 
 Creates a `MixedOptimizer` with separate optimizer groups for:
-- Engram sparse embeddings
-- Engram dense parameters
-- Backbone parameters
+- Engram sparse embeddings (default: `SparseAdam`)
+- Engram dense parameters (default: `Adam`)
+- Backbone parameters (default: `AdamW`)
+
+**Args:**
+- `model` (`EngramModel`): The Engram model.
+- `base_learning_rate` (`float`, default: `4e-4`): Base learning rate.
+- `backbone_learning_rate` (`float`, optional): LR for backbone params (defaults to `base_learning_rate`).
+- `engram_dense_learning_rate` (`float`, optional): LR for Engram dense params (defaults to `base_learning_rate * learning_rate_multiplier`).
+- `engram_sparse_learning_rate` (`float`, optional): LR for Engram sparse embeddings (defaults to `base_learning_rate * learning_rate_multiplier`).
+- `backbone_weight_decay` (`float`, optional): Weight decay for backbone params.
+- `engram_dense_weight_decay` (`float`, optional): Weight decay for Engram dense params.
+- `engram_sparse_weight_decay` (`float`, default: `0.0`): Weight decay for Engram sparse embeddings.
+- `backbone_optimizer` (`OptimizerSpec`, optional): Optimizer for backbone (default: `"adamw"`).
+- `engram_dense_optimizer` (`OptimizerSpec`, default: `"adam"`): Optimizer for Engram dense params.
+- `engram_sparse_optimizer` (`OptimizerSpec`, default: `"sparse_adam"`): Optimizer for Engram sparse embeddings.
 
 Supported optimizer specs:
 - Built-in strings: `"adam"`, `"adamw"`, `"sgd"`, `"sparse_adam"`
-- Optimizer classes
+- Optimizer classes (e.g., `torch.optim.AdamW`)
 - Custom builder callables
 
 **Example Usage:**
 ```python
+from engram_peft import get_optimizer
+
 optimizer = get_optimizer(
     model,
     backbone_learning_rate=5e-5,
@@ -220,7 +261,17 @@ Returns a dictionary with three trainable parameter lists:
 - `engram_dense`
 - `engram_sparse`
 
+### `get_scheduler`
+`engram_peft.utils.get_scheduler(optimizer, num_training_steps, warmup_steps=0)`
+
 Returns a `LambdaLR` scheduler implementing the Step Decay schedule from the DeepSeek paper (decay at 80% and 90% progress).
+
+**Example Usage:**
+```python
+from engram_peft import get_scheduler
+
+scheduler = get_scheduler(optimizer, num_training_steps=1000, warmup_steps=100)
+```
 
 ---
 

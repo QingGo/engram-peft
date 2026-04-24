@@ -2,8 +2,8 @@
 # This file serves as a blueprint for training Engram-augmented models.
 
 # The base model to which Engram layers will be injected.
-# Can be a Hugging Face ID (e.g., TinyLlama/TinyLlama-1.1B-Chat-v1.0) or a local path.
-model_name_or_path: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+# Can be a Hugging Face ID (e.g., TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T) or a local path.
+model_name_or_path: "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T"
 
 engram_config:
   # Total number of hash buckets (memory slots) for each N-gram size.

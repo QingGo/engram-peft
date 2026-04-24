@@ -26,6 +26,8 @@ from engram_peft.types import (
     jaxtyped,
 )
 from engram_peft.utils import (
+    as_dict,
+    as_module,
     as_scalar,
     get_optimizer,
     get_scheduler,
@@ -71,6 +73,8 @@ class EngramModel(nn.Module, GenerationMixin):
     _hook_handles: list[RemovableHandle]
     _current_hash_indices: dict[int, np.ndarray] | torch.Tensor | None
     _inference_token_buffer: torch.Tensor | None
+    _engram_enabled: bool
+    _hooks_registered: bool
 
     def __init__(
         self,
@@ -184,11 +188,11 @@ class EngramModel(nn.Module, GenerationMixin):
         """
         backbone_all = sum(
             param.numel()
-            for _, param in cast("nn.Module", self.base_model).named_parameters()
+            for _, param in as_module(self.base_model).named_parameters()
         )
         backbone_trainable = sum(
             param.numel()
-            for _, param in cast("nn.Module", self.base_model).named_parameters()
+            for _, param in as_module(self.base_model).named_parameters()
             if param.requires_grad
         )
         engram_all = sum(param.numel() for _, param in self.adapters.named_parameters())
@@ -365,7 +369,7 @@ class EngramModel(nn.Module, GenerationMixin):
                 )
 
         container = get_submodule_by_path(
-            cast("nn.Module", self.base_model), container_path
+            as_module(self.base_model), container_path
         )
         if not isinstance(container, nn.ModuleList):
             raise ValueError(f"Path '{container_path}' is not a nn.ModuleList.")
@@ -663,8 +667,7 @@ class EngramModel(nn.Module, GenerationMixin):
         if len(args) > 0 and (
             isinstance(args[0], dict) or isinstance(args[0], ToDictProtocol)
         ):
-            input_dict = cast(
-                "dict[str, Any]",
+            input_dict = as_dict(
                 args[0].to_dict() if isinstance(args[0], ToDictProtocol) else args[0],
             )
             args = args[1:]
@@ -676,8 +679,7 @@ class EngramModel(nn.Module, GenerationMixin):
             isinstance(kwargs["input_ids"], dict)
             or isinstance(kwargs["input_ids"], ToDictProtocol)
         ):
-            input_dict = cast(
-                "dict[str, Any]",
+            input_dict = as_dict(
                 kwargs["input_ids"].to_dict()
                 if isinstance(kwargs["input_ids"], ToDictProtocol)
                 else kwargs["input_ids"],
@@ -700,18 +702,20 @@ class EngramModel(nn.Module, GenerationMixin):
 
         raise AttributeError("Base model does not have a 'generate' method.")
 
-    def gradient_checkpointing_enable(self, **kwargs: Any) -> None:
+    def gradient_checkpointing_enable(
+        self, gradient_checkpointing_kwargs: dict[str, Any] | None = None, **kwargs: Any
+    ) -> None:
         """Delegates gradient checkpointing enablement to the base model."""
         base_model = self.base_model
         if isinstance(base_model, ModelProtocol):
             base_model.gradient_checkpointing_enable(
-                gradient_checkpointing_kwargs=kwargs
+                gradient_checkpointing_kwargs=gradient_checkpointing_kwargs
             )
         else:
             # Fallback for models that don't strictly match Protocol but have the method
             func = getattr(base_model, "gradient_checkpointing_enable", None)
             if func:
-                func(**kwargs)
+                func(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs, **kwargs)
 
     def gradient_checkpointing_disable(self, **kwargs: Any) -> None:
         """Delegates gradient checkpointing disablement to the base model."""

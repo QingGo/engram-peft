@@ -3,6 +3,9 @@
 Example script demonstrating how to use Engram-PEFT with trl's SFTTrainer.
 """
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from typing import Any
 
 import torch

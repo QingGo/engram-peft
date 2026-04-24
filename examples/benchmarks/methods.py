@@ -167,7 +167,7 @@ def train_engram(
         pad_id=tokenizer.pad_token_id if isinstance(tokenizer.pad_token_id, int) else 0,
         learning_rate_multiplier=15.0,
     )
-    # Apply overrides to config before model creation
+    # Apply overrides to engram config
     for k, v in overrides.items():
         if hasattr(config, k):
             setattr(config, k, v)
@@ -495,9 +495,10 @@ def train_full_finetune_engram(
     # via save_pretrained_unified if detecting a need to save backbone.
     # However, for full finetune, we might want to be explicit about saving the backbone
     # to a subfolder if we don't want it to merge with Engram artifacts.
-    if isinstance(model.base_model, ModelProtocol):
-        model.base_model.save_pretrained(
-            "outputs/benchmarks/full_ft_engram_weights/base_model"
-        )
+    save_fn = getattr(model.base_model, "save_pretrained", None)
+    if save_fn is not None:
+        save_fn("outputs/benchmarks/full_ft_engram_weights/base_model")
+    else:
+        print("Warning: model.base_model does not have save_pretrained; backbone saving skipped.")
     model.unload_engram()
     return metrics

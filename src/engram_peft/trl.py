@@ -1,6 +1,7 @@
 # pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none
 from __future__ import annotations
 
+import inspect
 import logging
 from typing import TYPE_CHECKING, Any, cast, override
 
@@ -225,7 +226,9 @@ def create_engram_sft_trainer(
 
     # 4. Instantiate EngramCompatibleSFTTrainer
     # This class supports sparse gradient clipping and is mandatory for EngramModel
-    if hasattr(SFTTrainer, "processing_class"):
+    # Detect trl version: processing_class (trl>=1.2.0) vs tokenizer (trl<1.2.0)
+    sft_params = inspect.signature(SFTTrainer.__init__).parameters
+    if "processing_class" in sft_params:
         return EngramCompatibleSFTTrainer(
             model=model,
             args=args,

@@ -11,6 +11,9 @@ Usage:
 
 from __future__ import annotations
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import argparse
 import logging
 import os
@@ -377,9 +380,12 @@ def run_example(args: argparse.Namespace) -> None:
     print(f"Saving combined adapters to {OUTPUT_DIR}")
     # Explicitly save LoRA adapters first to ensure adapter_config.json exists
     # Use the Protocol for saving/generating to avoid strange mypy attribute errors
-    if isinstance(model.base_model, ModelProtocol):
+    save_fn = getattr(model.base_model, "save_pretrained", None)
+    if save_fn is not None:
         print("Saving LoRA adapters...")
-        model.base_model.save_pretrained(OUTPUT_DIR)
+        save_fn(OUTPUT_DIR)
+    else:
+        print("Warning: model.base_model does not have save_pretrained; LoRA adapter saving skipped.")
 
     # Save Engram adapters separately for maximum robustness
     print("Saving Engram adapters...")
@@ -388,7 +394,12 @@ def run_example(args: argparse.Namespace) -> None:
     # 7. Inference Demo (Original Model)
     print("\n>>> Inference Demo (Original Model)")
     prompt = "<start_of_turn>user\nTell me a short fact about the moon.<end_of_turn>\n<start_of_turn>model\n"
-    inputs = tokenizer(prompt, return_tensors="pt").to(model.base_model.device)
+    # Use hasattr to get the device safely
+    if hasattr(model.base_model, "device"):
+        target_device = model.base_model.device
+    else:
+        target_device = "cuda"
+    inputs = tokenizer(prompt, return_tensors="pt").to(target_device)
 
     print(f"Prompt: {prompt}")
     with torch.no_grad():
