@@ -642,7 +642,7 @@ dev = [
     { name = "scipy", specifier = ">=1.15.3" },
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "setuptools", specifier = ">=82.0.1" },
-    { name = "sprintest", specifier = "==1.0.7" },
+    { name = "sprintest", specifier = ">=1.1.0" },
     { name = "torchinfo", specifier = ">=1.8.0" },
     { name = "torchview", specifier = ">=0.2.7" },
     { name = "torchviz", specifier = ">=0.0.3" },
@@ -2782,7 +2782,7 @@ wheels = [
 
 [[package]]
 name = "sprintest"
-version = "1.0.7"
+version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "fastapi" },
@@ -2792,9 +2792,9 @@ dependencies = [
     { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "uvicorn" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/01/c1/bed5f40bcf33499c8ce6c025db0e8cc261e4d20c2151636d223e4040cbe6/sprintest-1.0.7.tar.gz", hash = "sha256:268d007b1e6b2449c783e8e72dba45d912594fd753a2bb09edc179840c5a74a4", size = 32247, upload-time = "2026-04-21T13:26:02.624Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/b8/aac425ac009b1054d5c43c05b97da3bb4570fab31298ed61c64dbd1537e7/sprintest-1.1.0.tar.gz", hash = "sha256:77c37503e6f06776e41cd14b6970bf26e9d8a9a9831b93256ea6055b9ca73523", size = 35374, upload-time = "2026-04-24T00:45:13.548Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6d/e6/c2d29bbe1a44ce9de01ba66182ac3d31d308e59a7829c9f0f1c3fbaa53e8/sprintest-1.0.7-py3-none-any.whl", hash = "sha256:6acb5f7fc012cd3831e3d1bd833cd3a29c5e058668ff00a7d0199b070c88b411", size = 25127, upload-time = "2026-04-21T13:26:01.214Z" },
+    { url = "https://files.pythonhosted.org/packages/c8/b3/d3e2f24e513ae80c520a61c215c1168eb9e9c599400353d39335eea0a4eb/sprintest-1.1.0-py3-none-any.whl", hash = "sha256:656c960e477c47b833fcb1a8302535b5a851105dd8ca90ed2a398b977fee94ca", size = 26626, upload-time = "2026-04-24T00:45:12.396Z" },
 ]
 
 [[package]]
@@ -2922,12 +2922,12 @@ dependencies = [
     { name = "typing-extensions" },
 ]
 wheels = [
-    { url = "https://download-r2.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp310-cp310-linux_x86_64.whl", hash = "sha256:7f2ba7f7c0459320a521696f6b5bccc187f59890b23c9dfb6c49b0b87c6bfc97" },
-    { url = "https://download-r2.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp310-cp310-win_amd64.whl", hash = "sha256:7cc45c5b39d74875cfafe908b7f55c544147cc16b01e795feb2fe766583efe78" },
-    { url = "https://download-r2.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp311-cp311-linux_x86_64.whl", hash = "sha256:d4c3e9a8d31a7c0fcbb9da17c31a1917e1fac26c566a4cfbd8c9568ad7cade79" },
-    { url = "https://download-r2.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp311-cp311-win_amd64.whl", hash = "sha256:6a1fb2714e9323f11edb6e8abf7aad5f79e45ad25c081cde87681a18d99c29eb" },
-    { url = "https://download-r2.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp312-cp312-linux_x86_64.whl", hash = "sha256:a393b506844035c0dac2f30ea8478c343b8e95a429f06f3b3cadfc7f53adb597" },
-    { url = "https://download-r2.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp312-cp312-win_amd64.whl", hash = "sha256:3313061c1fec4c7310cf47944e84513dcd27b6173b72a349bb7ca68d0ee6e9c0" },
+    { url = "https://download-r2.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp310-cp310-linux_x86_64.whl", hash = "sha256:7f2ba7f7c0459320a521696f6b5bccc187f59890b23c9dfb6c49b0b87c6bfc97", upload-time = "2025-01-30T00:53:02Z" },
+    { url = "https://download-r2.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp310-cp310-win_amd64.whl", hash = "sha256:7cc45c5b39d74875cfafe908b7f55c544147cc16b01e795feb2fe766583efe78", upload-time = "2025-01-30T00:53:32Z" },
+    { url = "https://download-r2.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp311-cp311-linux_x86_64.whl", hash = "sha256:d4c3e9a8d31a7c0fcbb9da17c31a1917e1fac26c566a4cfbd8c9568ad7cade79", upload-time = "2025-01-30T00:55:01Z" },
+    { url = "https://download-r2.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp311-cp311-win_amd64.whl", hash = "sha256:6a1fb2714e9323f11edb6e8abf7aad5f79e45ad25c081cde87681a18d99c29eb", upload-time = "2025-01-30T00:55:31Z" },
+    { url = "https://download-r2.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp312-cp312-linux_x86_64.whl", hash = "sha256:a393b506844035c0dac2f30ea8478c343b8e95a429f06f3b3cadfc7f53adb597", upload-time = "2025-01-30T00:57:08Z" },
+    { url = "https://download-r2.pytorch.org/whl/cu124/torch-2.6.0%2Bcu124-cp312-cp312-win_amd64.whl", hash = "sha256:3313061c1fec4c7310cf47944e84513dcd27b6173b72a349bb7ca68d0ee6e9c0", upload-time = "2025-01-30T00:57:40Z" },
 ]
 
 [[package]]

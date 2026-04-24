@@ -457,6 +457,8 @@ class EngramModel(nn.Module, GenerationMixin):
                     curr_seq_len = input_ids.shape[1]
                     if curr_seq_len > 1 or self._inference_token_buffer is None:
                         self._inference_token_buffer = input_ids
+                        # Reset hash indices so they are recalculated for the new input
+                        self._current_hash_indices = None
                     else:
                         # Append new tokens to buffer
                         self._inference_token_buffer = torch.cat(
