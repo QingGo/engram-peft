@@ -165,3 +165,4 @@ test_out/
 *.txt
 my_experiment.yaml
 .env
+docs/human_plan.md
