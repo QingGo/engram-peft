@@ -830,7 +830,7 @@ pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </s
 engram-peft<span class="w"> </span>config-template<span class="w"> </span>--output<span class="w"> </span>training_config.yaml
 </code></pre></div>
 <p>生成的 YAML 文件包含五个核心区块：
-- <code>model_name_or_path</code>: 基础模型路径或 ID。
+- <code>model_name_or_path</code>: 基础模型路径 or ID。
 - <code>engram_config</code>: Engram 层的核心超参数。
 - <code>lora_config</code>: (可选) PEFT LoRA 设置，用于混合适配。
 - <code>training_args</code>: 标准的 <code>transformers.TrainingArguments</code> 训练参数。
@@ -918,6 +918,9 @@ engram-peft<span class="w"> </span>config-template<span class="w"> </span>--outp
 <li><strong>自动化推理脚本生成</strong>：CLI 会在训练完成后自动生成可立即运行的 <code>inference.py</code> 脚本，方便快速验证。</li>
 <li><strong>主流模型开箱即用模板</strong>：提供 <strong>Qwen 3.5-4B</strong>、<strong>Ministral-3-3B</strong> 和 <strong>Gemma-4-E2B</strong> 的训练与推理脚本，内置量化支持。</li>
 <li><strong>多模态与主流架构深度适配</strong>：原生支持复杂封装架构下的递归层定位，兼容多模态模型特有的嵌套配置（text_config）同步，实现对 Qwen、Gemma 等新架构的无缝支持。</li>
+<li><strong>Hugging Face Hub 集成</strong>：支持通过 <code>push_to_hub</code> 上传适配器，并通过 <code>from_pretrained</code> 直接从 Hub ID 加载，与 PEFT 生态深度对齐。</li>
+<li><strong>TRL &amp; SFTTrainer 兼容性</strong>：原生提供 <code>EngramCompatibleSFTTrainer</code>，自动处理模型准备、哈希预计算及<strong>稀疏梯度裁剪</strong>，实现无缝的指令微调。</li>
+<li><strong>量化支持</strong>：原生兼容 <strong>bitsandbytes (4-bit/8-bit)</strong> 和 <strong>GPTQ</strong> 模型。智能 dtype 检测确保 Engram 层自动与主干网络的 <code>compute_dtype</code> 对齐。</li>
 </ul>
 <hr />
 <h2 id="_5">📖 文档</h2>

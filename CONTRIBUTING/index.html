@@ -767,9 +767,9 @@
 <p>All contributors (including AI Agents) should follow these layers of verification:</p>
 <h3 id="l1-real-time-feedback-ide">L1: Real-time Feedback (IDE)</h3>
 <ul>
-<li><strong>Tool</strong>: Pyright / Pylance</li>
-<li><strong>Goal</strong>: Catch obvious type errors and syntax bugs while typing.</li>
-<li><strong>Config</strong>: Tests are excluded from strict checking; focus your strict energy on <code>src/</code>.</li>
+<li><strong>Tool</strong>: Basedpyright</li>
+<li><strong>Goal</strong>: Catch internal logic errors and ensure type safety.</li>
+<li><strong>Config</strong>: Strict internal enforcement (Error level); Permissive external boundaries (Warning level).</li>
 </ul>
 <h3 id="l2-automated-pre-commit-standardization">L2: Automated Pre-commit (Standardization)</h3>
 <ul>
@@ -781,10 +781,10 @@
 </ul>
 <h3 id="l3-deep-verification-deep-logic">L3: Deep Verification (Deep Logic)</h3>
 <ul>
-<li><strong>Tools</strong>: Mypy &amp; sprintest (Unit)</li>
+<li><strong>Tools</strong>: Basedpyright &amp; sprintest (Unit)</li>
 <li><strong>Command</strong>: <code>make type-check &amp;&amp; make test-unit</code></li>
-<li><strong>Goal</strong>: Ensure 100% type safety in <code>src/</code> and verify core logic in &lt;2 seconds.</li>
-<li><strong>Philosophy</strong>: Use the <code>tiny_tokenizer</code> and <code>tiny_compressor</code> fixtures for fast unit testing.</li>
+<li><strong>Goal</strong>: Ensure 100% type safety in core internal logic and verify algorithmic correctness.</li>
+<li><strong>Philosophy</strong>: Use <code>jaxtyping</code> for tensor shape validation. Zero tolerance for <code>errors</code>. All high-frequency 3rd-party library calls (Transformers/Datasets) must be routed through <code>src/engram_peft/utils/compat.py</code> for "type washing". <code>warnings</code> are only allowed in these designated "Boundary Files" via file-level pyright silencing configurations.</li>
 </ul>
 <h3 id="l4-integration-regression-full-fidelity">L4: Integration &amp; Regression (Full Fidelity)</h3>
 <ul>
@@ -804,7 +804,9 @@
 <ul>
 <li>Follow PEP 8 (handled by Ruff).</li>
 <li>Docstrings are encouraged for all public APIs.</li>
-<li>Type hints are <strong>mandatory</strong> for all code in <code>src/</code>. For <code>tests/</code>, return types are optional but recommended for clarity.</li>
+<li>Type hints are mandatory for all code in <code>src/</code>.</li>
+<li><strong>jaxtyping</strong> annotations are <strong>mandatory</strong> for module boundaries and core tensor operations (e.g., <code>Float[Tensor, "batch seq_len dim"]</code>).</li>
+<li><strong>IMPORTANT</strong>: To avoid runtime overhead, you must use the dynamic decorator <code>from engram_peft.types import jaxtyped</code> instead of importing directly from <code>jaxtyping</code>. Runtime shape checking via <code>typeguard</code> is only enabled when <code>ENGRAM_DEBUG_SHAPES=1</code> is set in the environment.</li>
 </ul>
 <hr />
 <h2 id="sprintest-test-acceleration">⚡ Sprintest (Test Acceleration)</h2>

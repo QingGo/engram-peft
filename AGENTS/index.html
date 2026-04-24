@@ -661,16 +661,22 @@
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#6-coding-standards" class="md-nav__link">
+    <nav class="md-nav" aria-label="5. 测试与验证规范 (Testing Constraints)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#61-type-shape-safety-internal-strict-external-permissive" class="md-nav__link">
     <span class="md-ellipsis">
       
-        6. 代码风格与质量规约 (Coding Standards)
+        6.1 类型安全与维度校验 (Type &amp; Shape Safety: Internal Strict, External Permissive)
       
     </span>
   </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -884,18 +890,40 @@
 由于当前执行环境<strong>没有 GPU</strong>，所有涉及模型推理或张量计算的测试严禁运行真实的大模型前向传播。关于具体的 Mock 拦截与 Dummy 数据构造规范，你<strong>必须</strong>严格遵循 <code>mock-cpu-testing</code> 技能包。</p>
 <p><strong>5.5 强制验证与安全终端输出</strong>
 完成代码修改后，你必须主动运行命令验证测试是否修复、静态检测是否通过。<strong>注意保护上下文窗口</strong>：为防止 PyTorch 长报错撑爆上下文，执行测试时必须限制输出行数：
-<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>env<span class="w"> </span><span class="nv">SPRINTEST_TARGET_PKG</span><span class="o">=</span>engram_peft<span class="w"> </span>stest<span class="w"> </span>tests/unit<span class="w"> </span>--cov<span class="o">=</span>src/engram_peft<span class="w"> </span>--cov-report<span class="o">=</span>term-missing<span class="w"> </span>--durations<span class="o">=</span><span class="m">5</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-n<span class="w"> </span><span class="m">500</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>dmypy<span class="w"> </span>src/<span class="w"> </span>tests/<span class="w"> </span>examples/
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>env<span class="w"> </span><span class="nv">SPRINTEST_TARGET_PKG</span><span class="o">=</span>engram_peft<span class="w"> </span>stest<span class="w"> </span>tests/unit<span class="w"> </span>--cov<span class="o">=</span>src/engram_peft<span class="w"> </span>--cov-report<span class="o">=</span>term-missing<span class="w"> </span>--durations<span class="o">=</span><span class="m">5</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tail<span class="w"> </span>-n<span class="w"> </span><span class="m">500</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>basedpyright<span class="w"> </span>src/<span class="w"> </span>examples/
 </code></pre></div></p>
 <hr />
-<h2 id="6-coding-standards">6. 代码风格与质量规约 (Coding Standards)</h2>
-<ul>
-<li><strong>强制类型提示 (Type Hints)</strong>：所有新函数和类的方法必须包含完整的 Python 类型提示。务必确保能通过 <code>mypy</code> 检查。</li>
-<li><strong>文档注释 (Docstrings)</strong>：使用 Google 风格的 Docstring 描述类和复杂函数。不仅要写“它做什么”，更要写“为什么这么设计”。</li>
-<li><strong>精确修改模式 (Precise Search/Replace)</strong>：</li>
-<li>如果是新建文件，输出完整代码。</li>
-<li><strong>修改长文件时，严禁输出整个文件或整个巨型类</strong>。为了节约 Token，你必须使用精确的搜索/替换块（Search/Replace block）或标准的 Unified Diff 格式，仅输出发生变动的那几行代码及其必要的上下文。</li>
-<li><strong>绝对红线</strong>：在你输出的局部代码块内部，<strong>绝对禁止</strong>使用 <code>// ... existing code ...</code> 或 <code># pass</code> 等省略形式敷衍。输出的代码片段必须是逻辑完整、可直接复制替换的。</li>
+<h3 id="61-type-shape-safety-internal-strict-external-permissive">6.1 类型安全与维度校验 (Type &amp; Shape Safety: Internal Strict, External Permissive)</h3>
+<p>本项目使用 <strong>Basedpyright</strong> 作为核心检查引擎，遵循“内部严苛、外部包容”的渐进式类型安全策略。</p>
+<ol>
+<li><strong>分级防御原则 (Tiered Defense)</strong>：<ul>
+<li><strong>内部代码 (Internal)</strong>：<code>src/engram_peft</code> 内部逻辑必须保持 100% 类型安全，禁止 <code>Any</code> 泄漏。所有逻辑风险相关的规则（如 <code>reportUndefinedVariable</code>）设为 <code>error</code>。</li>
+<li><strong>外部边界 (External Boundaries)</strong>：由于 <code>torch</code>、<code>transformers</code> 等三方库 Stub 不完整，允许在调用边界存在 <code>Unknown</code> 类型，相关规则（如 <code>reportUnknownMemberType</code>）设为 <code>warning</code>。<strong>禁止为了消除 warning 而在业务逻辑中大量编写无意义的 <code>cast</code> 或 <code>ignore</code></strong>。</li>
 </ul>
+</li>
+<li><strong>隔离层模式 (Isolation/Compatibility Layer)</strong>：<ul>
+<li>若某三方函数（如 <code>load_file</code>）在多处产生 <code>Unknown</code> 噪音，应在 <code>src/engram_peft/utils/compat.py</code> 中编写强类型的包装函数（Type-Safe Wrapper），在隔离层内使用 <code>cast</code> 将其“洗白”。</li>
+</ul>
+</li>
+<li><strong>现代化类型收窄 (Modern Type Narrowing)</strong>：<ul>
+<li><strong>协议重绑定 (Isolation)</strong>：若 <code>isinstance</code> 收窄后仍报 <code>Invalid self argument</code>，必须将变量重新绑定到明确声明为专用 Protocol 类型的变量上。</li>
+<li><strong>零 <code>getattr</code> 原则</strong>：严禁使用 <code>getattr(obj, "method")</code> 规避方法检查。</li>
+</ul>
+</li>
+<li><strong>张量维度标注 (Pragmatic Jaxtyping)</strong>：<ul>
+<li>对于公有 API 边界与核心算子（如 <code>EngramLayer</code>），必须标注张量的维度。</li>
+<li><strong>零运行时开销</strong>：禁止直接导入 <code>jaxtyping.jaxtyped</code>，必须使用自定义的动态装饰器 <code>from engram_peft.types import jaxtyped</code>。它在生产环境中是零开销的，只有在测试时设置 <code>ENGRAM_DEBUG_SHAPES=1</code> 才会开启 <code>typeguard</code> 检查。</li>
+</ul>
+</li>
+<li><strong>边界文件选择性屏蔽 (Selective Boundary Silencing)</strong>：<ul>
+<li>对于主要负责对接三方库的文件（如 <code>trl.py</code>, <code>compat.py</code>, <code>weight_transfer.py</code>），应在文件头部使用 <code># pyright: reportUnknownMemberType=none</code> 等指令屏蔽无法消除的 <code>Unknown</code> 噪音，确保全局 <code>type-check</code> 结果的可读性。</li>
+</ul>
+</li>
+<li><strong>显式覆盖声明 (Explicit Overrides)</strong>：<ul>
+<li>在重写三方库或基类方法时，<strong>必须</strong>使用 <code>@override</code> 装饰器（PEP 698），以便在基类接口变动时能被静态分析工具立即发现。</li>
+</ul>
+</li>
+</ol>
 <hr />
 <h2 id="7">7. 文档同步规范</h2>
 <p>代码与文档必须保持同步，以下情况必须同步更新文档：
@@ -1025,7 +1053,7 @@
 <blockquote>
 <p><strong>🛑 绝对红线 (CRITICAL ENVIRONMENT RULES)</strong>
 1. <strong>无 GPU 限制</strong>：当前本地执行环境<strong>没有 GPU</strong>。所有测试必须遵循 Mock 或极简策略。
-2. <strong>禁止盲目执行</strong>：绝对不要尝试在本地自动运行任何需要真实 GPU 显存的代码（如 <code>examples/</code> 下的大模型训练/推理示例代码）。
+2. <strong>禁止盲目执行</strong>：除非人类显式批准，否则绝对不要尝试在本地自动运行任何需要真实 GPU 显存的代码（如 <code>examples/</code> 下的大模型训练/推理示例代码）。
 3. <strong>人机协同验证</strong>：如果需要测试 GPU 上的运行效果，请使用第14节的标准模板请求人类协助。</p>
 </blockquote>
 

@@ -664,6 +664,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#trl-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TRL Integration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TRL Integration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#engramcompatiblesfttrainer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EngramCompatibleSFTTrainer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#prepare_engram_for_sft" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        prepare_engram_for_sft
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create_engram_sft_trainer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        create_engram_sft_trainer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#optimization" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -702,6 +752,45 @@
     <span class="md-ellipsis">
       
         get_scheduler
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#general-utilities" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        General Utilities
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="General Utilities">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get_optimal_precision_config" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_optimal_precision_config
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#apply_peft_patches" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        apply_peft_patches
       
     </span>
   </a>
@@ -974,6 +1063,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#trl-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TRL Integration
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="TRL Integration">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#engramcompatiblesfttrainer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EngramCompatibleSFTTrainer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#prepare_engram_for_sft" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        prepare_engram_for_sft
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#create_engram_sft_trainer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        create_engram_sft_trainer
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#optimization" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1012,6 +1151,45 @@
     <span class="md-ellipsis">
       
         get_scheduler
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#general-utilities" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        General Utilities
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="General Utilities">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#get_optimal_precision_config" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        get_optimal_precision_config
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#apply_peft_patches" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        apply_peft_patches
       
     </span>
   </a>
@@ -1104,20 +1282,22 @@
 - <code>clip_grad_per_group</code> (<code>bool</code>, default: <code>False</code>): Whether to use group-wise gradient clipping.
 - <code>enable_telemetry</code> (<code>bool</code>, default: <code>False</code>): Enables detailed metric logging (norms, drift, max values).
 - <code>entropy_loss_weight</code> (<code>float</code>, default: <code>0.0</code>): Weight for the gating entropy penalty loss.
-- <code>backbone_freeze_steps</code> (<code>int</code>, default: <code>0</code>): Initial steps where backbone is frozen (Adapter-First warm-up).</p>
+- <code>backbone_freeze_steps</code> (<code>int</code>, default: <code>0</code>): Initial steps where backbone is frozen (Adapter-First warm-up).
+- <code>engram_dtype</code> (<code>Optional[str]</code>, default: <code>None</code>): Explicit precision for Engram layers (e.g., <code>"float32"</code>, <code>"float16"</code>, <code>"bfloat16"</code>). If <code>None</code>, it's auto-detected from the backbone's <code>compute_dtype</code>.</p>
 <p><strong>Example Usage:</strong>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">engram_peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">EngramConfig</span>
 
 <span class="n">config</span> <span class="o">=</span> <span class="n">EngramConfig</span><span class="p">(</span>
     <span class="n">target_layers</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">11</span><span class="p">,</span> <span class="mi">20</span><span class="p">],</span>
     <span class="n">embedding_dim</span><span class="o">=</span><span class="mi">1024</span><span class="p">,</span>
-    <span class="n">learning_rate_multiplier</span><span class="o">=</span><span class="mf">5.0</span>
+    <span class="n">learning_rate_multiplier</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span>
+    <span class="n">engram_dtype</span><span class="o">=</span><span class="s2">&quot;bfloat16&quot;</span>
 <span class="p">)</span>
 </code></pre></div></p>
 <hr />
 <h2 id="model-wrapping">Model Wrapping</h2>
 <h3 id="get_engram_model"><code>get_engram_model</code></h3>
-<p><code>engram_peft.model.get_engram_model(model, config, tokenizer=None, wrap_peft=False, train_mode=None)</code></p>
+<p><code>engram_peft.model.get_engram_model(model, config, tokenizer=None, wrap_peft=False, train_mode=None, backbone_freeze_steps=0, engram_dtype=None)</code></p>
 <p>Injects Engram layers into a base Transformer model and configures which backbone
 parameters remain trainable.</p>
 <p><strong>Args:</strong>
@@ -1126,6 +1306,8 @@ parameters remain trainable.</p>
 - <code>tokenizer</code> (<code>Optional[PreTrainedTokenizer]</code>): Tokenizer for vocabulary/compression.
 - <code>wrap_peft</code> (<code>bool</code>, default: <code>False</code>): Backward-compatible alias for <code>train_mode="preserve_trainable"</code>.
 - <code>train_mode</code> (<code>Literal["engram_only", "preserve_trainable", "full_finetune"]</code>, optional): Controls backbone trainability.
+- <code>backbone_freeze_steps</code> (<code>int</code>, default: <code>0</code>): Initial steps to freeze the backbone.
+- <code>engram_dtype</code> (<code>Optional[str]</code>, default: <code>None</code>): Explicit precision for Engram layers.
   - <code>engram_only</code>: Freeze the backbone and train only Engram.
   - <code>preserve_trainable</code>: Preserve parameters that were already trainable before wrapping (e.g., LoRA), then add trainable Engram layers.
   - <code>full_finetune</code>: Train the full backbone together with Engram.</p>
@@ -1152,9 +1334,9 @@ parameters remain trainable.</p>
 - <code>create_scheduler(optimizer, num_training_steps, warmup_steps)</code>: Returns the paper-aligned Step Decay scheduler.
 - <code>get_telemetry_stats()</code>: Collects activation statistics and diagnostics from active layers.
 - <code>get_total_gating_entropy()</code>: Aggregates gating entropy tensors for regularization.
-- <code>save_pretrained(save_directory: str)</code>: Saves Engram configurations and weights (unified).
-- <code>save_pretrained_engram(save_directory: str)</code>: Saves ONLY Engram layers' weights and config.
-- <code>from_pretrained(base_model, engram_path)</code>: Loads Engram weights onto a base model.
+- <code>save_pretrained(save_directory: str, safe_serialization: bool = True, **kwargs)</code>: Saves Engram configurations and weights. Automatically saves base model adapters (e.g. LoRA) if present.
+- <code>push_to_hub(repo_id: str, use_temp_dir: bool | None = None, commit_message: str | None = None, private: bool | None = None, token: str | bool | None = None, **kwargs)</code>: Pushes the Engram adapter (and any base model adapters) to the Hugging Face Hub.
+- <code>from_pretrained(base_model, engram_path, tokenizer=None, **kwargs)</code>: Loads Engram weights onto a base model. <code>engram_path</code> can be a local directory or a Hugging Face Hub ID. Supports <code>token</code> and <code>revision</code> via <code>kwargs</code>.
 - <code>unload_engram()</code>: Dynamically removes all PEFT hooks (reverts to base model).
 - <code>load_engram(engram_path=None)</code>: Re-installs hooks and optionally loads weights.
 - <code>load_weights_flexible(checkpoint_path, source_config_path=None, layer_mapping=None, reuse_structural=False)</code>: Loads weights from a checkpoint even if configurations (layers, buckets, n-grams) differ.
@@ -1197,19 +1379,67 @@ mixed optimizer automatically.</p>
 <p><code>engram_peft.utils.evaluate_model_loss(model, tokenizer, dataset, batch_size=8, max_length=128)</code></p>
 <p>Standardizes the calculation of Zero-shot loss for language models. Uses <code>DataCollatorForLanguageModeling</code> to ensure correct label shifting.</p>
 <hr />
+<h2 id="trl-integration">TRL Integration</h2>
+<p>A high-level factory function that creates an <code>EngramCompatibleSFTTrainer</code> (a subclass of <code>trl.SFTTrainer</code>) pre-configured for Engram models. It automatically handles model preparation, sets up the <code>EngramDataCollator</code>, and enables sparse gradient support.</p>
+<h3 id="engramcompatiblesfttrainer"><code>EngramCompatibleSFTTrainer</code></h3>
+<p><code>engram_peft.trl.EngramCompatibleSFTTrainer</code></p>
+<p>A customized <code>SFTTrainer</code> that provides native support for Engram's sparse gradients within the TRL ecosystem.</p>
+<p><strong>Key Features:</strong>
+- <strong><code>create_optimizer</code></strong>: Automatically uses <code>MixedOptimizer</code> to handle sparse embedding updates correctly.
+- <strong><code>_clip_grad_norm</code></strong>: Implements a custom gradient clipping logic that supports sparse tensors on both CPU and GPU, bypassing PyTorch's <code>NotImplementedError</code>.
+- <strong>Automatic Config</strong>: Inherits all features from <code>trl.SFTTrainer</code> while ensuring compatibility with <code>EngramModel</code> specific requirements.</p>
+<h3 id="prepare_engram_for_sft"><code>prepare_engram_for_sft</code></h3>
+<p><code>engram_peft.trl.prepare_engram_for_sft(model, use_gradient_checkpointing=True)</code></p>
+<p>Prepares an <code>EngramModel</code> for SFT by disabling <code>use_cache</code>, enabling gradient checkpointing, and ensuring the model is in training mode.</p>
+<h3 id="create_engram_sft_trainer"><code>create_engram_sft_trainer</code></h3>
+<p><code>engram_peft.trl.create_engram_sft_trainer(model, tokenizer, train_dataset, eval_dataset=None, args=None, **kwargs)</code></p>
+<p>High-level factory function that creates an <code>EngramCompatibleSFTTrainer</code> pre-configured for Engram models. It automatically handles model preparation, sets up the <code>EngramDataCollator</code>, and supports the SFTConfig migration for <code>trl&gt;=1.2.0</code>.</p>
+<p><strong>Args:</strong>
+- <code>model</code> (<code>EngramModel</code>): The Engram model instance.
+- <code>tokenizer</code>: The tokenizer instance.
+- <code>train_dataset</code>: The training dataset.
+- <code>eval_dataset</code> (optional): Evaluation dataset.
+- <code>args</code> (<code>TrainingArguments</code> or <code>SFTConfig</code>, optional): Training configuration.
+- <code>**kwargs</code>: Additional arguments passed to <code>SFTTrainer</code>.</p>
+<p><strong>Example Usage:</strong>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">engram_peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_engram_sft_trainer</span>
+
+<span class="n">trainer</span> <span class="o">=</span> <span class="n">create_engram_sft_trainer</span><span class="p">(</span>
+    <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+    <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">,</span>
+    <span class="n">train_dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
+    <span class="n">args</span><span class="o">=</span><span class="n">sft_config</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">trainer</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
+</code></pre></div></p>
+<hr />
 <h2 id="optimization">Optimization</h2>
 <h3 id="get_optimizer"><code>get_optimizer</code></h3>
-<p><code>engram_peft.utils.get_optimizer(model, base_learning_rate=4e-4, ...)</code></p>
+<p><code>engram_peft.utils.get_optimizer(model, base_learning_rate=4e-4, backbone_learning_rate=None, engram_dense_learning_rate=None, engram_sparse_learning_rate=None, backbone_weight_decay=None, engram_dense_weight_decay=None, engram_sparse_weight_decay=0.0, backbone_optimizer=None, engram_dense_optimizer="adam", engram_sparse_optimizer="sparse_adam")</code></p>
 <p>Creates a <code>MixedOptimizer</code> with separate optimizer groups for:
-- Engram sparse embeddings
-- Engram dense parameters
-- Backbone parameters</p>
+- Engram sparse embeddings (default: <code>SparseAdam</code>)
+- Engram dense parameters (default: <code>Adam</code>)
+- Backbone parameters (default: <code>AdamW</code>)</p>
+<p><strong>Args:</strong>
+- <code>model</code> (<code>EngramModel</code>): The Engram model.
+- <code>base_learning_rate</code> (<code>float</code>, default: <code>4e-4</code>): Base learning rate.
+- <code>backbone_learning_rate</code> (<code>float</code>, optional): LR for backbone params (defaults to <code>base_learning_rate</code>).
+- <code>engram_dense_learning_rate</code> (<code>float</code>, optional): LR for Engram dense params (defaults to <code>base_learning_rate * learning_rate_multiplier</code>).
+- <code>engram_sparse_learning_rate</code> (<code>float</code>, optional): LR for Engram sparse embeddings (defaults to <code>base_learning_rate * learning_rate_multiplier</code>).
+- <code>backbone_weight_decay</code> (<code>float</code>, optional): Weight decay for backbone params.
+- <code>engram_dense_weight_decay</code> (<code>float</code>, optional): Weight decay for Engram dense params.
+- <code>engram_sparse_weight_decay</code> (<code>float</code>, default: <code>0.0</code>): Weight decay for Engram sparse embeddings.
+- <code>backbone_optimizer</code> (<code>OptimizerSpec</code>, optional): Optimizer for backbone (default: <code>"adamw"</code>).
+- <code>engram_dense_optimizer</code> (<code>OptimizerSpec</code>, default: <code>"adam"</code>): Optimizer for Engram dense params.
+- <code>engram_sparse_optimizer</code> (<code>OptimizerSpec</code>, default: <code>"sparse_adam"</code>): Optimizer for Engram sparse embeddings.</p>
 <p>Supported optimizer specs:
 - Built-in strings: <code>"adam"</code>, <code>"adamw"</code>, <code>"sgd"</code>, <code>"sparse_adam"</code>
-- Optimizer classes
+- Optimizer classes (e.g., <code>torch.optim.AdamW</code>)
 - Custom builder callables</p>
 <p><strong>Example Usage:</strong>
-<div class="highlight"><pre><span></span><code><span class="n">optimizer</span> <span class="o">=</span> <span class="n">get_optimizer</span><span class="p">(</span>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">engram_peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_optimizer</span>
+
+<span class="n">optimizer</span> <span class="o">=</span> <span class="n">get_optimizer</span><span class="p">(</span>
     <span class="n">model</span><span class="p">,</span>
     <span class="n">backbone_learning_rate</span><span class="o">=</span><span class="mf">5e-5</span><span class="p">,</span>
     <span class="n">engram_dense_learning_rate</span><span class="o">=</span><span class="mf">4e-4</span><span class="p">,</span>
@@ -1228,6 +1458,30 @@ mixed optimizer automatically.</p>
 <h3 id="get_scheduler"><code>get_scheduler</code></h3>
 <p><code>engram_peft.utils.get_scheduler(optimizer, num_training_steps, warmup_steps=0)</code></p>
 <p>Returns a <code>LambdaLR</code> scheduler implementing the Step Decay schedule from the DeepSeek paper (decay at 80% and 90% progress).</p>
+<p><strong>Example Usage:</strong>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">engram_peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_scheduler</span>
+
+<span class="n">scheduler</span> <span class="o">=</span> <span class="n">get_scheduler</span><span class="p">(</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">num_training_steps</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">warmup_steps</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+</code></pre></div></p>
+<hr />
+<h2 id="general-utilities">General Utilities</h2>
+<h3 id="get_optimal_precision_config"><code>get_optimal_precision_config</code></h3>
+<p><code>engram_peft.utils.get_optimal_precision_config()</code></p>
+<p>Automatically detects the best available training precision based on hardware.</p>
+<p><strong>Returns:</strong>
+- <code>dict[str, bool]</code>: A dictionary with keys <code>"bf16"</code> and <code>"fp16"</code>.
+  - On Ampere+ GPUs: <code>{"bf16": True, "fp16": False}</code>
+  - On older GPUs: <code>{"bf16": False, "fp16": True}</code>
+  - On CPU: <code>{"bf16": False, "fp16": False}</code></p>
+<p><strong>Example:</strong>
+<div class="highlight"><pre><span></span><code><span class="n">training_args</span> <span class="o">=</span> <span class="n">TrainingArguments</span><span class="p">(</span>
+    <span class="n">output_dir</span><span class="o">=</span><span class="s2">&quot;./results&quot;</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">get_optimal_precision_config</span><span class="p">()</span>
+<span class="p">)</span>
+</code></pre></div></p>
+<h3 id="apply_peft_patches"><code>apply_peft_patches</code></h3>
+<p><code>engram_peft.utils.apply_peft_patches()</code></p>
+<p>Applies necessary monkey-patches to third-party libraries (like PEFT) to improve compatibility with Engram modules.</p>
 <hr />
 <h2 id="core-components">Core Components</h2>
 <h3 id="engramlayer"><code>EngramLayer</code></h3>

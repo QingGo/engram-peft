@@ -916,6 +916,9 @@ engram-peft<span class="w"> </span>config-template<span class="w"> </span>--outp
 <li><strong>Automated Inference Generation</strong>: Progress-tracking CLI that automatically creates ready-to-run <code>inference.py</code> scripts for immediate verification.</li>
 <li><strong>Mainstream Model Templates</strong>: Out-of-the-box scripts for <strong>Qwen 3.5-4B</strong>, <strong>Ministral-3-3B</strong>, and <strong>Gemma-4-E2B</strong> with quantization support.</li>
 <li><strong>Multimodal &amp; Hybrid Architecture Support</strong>: Native support for recursive layer discovery in complex wrappers and synchronization of nested <code>text_config</code> attributes for state-of-the-art models.</li>
+<li><strong>Hugging Face Hub Integration</strong>: Support for pushing adapters via <code>push_to_hub</code> and loading directly from Hub IDs via <code>from_pretrained</code>, fully aligned with the PEFT ecosystem.</li>
+<li><strong>TRL &amp; SFTTrainer Compatibility</strong>: Native <code>EngramCompatibleSFTTrainer</code> that handles model preparation, hash precomputation, and <strong>sparse gradient clipping</strong> automatically for seamless instruction tuning.</li>
+<li><strong>Quantization Support</strong>: Native compatibility with <strong>bitsandbytes (4-bit/8-bit)</strong> and <strong>GPTQ</strong> models. Smart dtype detection ensures Engram layers automatically align with the backbone's <code>compute_dtype</code>.</li>
 </ul>
 <hr />
 <h2 id="documentation">📖 Documentation</h2>
