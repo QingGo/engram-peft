@@ -354,7 +354,7 @@ def run_example(args: argparse.Namespace) -> None:
     # Use the Protocol for saving/generating to avoid strange mypy attribute errors
     if hasattr(model.base_model, "save_pretrained"):
         print("Saving LoRA adapters...")
-        model.base_model.save_pretrained(OUTPUT_DIR)  # type: ignore[operator]
+        model.base_model.save_pretrained(OUTPUT_DIR)
     else:
         print(
             "Warning: model.base_model does not have save_pretrained; LoRA adapter saving skipped."
@@ -373,7 +373,7 @@ def run_example(args: argparse.Namespace) -> None:
     # Use hasattr to get the device cleanly (works with PeftModel, PreTrainedModel, etc.)
     target_device: torch.device | str
     if hasattr(model.base_model, "device"):
-        target_device = model.base_model.device  # type: ignore[assignment]
+        target_device = model.base_model.device
     else:
         target_device = "cuda"
     inputs = tokenizer(prompt, return_tensors="pt").to(target_device)

@@ -58,8 +58,8 @@ if isinstance(gen_inputs, dict) or hasattr(gen_inputs, "input_ids"):
 else:
     input_ids = gen_inputs
 
-# Move to correct device
-device = getattr(model.base_model, "device", "cuda")
+# Move to correct device (dynamically detected from model parameters)
+device = next(model.base_model.parameters()).device
 input_ids = input_ids.to(device)
 # Capture other inputs (like attention_mask) if they exist
 gen_kwargs: dict[str, Any] = (

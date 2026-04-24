@@ -32,6 +32,19 @@ uv sync --all-groups
 pip install -e ".[dev]"
 ```
 
+**NPU (昇腾) 支持**：如需在华为昇腾 NPU 上训练，请安装 `torch-npu`：
+```bash
+pip install torch-npu --index-url https://repo.huaweicloud.com/repository/pypi/simple
+```
+Engram-PEFT 会自动检测 NPU 可用性并切换 AMP 设置。NPU 上通常不支持 `bfloat16`——请在 `EngramConfig` 中设置 `engram_dtype="float16"`。
+
+**NPU 分布式训练**（`torchrun` DDP、**DeepSpeed ZeRO‑1/2**）使用内置的后端检测：
+```python
+from engram_peft.utils.device import get_distributed_backend
+backend = get_distributed_backend()  # NPU 返回 "hccl"，CUDA 返回 "nccl"
+```
+详见文档 [NPU 分布式训练](docs/tutorial.md#distributed-training-on-npu-ddp)。
+
 ### 5 分钟上手示例
 
 ```python
@@ -129,6 +142,8 @@ engram-peft train --config training_config.yaml --overrides "training_args.learn
 - **Hugging Face Hub 集成**：支持通过 `push_to_hub` 上传适配器，并通过 `from_pretrained` 直接从 Hub ID 加载，与 PEFT 生态深度对齐。
 - **TRL & SFTTrainer 兼容性**：原生提供 `EngramCompatibleSFTTrainer`，自动处理模型准备、哈希预计算及**稀疏梯度裁剪**，实现无缝的指令微调。
 - **量化支持**：原生兼容 **bitsandbytes (4-bit/8-bit)** 和 **GPTQ** 模型。智能 dtype 检测确保 Engram 层自动与主干网络的 `compute_dtype` 对齐。
+- **统一设备后端**：自动检测并支持 **CUDA**、**NPU（昇腾）** 和 **CPU**，提供统一的 AMP、GradScaler 和分布式后端检测（`get_distributed_backend()` 对 NPU 返回 `"hccl"`，对 CUDA 返回 `"nccl"`）。
+- **分布式训练（DDP & DeepSpeed）**：完全兼容 `torchrun`（DDP）和 **DeepSpeed ZeRO-1/2**，同时支持 CUDA 和 NPU。DDP 下支持分布式稀疏 Embedding；DeepSpeed 模式下自动回退为稠密 Embedding 以兼容 ZeRO 优化器。
 
 ---
 

@@ -211,6 +211,45 @@ def safe_cuda_is_bf16_supported() -> bool:
         return False
 
 
+def safe_npu_is_available() -> bool:
+    """
+    Type-safe wrapper for NPU availability.
+    Delegates to engram_peft.utils.device for lazy torch_npu import.
+    """
+    from engram_peft.utils.device import is_npu_available  # noqa: PLC0415
+
+    return is_npu_available()
+
+
+def safe_is_bf16_supported() -> bool:
+    """
+    Type-safe wrapper for BF16 support detection across all backends.
+    """
+    from engram_peft.utils.device import is_bf16_supported  # noqa: PLC0415
+
+    return is_bf16_supported()
+
+
+def safe_get_available_device() -> str:
+    """
+    Returns the current best available device type ('cuda', 'npu', or 'cpu').
+    """
+    from engram_peft.utils.device import get_available_device  # noqa: PLC0415
+
+    return get_available_device()
+
+
+def safe_get_distributed_backend() -> str:
+    """
+    Type-safe wrapper for distributed backend detection.
+
+    Returns ``"hccl"`` on NPU, ``"nccl"`` on CUDA, ``""`` on CPU.
+    """
+    from engram_peft.utils.device import get_distributed_backend  # noqa: PLC0415
+
+    return get_distributed_backend()
+
+
 def safe_snapshot_download(
     repo_id: str,
     **kwargs: Any,

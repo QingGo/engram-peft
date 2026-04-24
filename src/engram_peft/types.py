@@ -342,6 +342,21 @@ class EngramModelProtocol(EngramComponentProtocol, Protocol):
 
 
 @runtime_checkable
+class GradScalerProtocol(Protocol):
+    """
+    Protocol for gradient scaler (AMP) that unifies CUDA and NPU interfaces.
+    """
+
+    def unscale_(self, optimizer: Any) -> None: ...
+
+    def step(self, optimizer: Any, **kwargs: Any) -> Any: ...
+
+    def update(self) -> None: ...
+
+    def get_scale(self) -> float: ...
+
+
+@runtime_checkable
 class TokenizerProtocol(Protocol):
     """
     Structural protocol for Hugging Face-style tokenizers.

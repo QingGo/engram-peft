@@ -32,6 +32,19 @@ uv sync --all-groups
 pip install -e ".[dev]"
 ```
 
+**NPU (Ascend) Support**: For training on Huawei Ascend NPU, install `torch-npu`:
+```bash
+pip install torch-npu --index-url https://repo.huaweicloud.com/repository/pypi/simple
+```
+Engram-PEFT automatically detects NPU availability and switches all AMP settings accordingly. On NPU, `bfloat16` is generally not supported — use `engram_dtype="float16"` in your `EngramConfig`.
+
+For **distributed training on NPU** (`torchrun` DDP, **DeepSpeed ZeRO‑1/2**), use the built-in backend detection:
+```python
+from engram_peft.utils.device import get_distributed_backend
+backend = get_distributed_backend()  # "hccl" on NPU, "nccl" on CUDA
+```
+See [NPU Distributed Training](docs/tutorial.md#distributed-training-on-npu-ddp) in the docs for details.
+
 ### 5-Minute Example
 
 ```python
@@ -129,6 +142,8 @@ engram-peft train --config training_config.yaml --overrides "training_args.learn
 - **Hugging Face Hub Integration**: Support for pushing adapters via `push_to_hub` and loading directly from Hub IDs via `from_pretrained`, fully aligned with the PEFT ecosystem.
 - **TRL & SFTTrainer Compatibility**: Native `EngramCompatibleSFTTrainer` that handles model preparation, hash precomputation, and **sparse gradient clipping** automatically for seamless instruction tuning.
 - **Quantization Support**: Native compatibility with **bitsandbytes (4-bit/8-bit)** and **GPTQ** models. Smart dtype detection ensures Engram layers automatically align with the backbone's `compute_dtype`.
+- **Unified Device Backend**: Automatic detection and support for **CUDA**, **NPU (Ascend)**, and **CPU**, with unified AMP, GradScaler, and distributed backend detection (`get_distributed_backend()` returns `"hccl"` on NPU, `"nccl"` on CUDA).
+- **Distributed Training (DDP & DeepSpeed)**: Full compatibility with `torchrun` (DDP) and **DeepSpeed ZeRO-1/2** on both CUDA and NPU. Distributed sparse embeddings are supported under DDP; DeepSetup mode automatically falls back to dense embeddings for ZeRO optimizer compatibility.
 
 ---
 

@@ -423,6 +423,151 @@ engram_model = get_engram_model(peft_model, config, train_mode="preserve_trainab
 
 ---
 
+## NPU Support: Training on Huawei Ascend
+
+Engram-PEFT fully supports training and inference on **Huawei Ascend NPU** hardware via the unified device backend in `engram_peft.utils.device`.
+
+### Prerequisites
+
+1. **Ascend CANN** installed and configured (see [Huawei Ascend documentation](https://www.hiascend.com/)).
+2. **torch_npu** installed:
+   ```bash
+   pip install torch-npu --index-url https://repo.huaweicloud.com/repository/pypi/simple
+   ```
+
+### Usage
+
+No code changes are needed — Engram-PEFT automatically detects NPU and switches all AMP settings accordingly:
+
+```python
+from engram_peft import EngramConfig, get_engram_model
+
+config = EngramConfig(
+    target_layers=[2, 11, 20],
+    engram_dtype="float16",  # NPU typically does not support bfloat16
+)
+model = get_engram_model(base_model, config, tokenizer)
+```
+
+For training with the `EngramTrainer` or TRL integration:
+
+```python
+from engram_peft import EngramTrainer
+from engram_peft.utils import get_optimal_precision_config
+
+trainer = EngramTrainer(
+    model=model,
+    args=TrainingArguments(
+        output_dir="npu_engram_out",
+        per_device_train_batch_size=4,
+        **get_optimal_precision_config(),  # auto-detects NPU → fp16
+    ),
+    data_collator=collator,
+    train_dataset=dataset,
+)
+trainer.train()
+```
+
+### Using with `accelerate` (Single Device)
+
+Create an `accelerate` config that targets NPU:
+
+```bash
+accelerate config
+# Choose: "This machine" → "None" (don't use DeepSpeed/FSDP) → "NO" (no distributed training)
+# Then set `--mixed_precision fp16` explicitly.
+```
+
+Or use a config file:
+```yaml
+compute_environment: LOCAL_MACHINE
+distributed_type: 'NO'
+mixed_precision: fp16
+machine_rank: 0
+main_process_ip: null
+main_process_port: null
+num_machines: 1
+num_processes: 1
+use_cpu: false
+```
+
+### Distributed Training on NPU (DDP)
+
+NPU uses **HCCL** (Huawei Collective Communication Library) instead of NCCL. The unified backend provides automatic detection:
+
+```python
+import torch
+import torch.distributed as dist
+from engram_peft.utils.device import get_distributed_backend
+
+backend = get_distributed_backend()  # "hccl" on NPU, "nccl" on CUDA, "" on CPU
+if backend:
+    dist.init_process_group(backend=backend)
+```
+
+When using `transformers.Trainer` or `EngramTrainer` with `accelerate`, you must configure the backend via environment variables or `accelerate config`:
+
+```bash
+# Option 1: Environment variables
+export ACCELERATE_TORCH_DEVICE=npu
+export NCCL_BACKEND=hccl   # If PyTorch-NPU build supports this
+
+# Option 2: Use accelerate config for multi-NPU
+accelerate config
+# Choose: "This machine" → "Multi-NPU" → set backend to "hccl"
+```
+
+**`accelerate` config for multi-NPU:**
+```yaml
+compute_environment: LOCAL_MACHINE
+distributed_type: MULTI_NPU
+machine_rank: 0
+main_process_ip: null
+main_process_port: null
+num_machines: 1
+num_processes: 8  # Number of NPU devices
+mixed_precision: fp16
+```
+
+### Distributed Training on NPU (DeepSpeed)
+
+DeepSpeed on Ascend is supported in `deepspeed>=0.12.0` (experimental). To use it:
+
+1. Install DeepSpeed with NPU support:
+   ```bash
+   uv sync --group deepspeed  # installs deepspeed>=0.15.0
+   ```
+
+2. Set `torch.distributed` backend before trainer initialization:
+   ```python
+   import torch.distributed as dist
+   from engram_peft.utils.device import get_distributed_backend
+   
+   backend = get_distributed_backend()
+   if backend:
+       dist.init_process_group(backend=backend, init_method="env://")
+   ```
+
+3. Pass a standard DeepSpeed config to `TrainingArguments`:
+   ```python
+   training_args = TrainingArguments(
+       output_dir="npu_ds_out",
+       deepspeed="ds_config.json",
+       **get_optimal_precision_config(),
+   )
+   ```
+
+> **Note:** DeepSpeed's NPU integration is less mature than CUDA. If you encounter issues, fall back to DDP with `accelerate`.
+
+### Known Limitations
+
+- **bfloat16** is generally not supported on NPU — use `engram_dtype="float16"` explicitly.
+- **bitsandbytes** quantization does not support NPU; 4-bit/8-bit training is not available on NPU.
+- `pin_memory=True` in DataLoader may behave differently on NPU; set `pin_memory=False` if you encounter issues.
+- DeepSpeed's Ascend support is experimental — validate with small-scale tests before production.
+
+---
+
 ## Tutorial 9: Seamless SFT with TRL
 
 Engram-PEFT provides a deep integration with Hugging Face `trl`, including full support for sparse embeddings in instruction tuning.
@@ -467,3 +612,71 @@ trainer.train()
 *   **Sparse Support**: `use_sparse_embeddings=True` (default) now works out-of-the-box in TRL.
 *   **Mixed Optimizer**: Automatically uses `SparseAdam` for embeddings and `AdamW` for dense weights.
 *   **Robust Clipping**: Bypasses PyTorch `NotImplementedError` for sparse gradients on all hardware.
+
+---
+
+## Tutorial 10: Knowledge Memorization Benchmark (PopQA)
+
+This tutorial walks through the `examples/engram_knowledge_memory.py` script — a complete end-to-end benchmark that evaluates Engram's ability to memorize long-tail factual knowledge using the **PopQA** dataset.
+
+The script compares four configurations on Exact Match (EM) accuracy:
+- **Base** — no adapter (raw backbone)
+- **+Engram** — Engram adapter only
+- **+LoRA** — LoRA adapter only
+- **+Engram+LoRA** — combined
+
+### Running the Benchmark
+
+```bash
+# Train Engram only, then evaluate
+python examples/engram_knowledge_memory.py --mode train
+
+# Train Engram + LoRA, then evaluate
+python examples/engram_knowledge_memory.py --mode train --train_lora
+
+# Evaluate only (load previously saved adapters)
+python examples/engram_knowledge_memory.py --mode eval \
+    --engram_path outputs/popqa_benchmark/engram \
+    --lora_path outputs/popqa_benchmark/lora
+
+# Distributed training (DDP, 8 GPUs)
+torchrun --nproc_per_node=8 examples/engram_knowledge_memory.py
+
+# Distributed training (DeepSpeed ZeRO-2)
+torchrun --nproc_per_node=8 examples/engram_knowledge_memory.py --use_deepspeed
+```
+
+### What the Script Does
+
+1. **Loads PopQA** — 14,267 factual QA pairs (80/20 train/test split).
+2. **Loads backbone in 4-bit** — uses `bitsandbytes` NF4 quantization to fit large models (default: `Qwen/Qwen3.6-27B`) on a single GPU.
+3. **Builds Engram adapter** — sparse embeddings, configurable `embedding_dim` and `target_layers`.
+4. **Trains with `EngramTrainer`** — handles sparse gradients, mixed optimizer, and Engram data collator automatically.
+5. **(Optional) Trains LoRA adapter** — uses standard `peft.LoraConfig` + `Trainer`.
+6. **Evaluates EM accuracy** — greedy-decodes answers on held-out questions, compares against ground-truth via normalized exact match.
+7. **Prints comparison table** — shows accuracy and delta vs. base model.
+
+### Configuration Highlights
+
+```bash
+# Key CLI arguments
+--model "Qwen/Qwen3.6-27B"      # Backbone model
+--embedding_dim 1280              # Engram embedding dimension
+--target_layers 2 15              # Which layers to inject
+--batch_size 1                    # Per-device batch size (4-bit is memory-heavy)
+--grad_accum 8                    # Gradient accumulation steps
+--learning_rate 2e-4              # Learning rate for Engram
+--num_epochs 3                    # Training epochs
+--entropy_loss_weight 0.01        # Gating entropy regularization
+--lora_r 16                       # LoRA rank (if --train_lora)
+```
+
+### Distributed Training Details
+
+The script automatically detects distributed environment variables (`LOCAL_RANK`, `WORLD_SIZE`, `RANK`) set by `torchrun`. Key behaviors:
+
+- **DDP mode** (default): Uses sparse embeddings (`use_sparse_embeddings=True`) with `MixedOptimizer` for efficient gradient updates. Only the main process (rank 0) saves adapters.
+- **DeepSpeed mode** (`--use_deepspeed`): Disables sparse embeddings (`use_sparse_embeddings=False`) because DeepSpeed's ZeRO optimizer is incompatible with `torch.sparse` tensors. Falls back to dense embeddings with standard `AdamW`.
+- **Device-agnostic**: When running on Ascend NPU, use `get_distributed_backend()` from `engram_peft.utils.device` to detect the correct HCCL backend (see [NPU Distributed Training](#distributed-training-on-npu-ddp) section).
+
+

@@ -204,7 +204,7 @@ class SimpleTransformer(PreTrainedModel, GenerationMixin):
 
     @override
     def get_input_embeddings(self) -> nn.Module:
-        return self.transformer.wte  # type: ignore
+        return self.transformer.wte
 
     @override
     def set_input_embeddings(self, value: nn.Module) -> None:

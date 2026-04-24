@@ -45,7 +45,7 @@ testpaths = ["tests"]
 
 [[tool.uv.index]]
 name = "pytorch"
-url = "https://download.pytorch.org/whl/cu124"
+url = "https://download.pytorch.org/whl/cu121"
 explicit = true
 
 [tool.uv.sources]
@@ -167,9 +167,12 @@ executionEnvironments = [
 
 
 [dependency-groups]
-# Install: uv sync --group dev --group deepspeed
+# Install: uv sync --group dev --group deepspeed --group npu
 deepspeed = [
     "deepspeed>=0.15.0",
+]
+npu = [
+    "torch-npu>=2.5.1",
 ]
 dev = [
     "datasets>=4.8.4",

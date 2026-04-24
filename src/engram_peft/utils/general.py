@@ -25,8 +25,6 @@ from transformers import (
 
 from engram_peft.utils.compat import (
     create_safe_training_args,
-    safe_cuda_is_available,
-    safe_cuda_is_bf16_supported,
     safe_norm,
     safe_stack,
 )
@@ -77,20 +75,17 @@ def get_submodule_by_path(model: torch.nn.Module, path: str) -> torch.nn.Module:
 def get_optimal_precision_config() -> dict[str, bool]:
     """
     Returns the optimal precision configuration based on available hardware.
-    Prefers bf16 on supported GPUs, otherwise falls back to fp16 if CUDA is available.
+    Supports CUDA, NPU, and CPU backends.
+    Prefers bf16 on supported devices, otherwise falls back to fp16.
 
     Returns:
         dict[str, bool]: A dictionary containing 'bf16' and 'fp16' flags.
     """
-    is_cuda = safe_cuda_is_available()
-    if not is_cuda:
-        return {"bf16": False, "fp16": False}
+    from engram_peft.utils.device import (  # noqa: PLC0415
+        get_optimal_precision_config as _device_precision,
+    )
 
-    supports_bf16 = safe_cuda_is_bf16_supported()
-    return {
-        "bf16": supports_bf16,
-        "fp16": not supports_bf16,
-    }
+    return _device_precision()
 
 
 class MixedOptimizer(Optimizer):
@@ -175,8 +170,11 @@ class MixedOptimizer(Optimizer):
         for opt, sd in zip(self.optimizers, state_dict["optimizers"], strict=False):
             opt.load_state_dict(sd)
 
-    def unscale_(self, scaler: torch.cuda.amp.GradScaler) -> None:
-        """Proxies unscale_ to all sub-optimizers for FP16 compatibility."""
+    def unscale_(self, scaler: Any) -> None:
+        """Proxies unscale_ to all sub-optimizers for FP16 compatibility.
+
+        Accepts CUDA, NPU, or any scaler implementing an ``unscale_`` method.
+        """
         for opt in self.optimizers:
             if hasattr(scaler, "unscale_"):
                 scaler.unscale_(opt)
@@ -448,13 +446,13 @@ def evaluate_model_loss(
         float: The calculated eval_loss.
     """
 
+    precision = get_optimal_precision_config()
     eval_args_dict: SafeTrainingArguments = {
         "output_dir": output_dir,
         "per_device_eval_batch_size": batch_size,
         "report_to": "none",
-        "bf16": safe_cuda_is_available() and safe_cuda_is_bf16_supported(),
-        "fp16": not (safe_cuda_is_available() and safe_cuda_is_bf16_supported())
-        and safe_cuda_is_available(),
+        "bf16": precision["bf16"],
+        "fp16": precision["fp16"],
         "dataloader_num_workers": 0,
         "dataloader_pin_memory": True,
         "remove_unused_columns": True,

@@ -285,7 +285,7 @@ Automatically detects the best available training precision based on hardware.
 **Returns:**
 - `dict[str, bool]`: A dictionary with keys `"bf16"` and `"fp16"`.
   - On Ampere+ GPUs: `{"bf16": True, "fp16": False}`
-  - On older GPUs: `{"bf16": False, "fp16": True}`
+  - On older GPUs or NPU: `{"bf16": False, "fp16": True}`
   - On CPU: `{"bf16": False, "fp16": False}`
 
 **Example:**
@@ -294,6 +294,37 @@ training_args = TrainingArguments(
     output_dir="./results",
     **get_optimal_precision_config()
 )
+```
+
+### Device Backend (`device.py`)
+`engram_peft.utils.device`
+
+Unified device backend abstraction supporting CUDA, NPU (Ascend), and CPU.
+
+- `get_available_device() -> str`: Returns `"npu"`, `"cuda"`, or `"cpu"` based on priority (NPU > CUDA > CPU).
+- `is_cuda_available() -> bool`: Wraps `torch.cuda.is_available()`.
+- `is_npu_available() -> bool`: Lazily imports `torch_npu` and checks NPU availability. Returns `False` gracefully if `torch_npu` is not installed.
+- `is_bf16_supported(device_type: str | None = None) -> bool`: Checks BF16 support for the given or detected device.
+- `get_amp_device_type() -> str`: Returns the autocast device type (`"npu"`, `"cuda"`, or `"cpu"`).
+- `create_grad_scaler(device_type: str | None = None) -> GradScalerProtocol | None`: Creates the appropriate GradScaler for the device. Returns `None` for CPU.
+- `get_distributed_backend() -> str`: Returns `"hccl"` on NPU, `"nccl"` on CUDA, or `""` on CPU. Use as the `backend` argument to `torch.distributed.init_process_group()`.
+- `is_hccl_available() -> bool`: Returns `True` when NPU + HCCL (Huawei Collective Communication Library) is available.
+
+**Example:**
+```python
+from engram_peft.utils.device import get_available_device, create_grad_scaler, is_bf16_supported, get_distributed_backend
+
+device = get_available_device()  # "npu", "cuda", or "cpu"
+scaler = create_grad_scaler(device)
+if scaler is not None:
+    scaler.unscale_(optimizer)
+    scaler.step(optimizer)
+    scaler.update()
+
+# Distributed backend detection
+backend = get_distributed_backend()  # "hccl" on NPU, "nccl" on CUDA
+if backend:
+    torch.distributed.init_process_group(backend=backend)
 ```
 
 ### `apply_peft_patches`
