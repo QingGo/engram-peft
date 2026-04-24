@@ -406,14 +406,14 @@ def run_example(args: argparse.Namespace) -> None:
     inputs = tokenizer(prompt, return_tensors="pt").to(target_device)
 
     print(f"Prompt: {prompt}")
+    set_seed(SEED + 1)
     with torch.no_grad():
         gen_model = wash_model(model)
         output = gen_model.generate(
             **inputs,
             max_new_tokens=100,
             max_length=None,
-            do_sample=True,
-            temperature=0.7,
+            do_sample=False,
             stop_strings=["<end_of_turn>"],
             tokenizer=tokenizer,
         )
@@ -437,13 +437,13 @@ def run_example(args: argparse.Namespace) -> None:
         )
 
         print("Inference with Fully Reloaded Model (LoRA + Engram):")
+        set_seed(SEED + 2)
         with torch.no_grad():
             reloaded_output = reloaded_model.generate(
                 **inputs,
                 max_new_tokens=100,
                 max_length=None,
-                do_sample=True,
-                temperature=0.7,
+                do_sample=False,
                 stop_strings=["<end_of_turn>"],
                 tokenizer=tokenizer,
             )

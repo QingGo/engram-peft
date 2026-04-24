@@ -98,11 +98,10 @@ class ShortConv(nn.Module):
         normed_branches: list[torch.Tensor] = []
         for i in range(hc_mult):
             normed_branches.append(self.norms[i](x[:, :, i, :]))
-
         x_norm = torch.stack(normed_branches, dim=2)
 
         # Step 2: Reshape for Conv1D -> [batch_size, total_channels, seq_len]
-        # x_norm: [B, L, M, D] -> [B, M, D, L] -> [B, M*D, L]
+        # x_norm: [B, L, M, D] -> [B, M*D, L]
         x_conv_in = x_norm.permute(0, 2, 3, 1).reshape(
             batch_size, hc_mult * hidden_size, seq_len
         )
@@ -117,9 +116,9 @@ class ShortConv(nn.Module):
         # Step 3: Depthwise convolution
         conv_out = self.conv(x_padded)
 
-        # Step 5: SiLU activation
+        # Step 5: SiLU activation (in-place saves one intermediate tensor)
         if self.activation:
-            conv_out = F.silu(conv_out)
+            conv_out = F.silu(conv_out, inplace=True)
 
         # Step 6: Convert back to [batch_size, seq_len, hc_mult, hidden_size]
         out = (
@@ -207,23 +206,22 @@ class ContextAwareGating(nn.Module):
         # Step 1: Shared Value projection
         value = self.w_v(embeddings)  # [B, L, D]
 
-        normed_keys_list: list[torch.Tensor] = []
-        normed_queries_list: list[torch.Tensor] = []
-
+        # Compute gate scores per branch and stack small intermediates
+        # (only stores M * [B, L, 1] in the list, avoids stacking full [B, L, D] tensors)
+        gate_scores: list[torch.Tensor] = []
         for m in range(self.hc_mult):
-            # Step 2: Branch-specific Key projection
             key_m = self.w_k[m](embeddings)
-            # Step 3: Independent RMSNorm per branch
-            normed_keys_list.append(self.norm_k[m](key_m))
-            normed_queries_list.append(self.norm_h[m](hidden_states[:, :, m, :]))
+            normed_key = self.norm_k[m](key_m)
+            normed_query = self.norm_h[m](hidden_states[:, :, m, :])
+            gate_scores.append(
+                (normed_key * normed_query).sum(dim=-1, keepdim=True)
+            )
 
-        normed_key = torch.stack(normed_keys_list, dim=2)  # [B, L, M, D]
-        normed_query = torch.stack(normed_queries_list, dim=2)  # [B, L, M, D]
+        gate = torch.stack(gate_scores, dim=2)  # [B, L, M, 1]
+        gate = gate / (self.hidden_size**0.5)
 
-        # Step 4: Compute gating signal
-        gate = (normed_key * normed_query).sum(dim=-1) / (self.hidden_size**0.5)
         gate = gate.abs().clamp_min(1e-6).sqrt() * gate.sign()
-        gate = gate.sigmoid().unsqueeze(-1)  # [B, L, M, 1]
+        gate = gate.sigmoid()  # [B, L, M, 1]
 
         # Store for visualization
         self.last_gate = gate.detach()

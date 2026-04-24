@@ -2,7 +2,7 @@
 # This file provides shortcuts for common development tasks such as linting,
 # formatting, type checking, and testing using the project's preferred tools.
 
-.PHONY: help lint format type-check test clean all daemon-stop daemon-status
+.PHONY: help lint format type-check test clean all daemon-stop daemon-status test-daemon-restart
 
 # Default target: display help information for all available targets
 help:
@@ -42,6 +42,12 @@ type-check:
 
 # Run unit tests using sprintest, which provides optimized test execution.
 # Includes coverage calculation and identifies the slowest test cases.
+test-daemon-restart:
+	@echo "[*] Restarting Sprintest Daemon..."
+	-uv run stest stop 2>/dev/null || true
+	-rm -f .sprintest/daemon.lock .sprintest/daemon.sock .sprintest/status.json 2>/dev/null || true
+	@echo "[*] Daemon will auto-start on next test command."
+
 test: test-unit
 
 test-unit:
@@ -50,7 +56,7 @@ test-unit:
 
 test-integ:
 	@echo "[*] Running integration tests..."
-	uv run env SPRINTEST_TARGET_PKG=engram_peft stest tests/integration --durations=5
+	uv run env SPRINTEST_TARGET_PKG=engram_peft stest tests/integration --durations=10
 
 # Delete all tool-generated cache directories
 clean:

@@ -9,7 +9,7 @@ load_dotenv()
 from typing import Any
 
 import torch
-from datasets import Dataset
+from datasets import Dataset, load_dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from trl.trainer.sft_config import SFTConfig
 
@@ -23,24 +23,17 @@ from engram_peft.utils import get_optimal_precision_config
 
 
 def main() -> None:
-    # 1. Setup a dummy dataset for SFT
-    data = {
-        "instruction": [
-            "Explain the concept of sparse memory.",
-            "What is parameter-efficient fine-tuning?",
-            "Write a short poem about AI.",
-        ],
-        "response": [
-            "Sparse memory allows models to access specific information without full activation.",
-            "PEFT methods reduce the number of trainable parameters during fine-tuning.",
-            "In silicon minds, a spark does glow, a world of data, fast and slow.",
-        ],
-    }
-    dataset = Dataset.from_dict(data)
+    # 1. Setup a real dataset for SFT (Alpaca subset for fast execution)
+    dataset = load_dataset("tatsu-lab/alpaca", split="train[:10]", trust_remote_code=True)
+    assert isinstance(dataset, Dataset)
+
+    prompt_template = "### Instruction: {instruction}\n### Response: {output}"
 
     def formatting_prompts_func(example: dict[str, Any]) -> str:
         """Format the dataset into the expected prompt template."""
-        return f"### Instruction: {example['instruction']}\n### Response: {example['response']}"
+        return prompt_template.format(
+            instruction=example["instruction"], output=example["output"]
+        )
 
     # 2. Setup model and tokenizer
     model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
@@ -72,7 +65,7 @@ def main() -> None:
         per_device_train_batch_size=1,
         gradient_accumulation_steps=1,
         learning_rate=2e-4,
-        max_steps=5,
+        max_steps=30,
         logging_steps=1,
         save_steps=5,
         bf16=precision_cfg["bf16"],
@@ -121,6 +114,8 @@ def main() -> None:
     # 10. Reload and Verify
     print("\n>>> Reloading for Verification")
     try:
+        # Move inputs to CPU for fresh model
+        cpu_inputs = {k: v.cpu() if hasattr(v, "cpu") else v for k, v in inputs.items()}
         # Load a fresh base model
         reloaded_base = AutoModelForCausalLM.from_pretrained(model_id)
         # Reload Engram adapter
@@ -131,7 +126,7 @@ def main() -> None:
         print("Inference with Reloaded Model:")
         with torch.no_grad():
             reloaded_output = reloaded_model.generate(
-                **inputs,
+                **cpu_inputs,
                 max_new_tokens=30,
                 do_sample=True,
                 temperature=0.7,

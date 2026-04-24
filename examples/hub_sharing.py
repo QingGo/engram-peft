@@ -230,6 +230,8 @@ def main() -> None:
 
     # ---------- Reload ----------
     print(f"\n>>> Reloading adapter from: {load_path}")
+    # Unload existing engram hooks from base_model to prevent double registration
+    model.unload_engram()
     reloaded = EngramModel.from_pretrained(
         base_model, load_path, tokenizer=wash_tokenizer(tokenizer)
     )

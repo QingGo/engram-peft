@@ -26,6 +26,7 @@ def test_freeze_backbone_steps(tmp_path: Any) -> None:
             self.base_model.register_parameter("p", self.backbone_param)
             # utils.get_trainable_param_groups expects this
             self._engram_layers = nn.ModuleDict()
+            self.trainable_backbone_names: set[str] = {"p"}
 
         def forward(self, *args: Any, **kwargs: Any) -> dict[str, torch.Tensor]:
             return {"loss": torch.tensor(0.0, requires_grad=True)}
