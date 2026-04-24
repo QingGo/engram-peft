@@ -25,7 +25,6 @@ from engram_peft.utils import (
 from engram_peft.utils.compat import get_config_attr, wash_model
 
 
-
 class EngramTrainer(Trainer):
     """
     Custom Trainer that handles sparse gradient clipping and norm calculation.
@@ -209,7 +208,9 @@ class EngramTrainer(Trainer):
 
         return total_loss
 
-    def _compute_total_norm(self, parameters: Iterable[nn.Parameter]) -> torch.Tensor | None:
+    def _compute_total_norm(
+        self, parameters: Iterable[nn.Parameter]
+    ) -> torch.Tensor | None:
         """Computes the total gradient norm across dense and sparse parameters."""
         return compute_grad_norm(parameters)
 
@@ -349,7 +350,9 @@ class EngramTrainer(Trainer):
         super().log(logs, start_time=start_time)
 
     @override
-    def _save(self, output_dir: str | None = None, state_dict: dict[str, Any] | None = None) -> None:
+    def _save(
+        self, output_dir: str | None = None, state_dict: dict[str, Any] | None = None
+    ) -> None:
         """
         Override _save to delegate to EngramModel.save_pretrained() when the model
         is an EngramModel, avoiding safetensors shared-tensor errors from weight tying.

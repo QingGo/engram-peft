@@ -24,6 +24,7 @@ Usage:
 """
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 import argparse
@@ -86,15 +87,22 @@ def prepare_dataset(
     return train_dataset
 
 
-def run_inference(
-    model: EngramModel, tokenizer: PreTrainedTokenizerBase
-) -> str:
-    device = model.base_model.device
-    inputs = tokenizer(PROMPT, return_tensors="pt").to(device)
+def _resolve_device(model: EngramModel) -> torch.device:
+    d = model.base_model.device
+    if isinstance(d, torch.device):
+        return d
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def run_inference(model: EngramModel, tokenizer: PreTrainedTokenizerBase) -> str:
+    inputs = tokenizer(PROMPT, return_tensors="pt").to(_resolve_device(model))
     output = model.generate(
         **inputs, max_new_tokens=20, max_length=None, do_sample=False
     )
-    return tokenizer.decode(output[0], skip_special_tokens=True)
+    decoded = tokenizer.decode(output[0], skip_special_tokens=True)
+    if isinstance(decoded, str):
+        return decoded
+    return decoded[0] if decoded else ""
 
 
 def main() -> None:
@@ -125,9 +133,7 @@ def main() -> None:
     parser.add_argument(
         "--batch_size", type=int, default=2, help="Per-device batch size"
     )
-    parser.add_argument(
-        "--subset", type=int, default=500, help="Dataset subset size"
-    )
+    parser.add_argument("--subset", type=int, default=500, help="Dataset subset size")
     args = parser.parse_args()
 
     if not args.repo_id and not args.local:
@@ -223,7 +229,7 @@ def main() -> None:
             load_path = "outputs/hub_sharing/fallback"
             model.save_pretrained(load_path)
     else:
-        load_path = cast(str, args.local)
+        load_path = cast("str", args.local)
         os.makedirs(load_path, exist_ok=True)
         print(f"\n>>> Saving adapter locally: {load_path}")
         model.save_pretrained(load_path)

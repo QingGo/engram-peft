@@ -499,6 +499,8 @@ def train_full_finetune_engram(
     if save_fn is not None:
         save_fn("outputs/benchmarks/full_ft_engram_weights/base_model")
     else:
-        print("Warning: model.base_model does not have save_pretrained; backbone saving skipped.")
+        print(
+            "Warning: model.base_model does not have save_pretrained; backbone saving skipped."
+        )
     model.unload_engram()
     return metrics

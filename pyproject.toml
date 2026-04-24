@@ -100,6 +100,9 @@ ignore = ["E501", "F722"]
 # B011: Do not call assert False
 # PLC0415: import should be at the top-level (allowed for lazy loading in tests)
 "tests/*" = ["F811", "F401", "B011", "PLC0415"]
+# E402: import not at top of file (intentional: load_dotenv() must run before
+#       some imports to make HF tokens available via env vars)
+"examples/*" = ["E402"]
 
 
 [tool.basedpyright]

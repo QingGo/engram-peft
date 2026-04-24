@@ -187,8 +187,7 @@ class EngramModel(nn.Module, GenerationMixin):
         Prints the number of trainable parameters in the model.
         """
         backbone_all = sum(
-            param.numel()
-            for _, param in as_module(self.base_model).named_parameters()
+            param.numel() for _, param in as_module(self.base_model).named_parameters()
         )
         backbone_trainable = sum(
             param.numel()
@@ -368,9 +367,7 @@ class EngramModel(nn.Module, GenerationMixin):
                     "Could not detect transformer layers. Specify layer_container_path."
                 )
 
-        container = get_submodule_by_path(
-            as_module(self.base_model), container_path
-        )
+        container = get_submodule_by_path(as_module(self.base_model), container_path)
         if not isinstance(container, nn.ModuleList):
             raise ValueError(f"Path '{container_path}' is not a nn.ModuleList.")
         return container
@@ -715,7 +712,10 @@ class EngramModel(nn.Module, GenerationMixin):
             # Fallback for models that don't strictly match Protocol but have the method
             func = getattr(base_model, "gradient_checkpointing_enable", None)
             if func:
-                func(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs, **kwargs)
+                func(
+                    gradient_checkpointing_kwargs=gradient_checkpointing_kwargs,
+                    **kwargs,
+                )
 
     def gradient_checkpointing_disable(self, **kwargs: Any) -> None:
         """Delegates gradient checkpointing disablement to the base model."""

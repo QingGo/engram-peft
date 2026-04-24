@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 import os
@@ -268,7 +269,9 @@ class SimpleTransformer(PreTrainedModel, GenerationMixin):
 
 
 # 3. Main Logic Functions
-def train_engram() -> tuple[EngramModel, PreTrainedTokenizer | PreTrainedTokenizerFast, EngramConfig]:
+def train_engram() -> tuple[
+    EngramModel, PreTrainedTokenizer | PreTrainedTokenizerFast, EngramConfig
+]:
     print("\n>>> Stage 1: Initializing Tiny Model & Engram")
 
     # Load Tokenizer (using GPT2 as base)
@@ -373,7 +376,9 @@ def train_engram() -> tuple[EngramModel, PreTrainedTokenizer | PreTrainedTokeniz
     return model, tokenizer, engram_config
 
 
-def inference_demo(tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast, config: EngramConfig) -> None:
+def inference_demo(
+    tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast, config: EngramConfig
+) -> None:
     print("\n>>> Stage 2: Inference & Visualization")
 
     # Clean Base Model

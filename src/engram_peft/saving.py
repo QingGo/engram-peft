@@ -5,7 +5,13 @@ from typing import TYPE_CHECKING, Any, cast
 
 import torch
 
-from engram_peft.utils import as_tensor_dict, safe_load, safe_load_file, safe_save, safe_save_file
+from engram_peft.utils import (
+    as_tensor_dict,
+    safe_load,
+    safe_load_file,
+    safe_save,
+    safe_save_file,
+)
 
 if TYPE_CHECKING:
     from engram_peft.model import EngramModel

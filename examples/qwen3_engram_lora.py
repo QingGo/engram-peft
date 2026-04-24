@@ -21,6 +21,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from engram_peft.types import ModelProtocol, SizedEncoding
@@ -143,7 +144,9 @@ def prepare_alpaca_dataset(
 
 def run_example(args: argparse.Namespace) -> None:
     # Load environment variables from .env file if it exists (e.g. HF_TOKEN)
-    dotenv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    dotenv_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"
+    )
     if os.path.isfile(dotenv_path):
         logging.info(f"Environment variables loaded from {dotenv_path}")
 
@@ -385,7 +388,9 @@ def run_example(args: argparse.Namespace) -> None:
         print("Saving LoRA adapters...")
         model.base_model.save_pretrained(OUTPUT_DIR)  # type: ignore[operator]
     else:
-        print("Warning: model.base_model does not have save_pretrained; LoRA adapter saving skipped.")
+        print(
+            "Warning: model.base_model does not have save_pretrained; LoRA adapter saving skipped."
+        )
 
     # Save Engram adapters separately for maximum robustness
     print("Saving Engram adapters...")

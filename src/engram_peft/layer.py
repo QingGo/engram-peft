@@ -213,9 +213,7 @@ class ContextAwareGating(nn.Module):
             key_m = self.w_k[m](embeddings)
             normed_key = self.norm_k[m](key_m)
             normed_query = self.norm_h[m](hidden_states[:, :, m, :])
-            gate_scores.append(
-                (normed_key * normed_query).sum(dim=-1, keepdim=True)
-            )
+            gate_scores.append((normed_key * normed_query).sum(dim=-1, keepdim=True))
 
         gate = torch.stack(gate_scores, dim=2)  # [B, L, M, 1]
         gate = gate / (self.hidden_size**0.5)

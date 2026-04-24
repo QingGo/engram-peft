@@ -4,6 +4,7 @@ Example script demonstrating how to use Engram-PEFT with trl's SFTTrainer.
 """
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from typing import Any
@@ -24,7 +25,9 @@ from engram_peft.utils import get_optimal_precision_config
 
 def main() -> None:
     # 1. Setup a real dataset for SFT (Alpaca subset for fast execution)
-    dataset = load_dataset("tatsu-lab/alpaca", split="train[:10]", trust_remote_code=True)
+    dataset = load_dataset(
+        "tatsu-lab/alpaca", split="train[:10]", trust_remote_code=True
+    )
     assert isinstance(dataset, Dataset)
 
     prompt_template = "### Instruction: {instruction}\n### Response: {output}"

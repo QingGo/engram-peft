@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 import argparse
@@ -386,7 +387,9 @@ def run_example(args: argparse.Namespace) -> None:
         print("Saving LoRA adapters...")
         save_fn(OUTPUT_DIR)
     else:
-        print("Warning: model.base_model does not have save_pretrained; LoRA adapter saving skipped.")
+        print(
+            "Warning: model.base_model does not have save_pretrained; LoRA adapter saving skipped."
+        )
 
     # Save Engram adapters separately for maximum robustness
     print("Saving Engram adapters...")
