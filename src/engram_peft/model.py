@@ -157,27 +157,18 @@ class EngramModel(nn.Module, GenerationMixin):
         self._hook_handles = []
         self._current_hash_indices = None
         self._inference_token_buffer = None
-        self._engram_enabled: bool = True
+        self._engram_enabled = True
+        self._hooks_registered = False
 
         # 4. Apply precision settings
-        # By default, we keep Engram layers in float32 for training stability (Mixed Precision).
-        # We perform an initial probe on the base_model to see if an explicit override is requested.
-        target_dtype = torch.float32
-        source = "Default (float32)"
-
-        target_dtype, source = ArchitectureResolver.resolve_layer_dtype(
-            self.base_model, config
-        )
-
+        # Aligning with v1.2.1: Keep Engram layers in float32 by default
+        # to ensure training stability and prevent gradient underflow in sparse updates.
         if config.engram_dtype is not None:
-            self.adapters.to(target_dtype)
-            logger.info(
-                f"[Engram-PEFT] Set Engram layers to explicit dtype: {target_dtype} (Source: {source})"
+            target_dtype, _ = ArchitectureResolver.resolve_layer_dtype(
+                self.base_model, config
             )
+            self.adapters.to(target_dtype)
         else:
-            # If no explicit config, we default to float32 initially for stability.
-            # Attach precision settings initially
-            # By default, we keep Engram layers in float32 for training stability (Mixed Precision).
             self.adapters.float()
 
     def add_model_tags(self, tags: list[str]) -> None:
@@ -466,6 +457,8 @@ class EngramModel(nn.Module, GenerationMixin):
                     curr_seq_len = input_ids.shape[1]
                     if curr_seq_len > 1 or self._inference_token_buffer is None:
                         self._inference_token_buffer = input_ids
+                        # Reset hash indices so they are recalculated for the new input
+                        self._current_hash_indices = None
                     else:
                         # Append new tokens to buffer
                         self._inference_token_buffer = torch.cat(
@@ -551,6 +544,9 @@ class EngramModel(nn.Module, GenerationMixin):
         Dynamically loads and attaches Engram hooks.
         If engram_path is specified, optionally loads weights.
         """
+        if self._hooks_registered and engram_path is None:
+            return
+
         self.unload_engram()
 
         if engram_path is not None:
@@ -582,32 +578,26 @@ class EngramModel(nn.Module, GenerationMixin):
                     example_param = next(target_module.parameters())
                     target_device = example_param.device
 
-                    # Smart Dtype Detection for Quantization via ArchitectureResolver
-                    target_dtype, source = ArchitectureResolver.resolve_layer_dtype(
-                        target_module, self.config
-                    )
-
-                    # Align the entire adapter module to target device AND detected dtype
+                    # Align the entire adapter module to target device only
+                    # We maintain float32 for training stability unless config explicitly overrides.
                     engram_layer = self.engram_layers[str(layer_id)]
-                    engram_layer.to(device=target_device, dtype=target_dtype)
-
-                    logger.info(
-                        f"  - [Injected] Layer {layer_id} -> {module_class} "
-                        + f"(device: {target_device}, dtype: {target_dtype}, source: {source})"
-                    )
+                    engram_layer.to(device=target_device)
                 except (StopIteration, AttributeError):
                     pass
 
+                # 3. Register the hook
                 hook_handle = target_module.register_forward_pre_hook(
                     self._create_pre_hook(layer_id)
                 )
                 self._hook_handles.append(hook_handle)
+
                 logger.info(
                     f"  - [Injected] Layer {layer_id} -> {module_class} "
                     + f"(device: {target_device if target_device is not None else 'unknown'})"
                 )
 
         self._engram_enabled = True
+        self._hooks_registered = True
 
     def unload_engram(self) -> None:
         """Removes all Engram hooks and effectively disables Engram operations."""
@@ -615,6 +605,7 @@ class EngramModel(nn.Module, GenerationMixin):
             handle.remove()
         self._hook_handles = []
         self._engram_enabled = False
+        self._hooks_registered = False
 
     @jaxtyped
     @override
