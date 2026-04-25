@@ -153,9 +153,10 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--warmup_ratio", type=float, default=0.03)
     p.add_argument("--logging_steps", type=int, default=50)
     p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--train_engram", action="store_true", default=True)
-    p.add_argument("--no_train_engram", action="store_false", dest="train_engram")
-    p.add_argument("--train_lora", action="store_true", default=False)
+    p.add_argument("--engram", action="store_true", default=True)
+    p.add_argument("--no-engram", action="store_false", dest="engram")
+    p.add_argument("--lora", action="store_true", default=False)
+    p.add_argument("--joint", action="store_true", default=False)
     p.add_argument("--engram_path", type=str, default=None)
     p.add_argument("--lora_path", type=str, default=None)
     p.add_argument("--lora_r", type=int, default=16)
@@ -170,18 +171,23 @@ class TestParseArgs:
     def test_defaults(self) -> None:
         args = _parse_args([])
         assert args.mode == "train"
-        assert args.train_engram is True
-        assert args.train_lora is False
+        assert args.engram is True
+        assert args.lora is False
+        assert args.joint is False
         assert args.max_samples is None
         assert args.eval_max_samples == 200
 
-    def test_train_lora(self) -> None:
-        args = _parse_args(["--train_lora"])
-        assert args.train_lora is True
+    def test_lora(self) -> None:
+        args = _parse_args(["--lora"])
+        assert args.lora is True
+
+    def test_joint(self) -> None:
+        args = _parse_args(["--joint"])
+        assert args.joint is True
 
     def test_no_engram(self) -> None:
-        args = _parse_args(["--no_train_engram"])
-        assert args.train_engram is False
+        args = _parse_args(["--no-engram"])
+        assert args.engram is False
 
     def test_eval_mode(self) -> None:
         args = _parse_args(["--mode", "eval", "--engram_path", "/p"])
@@ -502,7 +508,7 @@ class TestBuildLoRAModel:
         ):
             mock_peft = MagicMock()
             mock_get.return_value = mock_peft
-            result = mod.build_lora_model("dummy", MagicMock(), r=8, lora_alpha=16)
+            result = mod.build_lora_model("dummy", r=8, lora_alpha=16)
             assert result == mock_peft
             mock_peft.print_trainable_parameters.assert_called_once()
 
@@ -514,7 +520,7 @@ class TestBuildLoRAModel:
             patch.object(mod, "get_peft_model") as mock_get,
         ):
             mock_get.return_value = MagicMock()
-            mod.build_lora_model("dummy", MagicMock())
+            mod.build_lora_model("dummy")
             lora_config = mock_get.call_args[0][1]
             assert lora_config.r == 16
             assert lora_config.lora_alpha == 32
@@ -620,6 +626,8 @@ class TestMain:
             patch.object(mod, "get_engram_model") as mock_get,
             patch.object(mod, "EngramTrainer") as mock_tr,
             patch.object(mod, "tokenize_dataset") as mock_tokenize,
+            patch("os.makedirs"),
+            patch.object(mod, "EngramModel"),
             patch.object(mod, "evaluate_em") as mock_eval,
         ):
             mock_tok = MagicMock()
