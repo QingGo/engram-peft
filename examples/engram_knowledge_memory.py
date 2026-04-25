@@ -152,20 +152,15 @@ def tokenize_dataset(
             max_length=max_length,
             padding=False,
         )
-        raw_ids: Any = tokenized["input_ids"]
-        labels: list[list[int]] = [list(ids) for ids in raw_ids]
-        if tokenizer.pad_token_id is not None:
-            for label in labels:
-                for i in range(len(label)):
-                    if label[i] == tokenizer.pad_token_id:
-                        label[i] = -100
-        tokenized["labels"] = labels
-        return cast("dict[str, Any]", tokenized)
+        return {
+            "input_ids": tokenized["input_ids"],
+            "attention_mask": tokenized["attention_mask"],
+        }
 
     return dataset.map(
         tokenize_fn,
         batched=True,
-        remove_columns=[c for c in dataset.column_names if c != "text"],
+        remove_columns=dataset.column_names,
         num_proc=num_proc,
     )
 
