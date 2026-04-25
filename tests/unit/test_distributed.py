@@ -9,7 +9,7 @@ from engram_peft.model import EngramModel
 from engram_peft.trainer import (
     EngramTrainer,
     _is_deepspeed_enabled,
-    _warn_deepspeed_sparse,
+    _warn_distributed_sparse,
 )
 
 
@@ -49,31 +49,32 @@ def test_is_deepspeed_enabled_none_args():
     assert not _is_deepspeed_enabled(object())
 
 
-# --- _warn_deepspeed_sparse ---
+# --- _warn_distributed_sparse ---
 
 
-def test_warn_deepspeed_sparse_no_model():
+def test_warn_distributed_sparse_no_model():
     args = _make_mock_args(deepspeed_val="ds_config.json")
-    _warn_deepspeed_sparse(None, args)
+    _warn_distributed_sparse(None, args)
 
 
-def test_warn_deepspeed_sparse_no_deepspeed():
+def test_warn_distributed_sparse_no_deepspeed_no_dist():
     model = nn.Linear(10, 10)
     args = _make_mock_args(deepspeed_val=None)
     with patch("builtins.print") as mock_print:
-        _warn_deepspeed_sparse(model, args)
+        _warn_distributed_sparse(model, args)
         mock_print.assert_not_called()
 
 
-def test_warn_deepspeed_sparse_non_engram_model():
+def test_warn_distributed_sparse_non_engram_model():
     model = nn.Linear(10, 10)
     args = _make_mock_args(deepspeed_val="ds_config.json")
     with patch("builtins.print") as mock_print:
-        _warn_deepspeed_sparse(model, args)
+        with patch.dict("os.environ", {"WORLD_SIZE": "2"}):
+            _warn_distributed_sparse(model, args)
         mock_print.assert_not_called()
 
 
-def test_warn_deepspeed_sparse_engram_with_sparse():
+def test_warn_distributed_sparse_engram_with_sparse():
     mock_model = MagicMock(spec=EngramModel)
     mock_model.config = MagicMock()
     mock_model.config.use_sparse_embeddings = True
@@ -81,14 +82,15 @@ def test_warn_deepspeed_sparse_engram_with_sparse():
     args = _make_mock_args(deepspeed_val="ds_config.json")
     with patch("builtins.print") as mock_print:
         with patch("engram_peft.trainer.unwrap_model", return_value=mock_model):
-            _warn_deepspeed_sparse(mock_model, args)
-            mock_print.assert_called_once()
-            text = mock_print.call_args[0][0]
-            assert "DeepSpeed" in text
-            assert "use_sparse_embeddings=True" in text
+            with patch.dict("os.environ", {"WORLD_SIZE": "2"}):
+                _warn_distributed_sparse(mock_model, args)
+                mock_print.assert_called_once()
+                text = mock_print.call_args[0][0]
+                assert "DeepSpeed" in text
+                assert "use_sparse_embeddings=True" in text
 
 
-def test_warn_deepspeed_sparse_engram_without_sparse():
+def test_warn_distributed_sparse_engram_without_sparse():
     mock_model = MagicMock(spec=EngramModel)
     mock_model.config = MagicMock()
     mock_model.config.use_sparse_embeddings = False
@@ -96,7 +98,7 @@ def test_warn_deepspeed_sparse_engram_without_sparse():
     args = _make_mock_args(deepspeed_val="ds_config.json")
     with patch("builtins.print") as mock_print:
         with patch("engram_peft.trainer.unwrap_model", return_value=mock_model):
-            _warn_deepspeed_sparse(mock_model, args)
+            _warn_distributed_sparse(mock_model, args)
             mock_print.assert_not_called()
 
 
@@ -108,7 +110,7 @@ def test_config_sparse_off_no_warning():
     args = _make_mock_args(deepspeed_val="ds_config.json")
     with patch("builtins.print") as mock_print:
         with patch("engram_peft.trainer.unwrap_model", return_value=mock_model):
-            _warn_deepspeed_sparse(mock_model, args)
+            _warn_distributed_sparse(mock_model, args)
             mock_print.assert_not_called()
 
 
