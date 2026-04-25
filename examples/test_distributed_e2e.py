@@ -38,7 +38,7 @@ from engram_peft import EngramConfig, EngramModel
 from engram_peft.trainer import (
     EngramTrainer,
     _is_deepspeed_enabled,
-    _warn_deepspeed_sparse,
+    _warn_distributed_sparse,
 )
 from engram_peft.utils.general import MixedOptimizer
 
@@ -235,7 +235,7 @@ def test_sparse_warning() -> bool:
 
     buf = io.StringIO()
     with redirect_stdout(buf):
-        _warn_deepspeed_sparse(model, args)
+        _warn_distributed_sparse(model, args)
     text = buf.getvalue()
     ok = check(
         "Warning" in text and "DeepSpeed" in text and "sparse" in text,

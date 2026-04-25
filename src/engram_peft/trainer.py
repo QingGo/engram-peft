@@ -30,9 +30,14 @@ def _is_deepspeed_enabled(args: Any) -> bool:
     return getattr(args, "deepspeed", None) is not None
 
 
-def _warn_deepspeed_sparse(model: Any, args: Any) -> None:
-    """Warn if DeepSpeed is used with sparse embeddings (incompatible)."""
-    if not _is_deepspeed_enabled(args) or model is None:
+def _warn_distributed_sparse(model: Any, args: Any) -> None:
+    """Warn if distributed mode is incompatible with sparse embeddings.
+
+    - DeepSpeed: does not support sparse gradients at all.
+    - DDP + NCCL: NCCL does not support all_reduce with sparse tensors.
+    - DDP + Gloo: supports sparse tensors (recommended when sparse is needed).
+    """
+    if model is None:
         return
     try:
         unwrapped = unwrap_model(model)
@@ -40,12 +45,25 @@ def _warn_deepspeed_sparse(model: Any, args: Any) -> None:
         return
     if not isinstance(unwrapped, EngramModel):
         return
-    if get_config_attr(unwrapped.config, "use_sparse_embeddings"):
+    if not get_config_attr(unwrapped.config, "use_sparse_embeddings"):
+        return
+
+    is_distributed = int(os.environ.get("WORLD_SIZE", "1")) > 1
+    if not is_distributed:
+        return
+
+    if _is_deepspeed_enabled(args):
         print(
             "[Engram-PEFT] Warning: DeepSpeed is enabled but use_sparse_embeddings=True. "
             + "DeepSpeed does not support sparse gradients. Set use_sparse_embeddings=False "
-            + "in EngramConfig and ensure use_sparse_embeddings is disabled. "
+            + "in EngramConfig or use DDP with ddp_backend='gloo' instead. "
             + "The MixedOptimizer will be skipped; a standard AdamW optimizer will be used instead."
+        )
+    elif torch.distributed.is_initialized() and torch.distributed.get_backend() == "nccl":
+        print(
+            "[Engram-PEFT] Warning: DDP with NCCL backend does not support all_reduce "
+            + "on sparse tensors. Set ddp_backend='gloo' in TrainingArguments to use "
+            + "sparse embeddings with DDP, or set use_sparse_embeddings=False in EngramConfig."
         )
 
 
@@ -87,7 +105,7 @@ class EngramTrainer(Trainer):
         if self.model is not None:
             self._handle_initial_freezing()
             self._capture_initial_weights()
-            _warn_deepspeed_sparse(self.model, self.args)
+            _warn_distributed_sparse(self.model, self.args)
 
     def _handle_initial_freezing(self) -> None:
         """Initially freezes the backbone if backbone_freeze_steps > 0."""

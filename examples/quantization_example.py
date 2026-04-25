@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import argparse
-from typing import Any, cast
+from typing import Any
 
 import torch
 from datasets import load_dataset
@@ -144,8 +144,11 @@ def run_quantization_example(model_id: str) -> None:
 
             labels.append(label)
 
-        tokenized["labels"] = labels
-        return cast("dict[str, Any]", tokenized)
+        return {
+            "input_ids": tokenized["input_ids"],
+            "attention_mask": tokenized["attention_mask"],
+            "labels": labels,
+        }
 
     train_dataset = dataset_subset.map(
         tokenize_function, batched=True, remove_columns=raw_dataset.column_names

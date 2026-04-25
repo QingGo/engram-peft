@@ -18,7 +18,7 @@ from trl import SFTConfig, SFTTrainer
 
 from engram_peft.collator import EngramDataCollator
 from engram_peft.model import EngramModel
-from engram_peft.trainer import _is_deepspeed_enabled, _warn_deepspeed_sparse
+from engram_peft.trainer import _is_deepspeed_enabled, _warn_distributed_sparse
 from engram_peft.utils import (
     apply_group_wise_clipping,
     compute_grad_norm,
@@ -105,7 +105,7 @@ class EngramCompatibleSFTTrainer(SFTTrainer):
 
         super().__init__(*args, **kwargs)
         if model is not None:
-            _warn_deepspeed_sparse(model, getattr(self, "args", None))
+            _warn_distributed_sparse(model, getattr(self, "args", None))
 
     @override
     def create_optimizer(self, model: Any = None) -> Optimizer:
