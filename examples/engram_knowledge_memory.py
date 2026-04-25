@@ -512,6 +512,17 @@ def main() -> None:
     is_main = global_rank <= 0
     use_deepspeed = args.use_deepspeed
 
+    # ── Inject 'rank' into all log records so the format string can use %(rank)s ──
+    _log_rank = global_rank
+
+    def _log_record_factory(*args, **kwargs):
+        record = logging.LogRecord(*args, **kwargs)
+        record.rank = _log_rank
+        return record
+
+    if local_rank >= 0:
+        logging.setLogRecordFactory(_log_record_factory)
+
     logging.basicConfig(
         level=logging.INFO if is_main else logging.WARNING,
         format="[%(levelname)s|rank=%(rank)s] %(message)s"
