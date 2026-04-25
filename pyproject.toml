@@ -24,6 +24,7 @@ dependencies = [
     "jaxtyping",
     "typeguard",
     "python-dotenv>=1.0.0",
+    "modelscope>=1.36.2",
 ]
 
 [project.scripts]

@@ -50,7 +50,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from datasets import Dataset, DatasetDict, load_dataset
+from datasets import Dataset, DatasetDict
+from modelscope import snapshot_download
 from peft import LoraConfig, PeftModel, get_peft_model, prepare_model_for_kbit_training
 from transformers import (
     AutoModelForCausalLM,
@@ -71,6 +72,31 @@ from engram_peft import (
     get_engram_model,
 )
 from engram_peft.utils.compat import wash_tokenizer
+
+# 下载模型，函数直接返回模型所在的本地绝对路径
+_model_dir = snapshot_download("AI-ModelScope/TinyLlama-1.1B-Chat-v1.0")
+
+# 数据集下载同理
+from modelscope.msdatasets import MsDataset
+
+_ms_ds = MsDataset.load("ibm-research/PopQA_robustness", split="train")
+# 3. 手动转换为 HF Dataset
+# 方式 A：如果 _ms_ds 是可迭代的列表/字典结构
+data_list = list(_ms_ds)
+_hf_dataset = Dataset.from_list(data_list)
+
+# >>> model_dir
+# '/root/.cache/modelscope/hub/models/AI-ModelScope/TinyLlama-1___1B-Chat-v1___0'
+# >>> ms_ds
+# Dataset({
+#     features: ['id', 'question', 'variant_id', 'variant_type', 'possible_answers'],
+#     num_rows: 204245
+# })
+# _tokenizer = AutoTokenizer.from_pretrained(_model_dir, trust_remote_code=True)
+# _model = AutoModelForCausalLM.from_pretrained(_model_dir, trust_remote_code=True)
+
+# 数据集一键转为HF原生格式，完全兼容datasets库
+# _hf_dataset = _ms_ds.to_hf_dataset()
 
 # ──────────────────────────────────────────────────────────────────────
 # Constants
@@ -113,7 +139,8 @@ def load_popqa(
     ``question`` and ``possible_answers`` columns) for later EM eval.
     A ``text`` column is added for training.
     """
-    raw: Dataset = load_dataset("akariasai/PopQA", split="test")
+    # raw: Dataset = load_dataset("ibm-research/PopQA_robustness", split="train")
+    raw = _hf_dataset
     if max_samples is not None and max_samples < len(raw):
         raw = raw.select(range(max_samples))
 
@@ -152,20 +179,15 @@ def tokenize_dataset(
             max_length=max_length,
             padding=False,
         )
-        raw_ids: Any = tokenized["input_ids"]
-        labels: list[list[int]] = [list(ids) for ids in raw_ids]
-        if tokenizer.pad_token_id is not None:
-            for label in labels:
-                for i in range(len(label)):
-                    if label[i] == tokenizer.pad_token_id:
-                        label[i] = -100
-        tokenized["labels"] = labels
-        return cast("dict[str, Any]", tokenized)
+        return {
+            "input_ids": tokenized["input_ids"],
+            "attention_mask": tokenized["attention_mask"],
+        }
 
     return dataset.map(
         tokenize_fn,
         batched=True,
-        remove_columns=[c for c in dataset.column_names if c != "text"],
+        remove_columns=dataset.column_names,
         num_proc=num_proc,
     )
 
@@ -240,7 +262,7 @@ def load_4bit_backbone(
     return cast(
         "AutoModelForCausalLM",
         AutoModelForCausalLM.from_pretrained(
-            model_id,
+            _model_dir,
             quantization_config=bnb_config,
             device_map=device_map,
             torch_dtype=torch.bfloat16,
@@ -544,7 +566,8 @@ def main() -> None:
     set_seed(args.seed)
 
     # ── Tokenizer ─────────────────────────────────────────────────
-    tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
+    # tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(_model_dir, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
