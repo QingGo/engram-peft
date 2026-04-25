@@ -570,7 +570,9 @@ def main() -> None:
     # ═══════════════════════════════════════════════════════════════
     if args.mode == "train":
         # ── Engram config ────────────────────────────────────────
-        sparse_embeddings = not use_deepspeed
+        sparse_embeddings = not (
+            use_deepspeed or int(os.environ.get("WORLD_SIZE", "1")) > 1
+        )
         if use_deepspeed and args.entropy_loss_weight > 0:
             logging.warning(
                 "DeepSpeed disables MixedOptimizer; entropy loss may not be applied."

@@ -1,4 +1,5 @@
 # pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none
+import os
 from typing import Any, cast, final, override
 
 import torch
@@ -260,6 +261,10 @@ class MultiHeadEmbedding(nn.Module):
         **kwargs: Any,
     ):
         super().__init__(**kwargs)
+
+        if sparse and int(os.environ.get("WORLD_SIZE", "1")) > 1:
+            sparse = False
+
         offsets = [0]
         for p in primes[:-1]:
             offsets.append(offsets[-1] + p)
