@@ -570,13 +570,9 @@ def main() -> None:
     # ═══════════════════════════════════════════════════════════════
     if args.mode == "train":
         # ── Engram config ────────────────────────────────────────
-        sparse_embeddings = not use_deepspeed
-        is_distributed = int(os.environ.get("WORLD_SIZE", "1")) > 1
-        ddp_backend: str | None = None
-        if sparse_embeddings and is_distributed:
-            ddp_backend = "gloo"
-            if is_main:
-                logging.info("Sparse embeddings + DDP detected: using Gloo backend (NCCL does not support all_reduce with sparse tensors).")
+        sparse_embeddings = not (
+            use_deepspeed or int(os.environ.get("WORLD_SIZE", "1")) > 1
+        )
         if use_deepspeed and args.entropy_loss_weight > 0:
             logging.warning(
                 "DeepSpeed disables MixedOptimizer; entropy loss may not be applied."
@@ -617,7 +613,6 @@ def main() -> None:
                 eval_strategy="no",
                 bf16=True,
                 deepspeed=deepspeed_config,
-                ddp_backend=ddp_backend,
                 ddp_find_unused_parameters=False,
                 dataloader_num_workers=2,
                 seed=args.seed,
@@ -672,7 +667,6 @@ def main() -> None:
                 save_total_limit=0,
                 eval_strategy="no",
                 bf16=True,
-                ddp_backend=ddp_backend,
                 ddp_find_unused_parameters=False,
                 dataloader_num_workers=2,
                 seed=args.seed,
