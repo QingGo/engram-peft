@@ -16,17 +16,19 @@ Protocol:
   4. Compare all available configurations in a table
 
 Usage:
-  # Train Engram only, then evaluate
-  python examples/engram_knowledge_memory.py --mode train
+  # Train Engram only
+  python examples/engram_knowledge_memory.py
 
-  # Train Engram + LoRA, then evaluate
-  python examples/engram_knowledge_memory.py --mode train --train_lora
+  # Train LoRA only
+  python examples/engram_knowledge_memory.py --lora
+
+  # Joint train Engram + LoRA together
+  python examples/engram_knowledge_memory.py --joint
+
+  # Train all three: Engram-only, LoRA-only, and Joint
+  python examples/engram_knowledge_memory.py --lora --joint
 
   # Evaluate only (load saved adapters)
-  python examples/engram_knowledge_memory.py --mode eval \\
-    --engram_path outputs/popqa_benchmark/engram
-
-  # Evaluate all three configs
   python examples/engram_knowledge_memory.py --mode eval \\
     --engram_path outputs/popqa_benchmark/engram \\
     --lora_path outputs/popqa_benchmark/lora
@@ -283,10 +285,8 @@ def build_engram_model(
     engram_config: EngramConfig,
 ) -> EngramModel:
     base_model = load_4bit_backbone(model_id, use_deepspeed)
-
     if not use_deepspeed:
         base_model = prepare_model_for_kbit_training(base_model)
-
     model = get_engram_model(
         base_model,
         engram_config,
@@ -297,36 +297,17 @@ def build_engram_model(
     return model
 
 
-# ──────────────────────────────────────────────────────────────────────
-# Model Construction — LoRA
-# ──────────────────────────────────────────────────────────────────────
-
-
 def build_lora_model(
     model_id: str,
-    _tokenizer: PreTrainedTokenizerBase,
     r: int = 16,
     lora_alpha: int = 32,
-    target_modules: list[str] | None = None,
 ) -> PeftModel:
     base_model = load_4bit_backbone(model_id)
     base_model = prepare_model_for_kbit_training(base_model)
-
-    if target_modules is None:
-        target_modules = [
-            "q_proj",
-            "k_proj",
-            "v_proj",
-            "o_proj",
-            "up_proj",
-            "down_proj",
-            "gate_proj",
-        ]
-
     lora_config = LoraConfig(
         r=r,
         lora_alpha=lora_alpha,
-        target_modules=target_modules,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "up_proj", "down_proj", "gate_proj"],
         lora_dropout=0.0,
         bias="none",
         task_type="CAUSAL_LM",
@@ -334,6 +315,36 @@ def build_lora_model(
     model = get_peft_model(base_model, lora_config)
     model.print_trainable_parameters()
     return cast("PeftModel", model)
+
+
+def build_joint_model(
+    model_id: str,
+    tokenizer: PreTrainedTokenizerBase,
+    use_deepspeed: bool,
+    engram_config: EngramConfig,
+    lora_r: int = 16,
+    lora_alpha: int = 32,
+) -> EngramModel:
+    base_model = load_4bit_backbone(model_id, use_deepspeed)
+    if not use_deepspeed:
+        base_model = prepare_model_for_kbit_training(base_model)
+    lora_config = LoraConfig(
+        r=lora_r,
+        lora_alpha=lora_alpha,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "up_proj", "down_proj", "gate_proj"],
+        lora_dropout=0.0,
+        bias="none",
+        task_type="CAUSAL_LM",
+    )
+    base_model = get_peft_model(base_model, lora_config)
+    model = get_engram_model(
+        base_model,
+        engram_config,
+        tokenizer=wash_tokenizer(tokenizer),
+        train_mode="preserve_trainable",
+    )
+    model.print_trainable_parameters()
+    return model
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -442,15 +453,22 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""\
             Examples:
-              # Train Engram + evaluate
-              python examples/engram_knowledge_memory.py --mode train
+              # Train Engram only
+              python examples/engram_knowledge_memory.py
 
-              # Train Engram + LoRA + evaluate
-              python examples/engram_knowledge_memory.py --mode train --train_lora
+              # Train LoRA only
+              python examples/engram_knowledge_memory.py --lora
+
+              # Joint train Engram + LoRA
+              python examples/engram_knowledge_memory.py --joint
+
+              # Train all three (Engram + LoRA + Joint)
+              python examples/engram_knowledge_memory.py --lora --joint
 
               # Evaluate only (load saved adapters)
               python examples/engram_knowledge_memory.py --mode eval \\
-                  --engram_path outputs/popqa_benchmark/engram
+                  --engram_path outputs/popqa_benchmark/engram \\
+                  --lora_path outputs/popqa_benchmark/lora
 
               # Distributed training
               torchrun --nproc_per_node=8 examples/engram_knowledge_memory.py
@@ -488,16 +506,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--logging_steps", type=int, default=50)
     p.add_argument("--seed", type=int, default=DEFAULT_SEED)
     # Adapters
-    p.add_argument(
-        "--train_engram", action="store_true", default=True, help="Train Engram adapter"
-    )
-    p.add_argument("--no_train_engram", action="store_false", dest="train_engram")
-    p.add_argument(
-        "--train_lora",
-        action="store_true",
-        default=False,
-        help="Additionally train LoRA adapter",
-    )
+    p.add_argument("--engram", action="store_true", default=True, help="Train Engram-only")
+    p.add_argument("--no-engram", action="store_false", dest="engram")
+    p.add_argument("--lora", action="store_true", default=False, help="Train LoRA-only")
+    p.add_argument("--joint", action="store_true", default=False, help="Joint train Engram + LoRA")
     p.add_argument(
         "--engram_path",
         type=str,
@@ -585,7 +597,7 @@ def main() -> None:
     )
     lora_save_path = (
         os.path.join(args.output_dir, "lora")
-        if args.mode == "train" and args.train_lora
+        if args.mode == "train" and (args.lora or args.joint)
         else args.lora_path
     )
     # Resolve eval-time paths from training defaults
@@ -613,114 +625,119 @@ def main() -> None:
             entropy_loss_weight=args.entropy_loss_weight if not use_deepspeed else 0.0,
         )
 
-        # ── Train Engram ─────────────────────────────────────────
-        if args.train_engram:
-            logging.info(">>> Training Engram adapter...")
-            model = build_engram_model(
-                args.model, tokenizer, use_deepspeed, engram_config
-            )
-            train_tokenized = tokenize_dataset(
-                train_raw, tokenizer, max_length=args.max_length
-            )
+        deepspeed_config: str | None = None
+        if use_deepspeed:
+            deepspeed_config = write_default_ds_config(args.output_dir)
 
-            deepspeed_config: str | None = None
-            if use_deepspeed:
-                deepspeed_config = write_default_ds_config(args.output_dir)
-
-            training_args = TrainingArguments(
-                output_dir=args.output_dir,
-                per_device_train_batch_size=args.batch_size,
-                gradient_accumulation_steps=args.grad_accum,
-                learning_rate=args.learning_rate,
-                num_train_epochs=args.num_epochs,
-                max_steps=args.max_steps if args.max_steps > 0 else -1,
-                warmup_ratio=args.warmup_ratio,
-                logging_steps=args.logging_steps,
-                save_steps=0,
-                save_total_limit=0,
-                eval_strategy="no",
-                bf16=True,
-                deepspeed=deepspeed_config,
-                ddp_find_unused_parameters=False,
-                dataloader_num_workers=2,
-                seed=args.seed,
-                report_to="none",
-                remove_unused_columns=False,
-            )
-
-            data_collator = EngramDataCollator(
-                tokenizer=tokenizer, config=model.config, mlm=False
-            )
-
+        # ── Engram-only ──────────────────────────────────────────
+        if args.engram:
+            logging.info(">>> Training Engram-only...")
+            model = build_engram_model(args.model, tokenizer, use_deepspeed, engram_config)
+            train_tokenized = tokenize_dataset(train_raw, tokenizer, max_length=args.max_length)
             trainer = EngramTrainer(
                 model=model,
-                args=training_args,
+                args=TrainingArguments(
+                    output_dir=args.output_dir,
+                    per_device_train_batch_size=args.batch_size,
+                    gradient_accumulation_steps=args.grad_accum,
+                    learning_rate=args.learning_rate,
+                    num_train_epochs=args.num_epochs,
+                    max_steps=args.max_steps if args.max_steps > 0 else -1,
+                    warmup_ratio=args.warmup_ratio,
+                    logging_steps=args.logging_steps,
+                    save_steps=0, save_total_limit=0, eval_strategy="no",
+                    bf16=True, deepspeed=deepspeed_config,
+                    ddp_find_unused_parameters=False, dataloader_num_workers=2,
+                    seed=args.seed, report_to="none", remove_unused_columns=False,
+                ),
                 train_dataset=train_tokenized,
-                data_collator=data_collator,
+                data_collator=EngramDataCollator(tokenizer=tokenizer, config=model.config, mlm=False),
             )
-
             trainer.train()
-
             if is_main:
-                saved = trainer.accelerator.unwrap_model(trainer.model)
-                if not isinstance(saved, EngramModel):
-                    saved = model
-                saved.save_pretrained(engram_save_path)
+                os.makedirs(engram_save_path, exist_ok=True)
+                try:
+                    saved = trainer.accelerator.unwrap_model(trainer.model)
+                    saved.save_pretrained(engram_save_path)
+                except Exception:
+                    model.save_pretrained(engram_save_path)
                 logging.info("Engram adapter saved to %s", engram_save_path)
-
-            del model, trainer, train_tokenized, data_collator
+            del model, trainer, train_tokenized
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-        # ── Train LoRA ────────────────────────────────────────────
-        if args.train_lora:
-            logging.info(">>> Training LoRA adapter...")
-            lora_model = build_lora_model(
-                args.model, tokenizer, r=args.lora_r, lora_alpha=args.lora_alpha
-            )
-            train_tokenized = tokenize_dataset(
-                train_raw, tokenizer, max_length=args.max_length
-            )
-
-            lora_training_args = TrainingArguments(
-                output_dir=args.output_dir,
-                per_device_train_batch_size=args.batch_size,
-                gradient_accumulation_steps=args.grad_accum,
-                learning_rate=args.learning_rate * 0.5,
-                num_train_epochs=args.num_epochs,
-                max_steps=args.max_steps if args.max_steps > 0 else -1,
-                warmup_ratio=args.warmup_ratio,
-                logging_steps=args.logging_steps,
-                save_steps=0,
-                save_total_limit=0,
-                eval_strategy="no",
-                bf16=True,
-                ddp_find_unused_parameters=False,
-                dataloader_num_workers=2,
-                seed=args.seed,
-                report_to="none",
-                remove_unused_columns=False,
-            )
-
-            lora_collator = DataCollatorForLanguageModeling(
-                tokenizer=tokenizer, mlm=False
-            )
-
+        # ── LoRA-only ────────────────────────────────────────────
+        if args.lora:
+            logging.info(">>> Training LoRA-only...")
+            lora_model = build_lora_model(args.model, r=args.lora_r, lora_alpha=args.lora_alpha)
+            train_tokenized = tokenize_dataset(train_raw, tokenizer, max_length=args.max_length)
             lora_trainer = Trainer(
                 model=lora_model,
-                args=lora_training_args,
+                args=TrainingArguments(
+                    output_dir=args.output_dir,
+                    per_device_train_batch_size=args.batch_size,
+                    gradient_accumulation_steps=args.grad_accum,
+                    learning_rate=args.learning_rate,
+                    num_train_epochs=args.num_epochs,
+                    max_steps=args.max_steps if args.max_steps > 0 else -1,
+                    warmup_ratio=args.warmup_ratio,
+                    logging_steps=args.logging_steps,
+                    save_steps=0, save_total_limit=0, eval_strategy="no",
+                    bf16=True, deepspeed=deepspeed_config,
+                    ddp_find_unused_parameters=False, dataloader_num_workers=2,
+                    seed=args.seed, report_to="none", remove_unused_columns=False,
+                ),
                 train_dataset=train_tokenized,
-                data_collator=lora_collator,
+                data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False),
             )
-
             lora_trainer.train()
-
             if is_main:
                 os.makedirs(lora_save_path, exist_ok=True)
                 lora_model.save_pretrained(lora_save_path)
                 logging.info("LoRA adapter saved to %s", lora_save_path)
+            del lora_model, lora_trainer, train_tokenized
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
-            del lora_model, lora_trainer, train_tokenized, lora_collator
+        # ── Joint (Engram + LoRA) ────────────────────────────────
+        if args.joint:
+            logging.info(">>> Joint training Engram + LoRA...")
+            model = build_joint_model(
+                args.model, tokenizer, use_deepspeed, engram_config,
+                lora_r=args.lora_r, lora_alpha=args.lora_alpha,
+            )
+            train_tokenized = tokenize_dataset(train_raw, tokenizer, max_length=args.max_length)
+            trainer = EngramTrainer(
+                model=model,
+                args=TrainingArguments(
+                    output_dir=args.output_dir,
+                    per_device_train_batch_size=args.batch_size,
+                    gradient_accumulation_steps=args.grad_accum,
+                    learning_rate=args.learning_rate,
+                    num_train_epochs=args.num_epochs,
+                    max_steps=args.max_steps if args.max_steps > 0 else -1,
+                    warmup_ratio=args.warmup_ratio,
+                    logging_steps=args.logging_steps,
+                    save_steps=0, save_total_limit=0, eval_strategy="no",
+                    bf16=True, deepspeed=deepspeed_config,
+                    ddp_find_unused_parameters=False, dataloader_num_workers=2,
+                    seed=args.seed, report_to="none", remove_unused_columns=False,
+                ),
+                train_dataset=train_tokenized,
+                data_collator=EngramDataCollator(tokenizer=tokenizer, config=model.config, mlm=False),
+            )
+            trainer.train()
+            if is_main:
+                os.makedirs(engram_save_path, exist_ok=True)
+                os.makedirs(lora_save_path, exist_ok=True)
+                saved = trainer.accelerator.unwrap_model(trainer.model)
+                if not isinstance(saved, EngramModel):
+                    saved = model
+                saved.save_pretrained(engram_save_path)
+                saved.base_model.save_pretrained(lora_save_path)
+                logging.info("Engram adapter saved to %s", engram_save_path)
+                logging.info("LoRA adapter saved to %s", lora_save_path)
+            del model, trainer, train_tokenized
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
@@ -737,81 +754,38 @@ def main() -> None:
     logging.info("  Evaluation on %d held-out PopQA samples", eval_max)
     logging.info("=" * 60)
 
-    # --- Base model ---
-    logging.info("[1/4] Evaluating Base model...")
-    base = load_4bit_backbone(args.model)
-    results["Base"] = evaluate_em(base, tokenizer, test_raw, max_samples=eval_max)
-    logging.info(
-        "  Base accuracy: %.1f%% (%d/%d)",
-        results["Base"]["accuracy"],
-        results["Base"]["correct"],
-        results["Base"]["total"],
-    )
-    del base
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    eval_steps: list[tuple[str, ...]] = [("Base",)]
 
-    # --- + Engram ---
-    if engram_save_path and os.path.isdir(engram_save_path):
-        logging.info("[2/4] Evaluating +Engram adapter...")
-        base = load_4bit_backbone(args.model)
-        engram_model: EngramModel = EngramModel.from_pretrained(
-            base, engram_save_path, tokenizer=wash_tokenizer(tokenizer)
-        )
-        results["+Engram"] = evaluate_em(
-            engram_model, tokenizer, test_raw, max_samples=eval_max
-        )
-        logging.info(
-            "  +Engram accuracy: %.1f%% (%d/%d)",
-            results["+Engram"]["accuracy"],
-            results["+Engram"]["correct"],
-            results["+Engram"]["total"],
-        )
-        del base, engram_model
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+    engram_available = engram_save_path and os.path.isdir(engram_save_path)
+    lora_available = lora_save_path and os.path.isdir(lora_save_path)
 
-    # --- + LoRA ---
-    if lora_save_path and os.path.isdir(lora_save_path):
-        logging.info("[3/4] Evaluating +LoRA adapter...")
-        base = load_4bit_backbone(args.model)
-        lora_model = PeftModel.from_pretrained(base, lora_save_path)
-        results["+LoRA"] = evaluate_em(
-            lora_model, tokenizer, test_raw, max_samples=eval_max
-        )
-        logging.info(
-            "  +LoRA accuracy: %.1f%% (%d/%d)",
-            results["+LoRA"]["accuracy"],
-            results["+LoRA"]["correct"],
-            results["+LoRA"]["total"],
-        )
-        del base, lora_model
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+    if engram_available:
+        eval_steps.append(("+Engram", "engram"))
+    if lora_available:
+        eval_steps.append(("+LoRA", "lora"))
+    if engram_available and lora_available:
+        eval_steps.append(("Joint (Engram+LoRA)", "engram", "lora"))
 
-    # --- + Engram + LoRA ---
-    if (
-        engram_save_path
-        and os.path.isdir(engram_save_path)
-        and lora_save_path
-        and os.path.isdir(lora_save_path)
-    ):
-        logging.info("[4/4] Evaluating +Engram+LoRA combined...")
+    for i, step in enumerate(eval_steps, 1):
+        name = step[0]
+        logging.info("[%d/%d] Evaluating %s...", i, len(eval_steps), name)
         base = load_4bit_backbone(args.model)
-        combined = PeftModel.from_pretrained(base, lora_save_path)
-        combined = EngramModel.from_pretrained(
-            combined, engram_save_path, tokenizer=wash_tokenizer(tokenizer)
-        )
-        results["+Engram+LoRA"] = evaluate_em(
-            combined, tokenizer, test_raw, max_samples=eval_max
-        )
+        model = base
+        if "lora" in step:
+            model = PeftModel.from_pretrained(model, lora_save_path)
+        if "engram" in step:
+            model = EngramModel.from_pretrained(
+                model, engram_save_path, tokenizer=wash_tokenizer(tokenizer)
+            )
+        results[name] = evaluate_em(model, tokenizer, test_raw, max_samples=eval_max)
         logging.info(
-            "  +Engram+LoRA accuracy: %.1f%% (%d/%d)",
-            results["+Engram+LoRA"]["accuracy"],
-            results["+Engram+LoRA"]["correct"],
-            results["+Engram+LoRA"]["total"],
+            "  %s accuracy: %.1f%% (%d/%d)",
+            name,
+            results[name]["accuracy"],
+            results[name]["correct"],
+            results[name]["total"],
         )
-        del base, combined
+        del base, model
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
