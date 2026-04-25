@@ -30,12 +30,18 @@ def _is_deepspeed_enabled(args: Any) -> bool:
     return getattr(args, "deepspeed", None) is not None
 
 
-def _warn_distributed_sparse(model: Any, args: Any) -> None:
+def _is_distributed() -> bool:
+    """Check if running in any distributed mode (DDP or DeepSpeed via torchrun)."""
+    return int(os.environ.get("WORLD_SIZE", "1")) > 1
+
+
+def _warn_distributed_sparse(model: Any, _args: Any = None) -> None:
     """Warn if distributed mode is incompatible with sparse embeddings.
 
-    - DeepSpeed: does not support sparse gradients at all.
-    - DDP + NCCL: NCCL does not support all_reduce with sparse tensors.
-    - DDP + Gloo: supports sparse tensors (recommended when sparse is needed).
+    DDP (DistributedDataParallel) does not support sparse gradients regardless
+    of the backend (NCCL or Gloo), because DDP flattens all gradients into
+    dense buckets before all_reduce. The same applies to DeepSpeed ZeRO.
+    Use single-GPU training for sparse embeddings + SparseAdam.
     """
     if model is None:
         return
@@ -52,19 +58,13 @@ def _warn_distributed_sparse(model: Any, args: Any) -> None:
     if not is_distributed:
         return
 
-    if _is_deepspeed_enabled(args):
-        print(
-            "[Engram-PEFT] Warning: DeepSpeed is enabled but use_sparse_embeddings=True. "
-            + "DeepSpeed does not support sparse gradients. Set use_sparse_embeddings=False "
-            + "in EngramConfig or use DDP with ddp_backend='gloo' instead. "
-            + "The MixedOptimizer will be skipped; a standard AdamW optimizer will be used instead."
-        )
-    elif torch.distributed.is_initialized() and torch.distributed.get_backend() == "nccl":
-        print(
-            "[Engram-PEFT] Warning: DDP with NCCL backend does not support all_reduce "
-            + "on sparse tensors. Set ddp_backend='gloo' in TrainingArguments to use "
-            + "sparse embeddings with DDP, or set use_sparse_embeddings=False in EngramConfig."
-        )
+    print(
+        "[Engram-PEFT] Warning: Distributed training detected with "
+        + "use_sparse_embeddings=True. DDP converts all gradients to dense "
+        + "during all_reduce, making SparseAdam unusable. The MixedOptimizer "
+        + "will be skipped; a standard AdamW optimizer will be used instead. "
+        + "For sparse embedding memory savings, train on a single GPU."
+    )
 
 
 class EngramTrainer(Trainer):
@@ -151,15 +151,22 @@ class EngramTrainer(Trainer):
         """
         Creates the MixedOptimizer if not provided.
 
-        When DeepSpeed is enabled, the MixedOptimizer is skipped because DeepSpeed
-        manages its own optimizer internally. A standard optimizer is created instead.
+        MixedOptimizer (SparseAdam + Adam) is skipped when using:
+        - DeepSpeed: manages its own optimizer internally.
+        - DDP / torchrun: DDP converts all gradients to dense during all_reduce,
+          making SparseAdam unusable. A standard optimizer is used instead.
         """
         if self.optimizer is None:
-            if _is_deepspeed_enabled(self.args):
+            if _is_deepspeed_enabled(self.args) or _is_distributed():
+                reason = (
+                    "DeepSpeed"
+                    if _is_deepspeed_enabled(self.args)
+                    else "DDP (torchrun)"
+                )
                 print(
-                    "[Engram-PEFT] DeepSpeed detected: skipping MixedOptimizer. "
-                    + "DeepSpeed will manage the optimizer internally. "
-                    + "Set use_sparse_embeddings=False in EngramConfig for compatibility."
+                    f"[Engram-PEFT] {reason} detected: skipping MixedOptimizer. "
+                    + "DDP converts sparse gradients to dense during all_reduce, "
+                    + "making SparseAdam unusable. A standard AdamW optimizer is used instead."
                 )
                 self.optimizer = super().create_optimizer(model)
             else:
