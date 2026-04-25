@@ -2285,8 +2285,8 @@ torchrun<span class="w"> </span>--nproc_per_node<span class="o">=</span><span cl
 <h3 id="distributed-training-details">Distributed Training Details</h3>
 <p>The script automatically detects distributed environment variables (<code>LOCAL_RANK</code>, <code>WORLD_SIZE</code>, <code>RANK</code>) set by <code>torchrun</code>. Key behaviors:</p>
 <ul>
-<li><strong>DDP mode</strong> (default): Uses sparse embeddings (<code>use_sparse_embeddings=True</code>) with <code>MixedOptimizer</code> for efficient gradient updates. Only the main process (rank 0) saves adapters.</li>
-<li><strong>DeepSpeed mode</strong> (<code>--use_deepspeed</code>): Disables sparse embeddings (<code>use_sparse_embeddings=False</code>) because DeepSpeed's ZeRO optimizer is incompatible with <code>torch.sparse</code> tensors. Falls back to dense embeddings with standard <code>AdamW</code>.</li>
+<li><strong>DDP mode</strong> (default): DDP forces dense gradients (its gradient bucket mechanism flattens all gradients before all-reduce). <code>nn.Embedding(sparse=True)</code> is automatically overridden to <code>sparse=False</code>, and <code>MixedOptimizer</code> is replaced with standard <code>AdamW</code>. For sparse <code>SparseAdam</code> benefits, train on a single GPU.</li>
+<li><strong>DeepSpeed mode</strong> (<code>--use_deepspeed</code>): Same as DDP — unsupported sparse gradients. Falls back to dense embeddings with standard <code>AdamW</code>.</li>
 <li><strong>Device-agnostic</strong>: When running on Ascend NPU, use <code>get_distributed_backend()</code> from <code>engram_peft.utils.device</code> to detect the correct HCCL backend (see <a href="#distributed-training-on-npu-ddp">NPU Distributed Training</a> section).</li>
 </ul>
 

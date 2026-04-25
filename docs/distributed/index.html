@@ -1384,13 +1384,20 @@
 <li><strong>Checkpoint saving</strong> (only on rank 0)</li>
 </ul>
 <h3 id="sparse-gradients-in-ddp">Sparse Gradients in DDP</h3>
-<p>PyTorch's DDP backend supports <code>all_reduce</code> on sparse tensors. When <code>use_sparse_embeddings=True</code> is set, the Engram sparse embedding gradients (in <code>SparseCUDA</code> / <code>SparseCPU</code> format) will be synchronized across workers.</p>
-<p><strong>Caveats:</strong></p>
+<p><strong>DDP does not support sparse gradients</strong> regardless of the backend (NCCL or Gloo). PyTorch's <code>DistributedDataParallel</code> flattens all gradients into <strong>dense buckets</strong> before performing all_reduce — this is a fundamental aspect of DDP's design, not a limitation of the communication backend.</p>
+<p>When <code>use_sparse_embeddings=True</code> is set and DDP is detected:</p>
+<ol>
+<li><code>MultiHeadEmbedding</code> automatically forces <code>sparse=False</code> on the <code>nn.Embedding</code> layer.</li>
+<li><code>EngramTrainer</code> skips <code>MixedOptimizer</code> (SparseAdam + Adam) and uses a standard <code>AdamW</code> for all parameters.</li>
+<li>A warning is printed at trainer initialization.</li>
+</ol>
+<p><strong>What this means for training:</strong></p>
 <ul>
-<li><code>SparseCUDA</code> all_reduce has higher communication overhead than dense all_reduce. For very large vocabularies (e.g., 1M+ buckets), this overhead may be noticeable.</li>
-<li>MixedOptimizer with SparseAdam works correctly under DDP, as DDP only performs gradient synchronization and does not interfere with the optimizer.</li>
-<li>For best performance with many GPUs, consider setting <code>use_sparse_embeddings=False</code> to use dense embeddings, avoiding the sparse sync overhead.</li>
+<li><strong>Memory</strong>: Same as single-GPU mode — no additional penalty from sparse-to-dense conversion at sync time. The Engram memory formula (<code>16E</code>) covers weights, gradients, and Adam states in dense format.</li>
+<li><strong>Performance</strong>: Dense all_reduce is the fastest NCCL operation. No sparse sync overhead.</li>
+<li><strong>Gloo is not a workaround</strong>: Gloo <code>all_reduce</code> supports sparse tensors, but DDP's gradient bucket mechanism converts all gradients to dense before calling it. Changing the backend alone does not enable sparse gradients.</li>
 </ul>
+<p><strong>Single GPU workaround:</strong> If you need the memory/compute benefits of SparseAdam, train on a single GPU with <code>use_sparse_embeddings=True</code>. DDP's throughput scaling offsets the loss of sparse optimizer efficiency on multi-GPU setups.</p>
 <hr />
 <h2 id="deepspeed-zero-12">DeepSpeed (ZeRO-1/2)</h2>
 <p>DeepSpeed ZeRO stages 1 and 2 are supported, but with important limitations.</p>
@@ -1404,7 +1411,7 @@
 <h3 id="limitations">Limitations</h3>
 <ol>
 <li><strong><code>MixedOptimizer</code> is not supported</strong>: DeepSpeed takes over optimizer creation internally. When DeepSpeed is detected, <code>EngramTrainer</code> automatically skips <code>MixedOptimizer</code> and falls back to a standard optimizer (AdamW).</li>
-<li><strong><code>SparseAdam</code> is not compatible</strong>: DeepSpeed does not support sparse gradient handling. You <strong>must</strong> set <code>use_sparse_embeddings=False</code> in <code>EngramConfig</code> when using DeepSpeed.</li>
+<li><strong><code>SparseAdam</code> is not compatible</strong>: DeepSpeed does not support sparse gradient handling (same as DDP — all gradients are flattened to dense internally). You <strong>must</strong> set <code>use_sparse_embeddings=False</code> in <code>EngramConfig</code> when using DeepSpeed. The trainer automatically forces dense mode and skips MixedOptimizer.</li>
 <li><strong>Gradient clipping is handled by DeepSpeed</strong>: The <code>_clip_grad_norm</code> override in <code>EngramTrainer</code> is bypassed when DeepSpeed is active.</li>
 <li><strong>ZeRO-3 is not tested</strong>: ZeRO stage 3 partitions model parameters, which may conflict with the Engram hook injection mechanism. Use at your own risk.</li>
 </ol>
@@ -1546,16 +1553,24 @@
 </thead>
 <tbody>
 <tr>
-<td><code>engram_only</code> (single GPU / DDP)</td>
-<td><code>2B + 16E + 0.1</code> GB</td>
+<td><code>engram_only</code> (single GPU)</td>
+<td><code>2B + 16E + 0.1</code> GB (uses SparseAdam for memory-efficient embedding lookup)</td>
+</tr>
+<tr>
+<td><code>engram_only</code> (DDP)</td>
+<td><code>2B + 16E + 0.1</code> GB (dense gradients, AdamW)</td>
 </tr>
 <tr>
 <td><code>engram_only</code> (ZeRO-2, N GPUs)</td>
 <td><code>2B + 2E + 10E/N + 0.1</code> GB</td>
 </tr>
 <tr>
-<td><code>engram+LoRA</code> (single GPU / DDP)</td>
+<td><code>engram+LoRA</code> (single GPU)</td>
 <td><code>2B + 12L + 16E + 0.1</code> GB</td>
+</tr>
+<tr>
+<td><code>engram+LoRA</code> (DDP)</td>
+<td><code>2B + 12L + 16E + 0.1</code> GB (dense gradients, AdamW)</td>
 </tr>
 <tr>
 <td><code>engram+LoRA</code> (ZeRO-2, N GPUs)</td>
@@ -1637,13 +1652,13 @@ full_finetune tops out at 1.5B on a single A100 (32 GB).
 </code></pre></div>
 </details>
 
-<details>
+<details open>
 <summary><b>Multi-GPU DDP (8 × RTX 4090, 24 GB)</b></summary>
 
-DDP replicates everything on each GPU — same per-GPU memory as single 4090. Gains come from throughput (8× tokens/sec).
+DDP replicates everything on each GPU — same per-GPU memory as single 4090. Gains come from throughput (8× tokens/sec). DDP forces dense gradients, so the memory is identical to single-GPU dense mode.
 
-| Backbone | `engram_only` (sparse) | `engram+LoRA` (dense) | `engram+full_finetune` |
-|----------|:----------------------:|:---------------------:|:----------------------:|
+| Backbone | `engram_only` (dense, DDP) | `engram+LoRA` (dense, DDP) | `engram+full_finetune` |
+|----------|:--------------------------:|:--------------------------:|:----------------------:|
 | 1.5B | **9** ✅ | **9** ✅ | ❌ (32) |
 | **7B** | **20** ✅ | **20** ✅ | ❌ (98) |
 | 13B | ❌ (32) | ❌ (33) | ❌ (170) |
@@ -1668,13 +1683,13 @@ ZeRO-2 partitions gradients + optimizer states across 8 cards. **Weights stay re
 > ⚠️ With 4-bit backbone quantization, `engram_only` on 8×4090 can reach 32B (22 GB/card). See Quantization section.
 </details>
 
-<details>
+<details open>
 <summary><b>Multi-GPU DDP (8 × A100-80 GB)</b></summary>
 
-With DDP, each GPU holds a complete copy — same per-GPU memory as single GPU. The only benefit is **throughput** (8× tokens/sec).
+With DDP, each GPU holds a complete copy — same per-GPU memory as single GPU. DDP forces dense gradients, so the Engram layers use standard AdamW (same memory as single-GPU dense mode).
 
-| Backbone | `engram_only` (sparse) | `engram+LoRA` (dense) | `engram+full_finetune` |
-|----------|:----------------------:|:---------------------:|:----------------------:|
+| Backbone | `engram_only` (dense, DDP) | `engram+LoRA` (dense, DDP) | `engram+full_finetune` |
+|----------|:--------------------------:|:--------------------------:|:----------------------:|
 | 7B | **20** ✅ | **20** ✅ | **98** ❌ |
 | 13B | **32** ✅ | **33** ✅ | ❌ (170) |
 | **32B** | **70** ✅ | **72** ✅ | ❌ (398) |
@@ -1682,9 +1697,9 @@ With DDP, each GPU holds a complete copy — same per-GPU memory as single GPU. 
 
 **Why no `full_finetune`?** DDP doesn't partition anything. `12B` (84 GB for 7B) must fit on every card — it doesn't.
 
-**Recommendation:** Use DDP only with `engram_only` + sparse. For `full_finetune`, use ZeRO-2.
+**Recommendation:** Use DDP with `engram_only` for throughput scaling. For `full_finetune`, use ZeRO-2.
 
-> DDP natively supports `SparseCUDA` all_reduce, so you can keep `sparse=True` and run `MixedOptimizer` without code changes. The only downside is slightly higher communication overhead for sparse tensors compared to dense all_reduce.
+> DDP does not support sparse gradients — all gradients are flattened to dense buckets during all_reduce. The optimizer is automatically switched to standard AdamW. Train on a single GPU with `use_sparse_embeddings=True` if you need SparseAdam.
 </details>
 
 <details open>
@@ -1723,20 +1738,20 @@ With 16 GPUs, `full_finetune` up to 13B fits comfortably. 32B `full_finetune` re
 <h3 id="decision-flowchart">Decision Flowchart</h3>
 <div class="highlight"><pre><span></span><code>Q: What is your GPU budget?
 ├─ Single GPU (24 GB)
-│  ├─ engram_only + sparse → up to 7B
+│  ├─ engram_only + sparse SparseAdam → up to 7B
 │  └─ engram_only + 4-bit → up to 32B (!)
 ├─ Single GPU (80 GB)
-│  ├─ engram_only + sparse → up to 32B
+│  ├─ engram_only + sparse SparseAdam → up to 32B
 │  ├─ engram_only + 4-bit → up to 130B (!)
 │  └─ engram_only + 8-bit → up to 70B
 ├─ Multi-GPU DDP (24 GB cards, e.g. 8×4090)
-│  ├─ engram_only + sparse → up to 7B (throughput)
+│  ├─ engram_only (dense AdamW) → up to 7B (throughput)
 │  └─ engram_only + 4-bit → up to 32B (throughput, comfortable headroom)
 ├─ Multi-GPU ZeRO-2 (24 GB cards, e.g. 8×4090)
 │  ├─ engram+full_finetune → up to 1.5B (ZeRO-2 helps grads+opt, but replicated weights block larger models)
 │  └─ engram_only → 4-bit recommended (ZeRO-2 adds no value for frozen backbone)
 ├─ Multi-GPU DDP (80 GB cards)
-│  ├─ engram_only + sparse → up to 32B (throughput scaling)
+│  ├─ engram_only (dense AdamW) → up to 32B (throughput scaling)
 │  └─ engram+full_finetune → use ZeRO-2 instead (DDP replicates all 12B per card)
 └─ Multi-GPU ZeRO-2 (80 GB cards)
    ├─ engram_only → up to 32B (8 or 16 GPUs), bottleneck at replicated 2B weights
@@ -1746,13 +1761,13 @@ With 16 GPUs, `full_finetune` up to 13B fits comfortably. 32B `full_finetune` re
 <h3 id="key-takeaways">Key Takeaways</h3>
 <ol>
 <li>
-<p><strong><code>engram_only</code> + sparse is the most memory-efficient without quantization</strong> because the backbone (7B, 13B, 32B) requires zero gradients or optimizer states. It's the only way to train a 7B model on a single 24 GB card, or a 32B model on a single 80 GB card.</p>
+<p><strong>Single GPU with <code>engram_only</code> + sparse SparseAdam</strong> is the most memory-efficient without quantization because the backbone (7B, 13B, 32B) requires zero gradients or optimizer states. It's the only way to train a 7B model on a single 24 GB card, or a 32B model on a single 80 GB card.</p>
 </li>
 <li>
 <p><strong>Add 4-bit quantization and <code>engram_only</code> goes even further</strong>: 32B on a single 4090 (22 GB), 70B on a single A100 (41 GB), 130B on a single A100 (71 GB). This is the single biggest memory lever.</p>
 </li>
 <li>
-<p><strong>DDP pairs naturally with <code>engram_only</code> + sparse</strong> because DDP handles <code>SparseCUDA</code> all_reduce natively while DeepSpeed requires dense gradients.</p>
+<p><strong>DDP does NOT support sparse gradients</strong>: PyTorch's <code>DistributedDataParallel</code> flattens all gradients into dense buckets before all_reduce, regardless of the backend (NCCL or Gloo). When DDP is active, <code>nn.Embedding(sparse=True)</code> is automatically overridden to <code>sparse=False</code>, and <code>EngramTrainer</code> switches from <code>MixedOptimizer</code> to standard <code>AdamW</code>. The memory formula is identical to single-GPU dense mode — DDP provides throughput scaling, not memory savings. For sparse SparseAdam benefits (optimizer step efficiency), use single-GPU training.</p>
 </li>
 <li>
 <p><strong>ZeRO-2's value is limited for <code>engram_only</code> and <code>full_finetune</code></strong> because <strong>weights are replicated</strong>. For <code>engram_only</code>, the backbone weights (2B) are the dominant cost and ZeRO-2 doesn't touch them. For <code>full_finetune</code>, the replicated 2B backbone weights are the floor — ZeRO-2 only partitions <code>10B/N</code> (grads+opt). On 8×A100, <code>full_finetune</code> maxes out at 13B (51 GB).</p>
@@ -1764,7 +1779,7 @@ With 16 GPUs, `full_finetune` up to 13B fits comfortably. 32B `full_finetune` re
 <p><strong>8 × RTX 4090 (24 GB) with ZeRO-2</strong> can <code>full_finetune</code> only up to 1.5B (14 GB). Even 7B <code>full_finetune</code> (32 GB) exceeds 24 GB. For these cards, <code>engram_only</code> (up to 7B) or <code>engram_only</code> + 4-bit (up to 32B) is the only viable path.</p>
 </li>
 <li>
-<p><strong>With 4-bit + DDP on 8 × 4090</strong>, you can train 32B <code>engram_only</code> comfortably (22 GB/card) with full sparse gradient throughput — the best price-performance ratio in this document.</p>
+<p><strong>With 4-bit + DDP on 8 × 4090</strong>, you can train 32B <code>engram_only</code> comfortably (22 GB/card) with high throughput — the best price-performance ratio in this document.</p>
 </li>
 </ol>
 <hr />
@@ -1920,10 +1935,10 @@ With 4-bit: 32B drops to 22 GB — fits on a single RTX 4090.
 </details>
 
 <h3 id="practical-impact-multi-gpu">Practical Impact — Multi-GPU</h3>
-<details>
-<summary><b>Multi-GPU DDP (8 × RTX 4090, 24 GB, 4-bit backbone, sparse=True)</b></summary>
+<details open>
+<summary><b>Multi-GPU DDP (8 × RTX 4090, 24 GB, 4-bit backbone)</b></summary>
 
-DDP replicates everything per GPU — but with 4-bit, each card's footprint is tiny.
+DDP replicates everything per GPU — but with 4-bit, each card's footprint is tiny. DDP forces dense gradients, but the memory formula is the same (Engram optimizer state dominates at 6 GB, not the gradient format).
 
 | Backbone | `engram_only` (4-bit, DDP) |
 |----------|:--------------------------:|
@@ -1933,7 +1948,7 @@ DDP replicates everything per GPU — but with 4-bit, each card's footprint is t
 | 70B | **41** ❌ |
 
 <div class="highlight"><pre><span></span><code>32B engram_only trains on 8×4090 DDP with huge headroom (22 GB / 24 GB).
-Perfect scenario: cheap hardware, large model, sparse gradients, DDP throughput scaling.
+Perfect scenario: cheap hardware, large model, high throughput, dense AdamW optimizer.
 </code></pre></div>
 </details>
 
@@ -1973,7 +1988,7 @@ engram_only and engram+LoRA converge to nearly identical memory (Engram dominate
 <p><strong>ZeRO-2 adds minimal value with a 4-bit backbone</strong>: The backbone is frozen and quantized (0.5B/card). Enram trainable overhead with ZeRO-2 is only ~1.3 GB (<code>2E + 10E/N + 0.1</code>). The limiting factor is the 4-bit backbone weight floor (0.5B), which ZeRO-2 can't partition.</p>
 </li>
 <li>
-<p><strong>DDP + 4-bit + <code>engram_only</code></strong> is the cheapest path to 32B training: 8×RTX 4090, each card at 22 GB — comfortable headroom for sparse gradient sync.</p>
+<p><strong>DDP + 4-bit + <code>engram_only</code></strong> is the cheapest path to 32B training: 8×RTX 4090, each card at 22 GB — comfortable headroom for throughput scaling with standard AdamW.</p>
 </li>
 <li>
 <p><strong><code>full_finetune</code> benefits least from quantization</strong>: The backbone needs to be trainable, so 4-bit doesn't help (must dequantize). 8-bit helps through Adam8bit, but <code>full_finetune</code> still needs fp16 gradients + replicated weights — infeasible on single GPU beyond tiny models.</p>
