@@ -1330,7 +1330,7 @@
 - <code>n_head_per_ngram</code> (<code>int</code>, default: <code>8</code>): Number of hash heads per N-gram order.
 - <code>embedding_dim</code> (<code>int</code>, default: <code>1280</code>): Dimension of the Engram retrieval embedding.
 - <code>enable_tokenizer_compression</code> (<code>bool</code>, default: <code>True</code>): Whether to use NFKC/Lowercase normalization for token grouping.
-- <code>target_layers</code> (<code>List[int]</code>, default: <code>[2, 15]</code>): Transformer layers where Engram modules are injected, 0-indexed.
+- <code>target_layers</code> (<code>List[int]</code>, default: <code>[1, 14]</code>): Transformer layers where Engram modules are injected, 0-indexed.
 - <code>target_modules</code> (<code>Optional[Union[List[str], str]]</code>, default: <code>None</code>): Specific module names or regex patterns to target for injection.
 - <code>hc_mult</code> (<code>int</code>, default: <code>4</code>): Multi-head hyper-connection expansion factor.
 - <code>combine_mhc</code> (<code>bool</code>, default: <code>True</code>): Whether to combine multi-head hyper-connections.

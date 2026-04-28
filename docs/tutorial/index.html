@@ -1853,7 +1853,7 @@ uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </sp
 <span class="n">model</span> <span class="o">=</span> <span class="n">get_peft_model</span><span class="p">(</span><span class="n">base_model</span><span class="p">,</span> <span class="n">lora_config</span><span class="p">)</span>
 
 <span class="c1"># 2. Inject Engram on top</span>
-<span class="n">engram_config</span> <span class="o">=</span> <span class="n">EngramConfig</span><span class="p">(</span><span class="n">target_layers</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">15</span><span class="p">])</span>
+<span class="n">engram_config</span> <span class="o">=</span> <span class="n">EngramConfig</span><span class="p">(</span><span class="n">target_layers</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">14</span><span class="p">])</span>
 <span class="c1"># IMPORTANT: preserve_trainable keeps existing LoRA parameters trainable.</span>
 <span class="n">model</span> <span class="o">=</span> <span class="n">get_engram_model</span><span class="p">(</span>
     <span class="n">model</span><span class="p">,</span>
