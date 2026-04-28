@@ -4,7 +4,7 @@
 model_name_or_path: "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T"
 
 engram_config:
-  target_layers: [2, 15]  # Inject into matching layers
+  target_layers: [1, 14]  # Inject into matching layers
 
 # Recommended: Use LoRA for structural adaptation + Engram for knowledge
 lora_config:

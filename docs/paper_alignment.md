@@ -21,7 +21,7 @@ Our `EngramConfig` defaults are 100% aligned with the configurations for the 27B
 | Engram Dim $d_{mem}$ | 1280 | `embedding_dim: 1280` |
 | Engram Vocab Size | 2,262,400 | `engram_vocab_size_per_ngram: [1131200, 1131200]` |
 | Hash Heads $K$ | 8 | `n_head_per_ngram: 8` |
-| Target Layers | [2, 15] | `target_layers: [2, 15]` |
+| Target Layers | [1, 14] | `target_layers: [2, 15] (0-indexed)` |
 | N-gram Orders $n$ | [2, 3] | `ngram_sizes: [2, 3]` |
 | LR Multiplier | $5\times$ | `learning_rate_multiplier: 5.0` |
 | Conv Zero Init | True | `conv_zero_init: True` |

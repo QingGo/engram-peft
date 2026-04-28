@@ -9,7 +9,7 @@ def test_collator_gpt2_integration(tokenizer_gpt2: Any) -> None:
     # Using the standard large config that triggers prime calculations for 1.1M vocab
 
     config = EngramConfig(
-        target_layers=[2, 15],
+        target_layers=[1, 14],
         ngram_sizes=[2, 3],
         n_head_per_ngram=8,
         # Default capacity is large (~1.1M per ngram)

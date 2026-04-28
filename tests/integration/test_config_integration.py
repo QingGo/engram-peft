@@ -17,7 +17,7 @@ class TestEngramConfig(unittest.TestCase):
         self.assertEqual(config.n_head_per_ngram, 8)
         self.assertEqual(config.embedding_dim, 1280)
         self.assertEqual(config.enable_tokenizer_compression, True)
-        self.assertEqual(config.target_layers, [2, 15])
+        self.assertEqual(config.target_layers, [1, 14])
         self.assertEqual(config.hc_mult, 4)
         self.assertEqual(config.combine_mhc, True)
         self.assertEqual(config.conv_kernel_size, 4)

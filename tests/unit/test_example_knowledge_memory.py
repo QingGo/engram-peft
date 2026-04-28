@@ -162,7 +162,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--lora_r", type=int, default=16)
     p.add_argument("--lora_alpha", type=int, default=32)
     p.add_argument("--embedding_dim", type=int, default=1280)
-    p.add_argument("--target_layers", type=int, nargs="+", default=[2, 15])
+    p.add_argument("--target_layers", type=int, nargs="+", default=[1, 14])
     p.add_argument("--entropy_loss_weight", type=float, default=0.01)
     return p.parse_args(argv)
 

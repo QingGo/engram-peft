@@ -109,7 +109,7 @@ def engram_config() -> Any:
     from engram_peft.config import EngramConfig
 
     return EngramConfig(
-        target_layers=[2, 15],
+        target_layers=[1, 14],
         ngram_sizes=[2, 3],
         n_head_per_ngram=4,
         engram_vocab_size_per_ngram=[100, 100],

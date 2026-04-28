@@ -17,7 +17,7 @@ engram_config:
 
   # Layer indices for Engram layer injection. 2nd and penultimate layers are common targets.
   # Injecting into too many layers may slow down training.
-  target_layers: [2, 15]
+  target_layers: [1, 14]
 
   # Internal dimension of Engram embeddings.
   # High dimensionality allows more expressive memory retrieval but increases footprint.

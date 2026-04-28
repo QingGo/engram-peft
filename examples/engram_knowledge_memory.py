@@ -519,7 +519,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--lora_alpha", type=int, default=32)
     # Engram
     p.add_argument("--embedding_dim", type=int, default=1280)
-    p.add_argument("--target_layers", type=int, nargs="+", default=[2, 15])
+    p.add_argument("--target_layers", type=int, nargs="+", default=[1, 14])
     p.add_argument("--entropy_loss_weight", type=float, default=0.01)
     return p.parse_args()
 

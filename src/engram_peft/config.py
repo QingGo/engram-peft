@@ -57,9 +57,9 @@ class EngramConfig(PreTrainedConfig):
         },
     )
     target_layers: list[int] = field(
-        default_factory=lambda: [2, 15],
+        default_factory=lambda: [1, 14],
         metadata={
-            "help": "List of layer indices where Engram layers will be injected. 0-indexed."
+            "help": "List of layer indices where Engram layers will be injected. 0-indexed. Which is [2, 15] in paper."
         },
     )
     target_modules: list[str] | str | None = field(
@@ -228,7 +228,7 @@ class EngramConfig(PreTrainedConfig):
         self.n_head_per_ngram = n_head_per_ngram
         self.embedding_dim = embedding_dim
         self.enable_tokenizer_compression = enable_tokenizer_compression
-        self.target_layers = target_layers if target_layers is not None else [2, 15]
+        self.target_layers = target_layers if target_layers is not None else [1, 14]
         self.hc_mult = hc_mult
         self.combine_mhc = combine_mhc
         self.conv_kernel_size = conv_kernel_size

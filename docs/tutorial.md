@@ -142,7 +142,7 @@ lora_config = LoraConfig(r=16, lora_alpha=32, target_modules=["q_proj", "v_proj"
 model = get_peft_model(base_model, lora_config)
 
 # 2. Inject Engram on top
-engram_config = EngramConfig(target_layers=[2, 15])
+engram_config = EngramConfig(target_layers=[1, 14])
 # IMPORTANT: preserve_trainable keeps existing LoRA parameters trainable.
 model = get_engram_model(
     model,
