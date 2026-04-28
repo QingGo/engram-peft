@@ -467,31 +467,28 @@ class EngramModel(nn.Module, GenerationMixin):
                         )
 
                     # Only keep enough context for the max ngram size
-                    # This prevents memory leaks during long generation
-                    # We keep at least 1024 tokens to avoid frequent truncation
-                    max_n = self.hash_mapping.max_ngram_size
-                    limit = max(max_n * 2, 1024)
-                    if (
-                        self._inference_token_buffer is not None
-                        and self._inference_token_buffer.size(1) > limit
-                    ):
-                        self._inference_token_buffer = self._inference_token_buffer[
-                            :, -limit:
-                        ]
+                    # This prevents memory leaks during long generation.
+                    # We keep at least 1024 tokens to avoid frequent truncation.
+                    # NOTE: For full-sequence eval batches (seq_len > 1), the buffer
+                    # truncation would produce hash indices shorter than the input,
+                    # causing the layer hooks to skip due to shape mismatch.
+                    # We always use the full input_ids for hashing in this case.
+                    if curr_seq_len > 1:
+                        input_ids_to_hash = input_ids
+                    else:
+                        max_n = self.hash_mapping.max_ngram_size
+                        limit = max(max_n * 2, 1024)
+                        if (
+                            self._inference_token_buffer is not None
+                            and self._inference_token_buffer.size(1) > limit
+                        ):
+                            self._inference_token_buffer = self._inference_token_buffer[
+                                :, -limit:
+                            ]
 
-                    input_ids_to_hash = self._inference_token_buffer
+                        input_ids_to_hash = self._inference_token_buffer
                 else:
                     input_ids_to_hash = input_ids
-
-                # 2. Performance Optimization
-                # If indices are already precomputed AND it's not incremental generation, Skip!
-                # Incremental generation (seq_len == 1) ALWAYS needs the buffer-based hash.
-                if (
-                    self._current_hash_indices is not None
-                    and not self.base_model.training
-                    and input_ids.size(1) > 1
-                ):
-                    return None
 
                 # 3. Precompute global hash indices
                 if input_ids_to_hash is not None:

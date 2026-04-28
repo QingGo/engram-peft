@@ -190,6 +190,43 @@ def test_incremental_generation_hook() -> None:
     assert engram_model._inference_token_buffer.size(1) == 6
 
 
+def test_eval_long_sequence_no_truncation() -> None:
+    """
+    Regression test: eval with seq_len > limit (1024) must NOT truncate hash
+    indices via the inference buffer, which would cause Engram hooks to skip
+    due to shape mismatch and silently produce zero Engram contribution.
+
+    The buffer truncation (limit = max(max_n*2, 1024)) is designed for
+    incremental generation only. Full eval batches must use the complete
+    input_ids for hashing.
+    """
+    config, base_model = create_mock_setup()
+    engram_model = get_engram_model(base_model, config, tokenizer=None)
+    engram_model.eval()
+
+    seq_len = 1500  # > default limit=1024, triggers the buffer truncation
+    input_ids = torch.randint(0, 100, (1, seq_len))
+    output = engram_model(input_ids=input_ids)
+
+    # Output shape must be correct (no crash from hook skip)
+    assert output.shape == (1, seq_len, 32)
+
+    # Core assertion: hash indices must NOT be truncated
+    assert engram_model._current_hash_indices is not None
+    if isinstance(engram_model._current_hash_indices, dict):
+        for layer_id, indices in engram_model._current_hash_indices.items():
+            assert indices.shape[1] == seq_len, (
+                f"Layer {layer_id}: hash indices length {indices.shape[1]} != "
+                f"input seq_len {seq_len}; buffer truncation caused hook skip"
+            )
+    else:
+        assert engram_model._current_hash_indices.size(1) == seq_len
+
+    # Inference buffer itself must also be full-length, not truncated
+    assert engram_model._inference_token_buffer is not None
+    assert engram_model._inference_token_buffer.size(1) == seq_len
+
+
 def test_generate_robustness() -> None:
     config, base_model = create_mock_setup()
     engram_model = get_engram_model(base_model, config, tokenizer=None)

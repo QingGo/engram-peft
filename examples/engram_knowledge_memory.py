@@ -280,7 +280,15 @@ def build_lora_model(
     lora_config = LoraConfig(
         r=r,
         lora_alpha=lora_alpha,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "up_proj", "down_proj", "gate_proj"],
+        target_modules=[
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "up_proj",
+            "down_proj",
+            "gate_proj",
+        ],
         lora_dropout=0.0,
         bias="none",
         task_type="CAUSAL_LM",
@@ -304,7 +312,15 @@ def build_joint_model(
     lora_config = LoraConfig(
         r=lora_r,
         lora_alpha=lora_alpha,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj", "up_proj", "down_proj", "gate_proj"],
+        target_modules=[
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "up_proj",
+            "down_proj",
+            "gate_proj",
+        ],
         lora_dropout=0.0,
         bias="none",
         task_type="CAUSAL_LM",
@@ -479,10 +495,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--logging_steps", type=int, default=50)
     p.add_argument("--seed", type=int, default=DEFAULT_SEED)
     # Adapters
-    p.add_argument("--engram", action="store_true", default=True, help="Train Engram-only")
+    p.add_argument(
+        "--engram", action="store_true", default=True, help="Train Engram-only"
+    )
     p.add_argument("--no-engram", action="store_false", dest="engram")
     p.add_argument("--lora", action="store_true", default=False, help="Train LoRA-only")
-    p.add_argument("--joint", action="store_true", default=False, help="Joint train Engram + LoRA")
+    p.add_argument(
+        "--joint", action="store_true", default=False, help="Joint train Engram + LoRA"
+    )
     p.add_argument(
         "--engram_path",
         type=str,
@@ -604,8 +624,12 @@ def main() -> None:
         # ── Engram-only ──────────────────────────────────────────
         if args.engram:
             logging.info(">>> Training Engram-only...")
-            model = build_engram_model(args.model, tokenizer, use_deepspeed, engram_config)
-            train_tokenized = tokenize_dataset(train_raw, tokenizer, max_length=args.max_length)
+            model = build_engram_model(
+                args.model, tokenizer, use_deepspeed, engram_config
+            )
+            train_tokenized = tokenize_dataset(
+                train_raw, tokenizer, max_length=args.max_length
+            )
             trainer = EngramTrainer(
                 model=model,
                 args=TrainingArguments(
@@ -617,13 +641,21 @@ def main() -> None:
                     max_steps=args.max_steps if args.max_steps > 0 else -1,
                     warmup_ratio=args.warmup_ratio,
                     logging_steps=args.logging_steps,
-                    save_steps=0, save_total_limit=0, eval_strategy="no",
-                    bf16=True, deepspeed=deepspeed_config,
-                    ddp_find_unused_parameters=False, dataloader_num_workers=2,
-                    seed=args.seed, report_to="none", remove_unused_columns=False,
+                    save_steps=0,
+                    save_total_limit=0,
+                    eval_strategy="no",
+                    bf16=True,
+                    deepspeed=deepspeed_config,
+                    ddp_find_unused_parameters=False,
+                    dataloader_num_workers=2,
+                    seed=args.seed,
+                    report_to="none",
+                    remove_unused_columns=False,
                 ),
                 train_dataset=train_tokenized,
-                data_collator=EngramDataCollator(tokenizer=tokenizer, config=model.config, mlm=False),
+                data_collator=EngramDataCollator(
+                    tokenizer=tokenizer, config=model.config, mlm=False
+                ),
             )
             trainer.train()
             if is_main:
@@ -641,8 +673,12 @@ def main() -> None:
         # ── LoRA-only ────────────────────────────────────────────
         if args.lora:
             logging.info(">>> Training LoRA-only...")
-            lora_model = build_lora_model(args.model, r=args.lora_r, lora_alpha=args.lora_alpha)
-            train_tokenized = tokenize_dataset(train_raw, tokenizer, max_length=args.max_length)
+            lora_model = build_lora_model(
+                args.model, r=args.lora_r, lora_alpha=args.lora_alpha
+            )
+            train_tokenized = tokenize_dataset(
+                train_raw, tokenizer, max_length=args.max_length
+            )
             lora_trainer = Trainer(
                 model=lora_model,
                 args=TrainingArguments(
@@ -654,13 +690,21 @@ def main() -> None:
                     max_steps=args.max_steps if args.max_steps > 0 else -1,
                     warmup_ratio=args.warmup_ratio,
                     logging_steps=args.logging_steps,
-                    save_steps=0, save_total_limit=0, eval_strategy="no",
-                    bf16=True, deepspeed=deepspeed_config,
-                    ddp_find_unused_parameters=False, dataloader_num_workers=2,
-                    seed=args.seed, report_to="none", remove_unused_columns=False,
+                    save_steps=0,
+                    save_total_limit=0,
+                    eval_strategy="no",
+                    bf16=True,
+                    deepspeed=deepspeed_config,
+                    ddp_find_unused_parameters=False,
+                    dataloader_num_workers=2,
+                    seed=args.seed,
+                    report_to="none",
+                    remove_unused_columns=False,
                 ),
                 train_dataset=train_tokenized,
-                data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False),
+                data_collator=DataCollatorForLanguageModeling(
+                    tokenizer=tokenizer, mlm=False
+                ),
             )
             lora_trainer.train()
             if is_main:
@@ -675,10 +719,16 @@ def main() -> None:
         if args.joint:
             logging.info(">>> Joint training Engram + LoRA...")
             model = build_joint_model(
-                args.model, tokenizer, use_deepspeed, engram_config,
-                lora_r=args.lora_r, lora_alpha=args.lora_alpha,
+                args.model,
+                tokenizer,
+                use_deepspeed,
+                engram_config,
+                lora_r=args.lora_r,
+                lora_alpha=args.lora_alpha,
             )
-            train_tokenized = tokenize_dataset(train_raw, tokenizer, max_length=args.max_length)
+            train_tokenized = tokenize_dataset(
+                train_raw, tokenizer, max_length=args.max_length
+            )
             trainer = EngramTrainer(
                 model=model,
                 args=TrainingArguments(
@@ -690,13 +740,21 @@ def main() -> None:
                     max_steps=args.max_steps if args.max_steps > 0 else -1,
                     warmup_ratio=args.warmup_ratio,
                     logging_steps=args.logging_steps,
-                    save_steps=0, save_total_limit=0, eval_strategy="no",
-                    bf16=True, deepspeed=deepspeed_config,
-                    ddp_find_unused_parameters=False, dataloader_num_workers=2,
-                    seed=args.seed, report_to="none", remove_unused_columns=False,
+                    save_steps=0,
+                    save_total_limit=0,
+                    eval_strategy="no",
+                    bf16=True,
+                    deepspeed=deepspeed_config,
+                    ddp_find_unused_parameters=False,
+                    dataloader_num_workers=2,
+                    seed=args.seed,
+                    report_to="none",
+                    remove_unused_columns=False,
                 ),
                 train_dataset=train_tokenized,
-                data_collator=EngramDataCollator(tokenizer=tokenizer, config=model.config, mlm=False),
+                data_collator=EngramDataCollator(
+                    tokenizer=tokenizer, config=model.config, mlm=False
+                ),
             )
             trainer.train()
             if is_main:
