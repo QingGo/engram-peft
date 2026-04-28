@@ -171,7 +171,7 @@ class EngramConfig(PreTrainedConfig):
         },
     )
     engram_version: str = field(
-        default="1.2.3",
+        default="1.2.4",
         metadata={"help": "The version of the Engram state file format."},
     )
     train_mode: str | None = field(
@@ -212,7 +212,7 @@ class EngramConfig(PreTrainedConfig):
         backbone_freeze_steps: int = 0,
         engram_dtype: str | None = None,
         use_sparse_embeddings: bool = True,
-        engram_version: str = "1.2.3",
+        engram_version: str = "1.2.4",
         train_mode: str | None = None,
         wrap_peft: bool = False,
         **kwargs: Any,

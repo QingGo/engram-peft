@@ -48,7 +48,7 @@ def test_save_pretrained_standalone() -> None:
 
         # Verify config version
         loaded_config = EngramConfig.from_pretrained(tmp_dir)
-        assert loaded_config.engram_version == "1.2.3"
+        assert loaded_config.engram_version == "1.2.4"
 
 
 def test_save_pretrained_with_peft() -> None:
