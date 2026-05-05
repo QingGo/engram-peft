@@ -1,4 +1,4 @@
-# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportUnknownParameterType=none
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportUnknownParameterType=none, reportArgumentType=none
 """
 Engram-PEFT End-to-End GPU Example.
 
@@ -318,8 +318,10 @@ if __name__ == "__main__":
 
     print("Loading Base Model...")
     base_model = AutoModelForCausalLM.from_pretrained(
-        MODEL_NAME, dtype=torch.float16, device_map="auto"
+        MODEL_NAME, dtype=torch.float16
     )
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    base_model = base_model.to(device)
 
     # 1. Prepare Data
     train_dataset = prepare_dataset(tokenizer, subset_size=args.subset, max_length=128)

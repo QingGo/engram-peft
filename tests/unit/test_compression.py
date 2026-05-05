@@ -80,3 +80,34 @@ def test_compress_tensor_shapes(tiny_tokenizer: Any) -> None:
     np_compressed = compressor.compress(np_ids)
     assert isinstance(np_compressed, np.ndarray)
     assert np_compressed.shape == np_ids.shape
+
+
+def test_map_ids_does_not_mutate_shared_lookup(tiny_tokenizer: Any) -> None:
+    """Verify map_ids() never mutates or reassigns ``self.lookup``.
+
+    The old code did ``self.lookup = self.lookup.to(device)``, permanently
+    moving the shared lookup tensor. Under DataParallel / device_map="auto",
+    replicas on different GPUs race on this mutation, causing device mismatch
+    errors in the subsequent indexing.
+
+    The fix ensures each call uses a local copy (``lookup.to(device)``)
+    without touching ``self.lookup``.
+    """
+    compressor = CompressedTokenizer("mock/tiny", tokenizer=tiny_tokenizer)
+    lookup_id_before = id(compressor.lookup)
+    input_ids = torch.tensor([[1, 2, 3], [4, 5, 6]], dtype=torch.long)
+
+    # Multiple calls with tensor input: lookup identity must be stable
+    for _ in range(3):
+        compressor.compress(input_ids)
+        assert id(compressor.lookup) == lookup_id_before, (
+            "self.lookup must not be reassigned across compress() calls"
+        )
+
+    # NumPy path must also preserve identity
+    compressor.compress(np.array([[1, 2, 3]]))
+    assert id(compressor.lookup) == lookup_id_before
+
+    # torch.as_tensor path (list input)
+    compressor.compress([1, 2, 3])
+    assert id(compressor.lookup) == lookup_id_before
