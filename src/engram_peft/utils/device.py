@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -234,3 +235,38 @@ def get_optimal_precision_config() -> dict[str, bool]:
         "bf16": supports_bf16,
         "fp16": not supports_bf16,
     }
+
+
+# ---------------------------------------------------------------------------
+# Multi-GPU safety
+# ---------------------------------------------------------------------------
+
+
+def ensure_single_gpu() -> None:
+    """Force single GPU when DDP/torchrun is not explicitly configured.
+
+    Engram's nested ``nn.ModuleDict`` is incompatible with PyTorch's
+    ``DataParallel`` (``nn.parallel.replicate`` does not properly copy
+    deeply nested submodules). When multiple GPUs are detected but no DDP
+    launcher is active, set ``CUDA_VISIBLE_DEVICES=0`` to prevent the
+    Trainer from wrapping the model in DataParallel.
+
+    Call this early in your entrypoint (before any model loading).
+    Has no effect when ``WORLD_SIZE`` is set (DDP/torchrun mode).
+
+    Example::
+
+        from engram_peft.utils.device import ensure_single_gpu
+        ensure_single_gpu()
+        model = get_engram_model(...)
+        trainer = EngramTrainer(...)
+    """
+    if "WORLD_SIZE" not in os.environ and torch.cuda.device_count() > 1:
+        gpu_count = torch.cuda.device_count()
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+        logger.info(
+            "Engram: detected %d GPUs but no DDP config. "
+            + "Limiting to GPU 0 (DataParallel incompatible with "
+            + "nested ModuleDict). Use torchrun for multi-GPU.",
+            gpu_count,
+        )

@@ -18,6 +18,7 @@ from transformers import (
 import examples.benchmarks.methods as methods
 import wandb
 from engram_peft.utils import evaluate_model_loss
+from engram_peft.utils.device import ensure_single_gpu
 from examples.benchmarks.data import prepare_dataset
 from examples.benchmarks.persistence import BenchmarkResult, ResultManager
 
@@ -71,6 +72,9 @@ class BenchmarkEngine:
     results: dict[str, BenchmarkResult]
 
     def __init__(self, model_name: str, args: Any):
+        # Force single GPU — Engram's nested ModuleDict is incompatible with DataParallel.
+        ensure_single_gpu()
+
         self.model_name = model_name
         self.args = args
         self.result_manager = ResultManager()

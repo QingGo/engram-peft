@@ -48,6 +48,7 @@ from engram_peft import (
     get_scheduler,
 )
 from engram_peft.utils.compat import wash_tokenizer
+from engram_peft.utils.device import ensure_single_gpu
 
 MODEL_NAME = "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T"
 OUTPUT_DIR = "outputs/engram_standard"
@@ -342,14 +343,8 @@ def resume_demo(
 
 
 if __name__ == "__main__":
-    # Engram's nested ModuleDict is incompatible with PyTorch DataParallel.
-    # Auto-limit to single GPU when DDP/torchrun is not explicitly configured.
-    if "WORLD_SIZE" not in os.environ and torch.cuda.device_count() > 1:
-        print(
-            f"Detected {torch.cuda.device_count()} GPUs but no DDP config. "
-            + "Limiting to GPU 0 to avoid DataParallel issues."
-        )
-        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+    # Force single GPU — Engram's nested ModuleDict is incompatible with DataParallel.
+    ensure_single_gpu()
 
     parser = argparse.ArgumentParser(description="Run Engram End-to-End Demo")
     parser.add_argument(
