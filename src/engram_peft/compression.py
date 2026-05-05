@@ -149,12 +149,11 @@ class CompressedTokenizer:
                 )
             tensor_ids = torch.as_tensor(input_ids).to(torch.long)
 
-        lookup = self.lookup
-        if lookup.device != tensor_ids.device:
-            lookup = lookup.to(tensor_ids.device)
+        if self.lookup.device != tensor_ids.device:
+            self.lookup = self.lookup.to(tensor_ids.device)
 
         # 1. Create a mask for valid (non-negative) IDs that are within lookup range
-        mask = (tensor_ids >= 0) & (tensor_ids < len(lookup))
+        mask = (tensor_ids >= 0) & (tensor_ids < len(self.lookup))
 
         # 2. Clone input to preserve values in negative or out-of-range positions
         compressed = tensor_ids.clone()
@@ -162,7 +161,7 @@ class CompressedTokenizer:
         # 3. Only perform lookup for valid IDs
         valid_ids = tensor_ids[mask]
         if valid_ids.numel() > 0:
-            compressed[mask] = lookup[valid_ids]
+            compressed[mask] = self.lookup[valid_ids]
 
         if is_numpy:
             return compressed.cpu().numpy()
