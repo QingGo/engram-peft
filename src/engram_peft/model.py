@@ -552,9 +552,15 @@ class EngramModel(nn.Module, GenerationMixin):
 
         layers = self._find_transformer_layers()
 
-        # 1. Attach hook to the base model itself to capture input_ids automatically
-        # Priority: run this before layer hooks
-        model_hook = self.base_model.register_forward_pre_hook(
+        # 1. Attach hook to the innermost base model to capture input_ids.
+        # PeftModel.generate() bypasses PeftModel.__call__ and calls
+        # get_base_model().generate() directly, so the hook must be on the
+        # inner transformer model, not on the PeftModel wrapper.
+        hook_target = self.base_model
+        get_base_fn = getattr(hook_target, "get_base_model", None)
+        if get_base_fn is not None:
+            hook_target = get_base_fn()
+        model_hook = hook_target.register_forward_pre_hook(
             self._create_model_pre_hook(), with_kwargs=True
         )
         self._hook_handles.append(model_hook)
