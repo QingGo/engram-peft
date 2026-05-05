@@ -700,6 +700,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#tutorial-55-checkpoint-save-resume" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tutorial 5.5: Checkpoint Save &amp; Resume
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tutorial 5.5: Checkpoint Save &amp; Resume">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#saving-checkpoints-during-training" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Saving checkpoints during training
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resuming-from-a-checkpoint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resuming from a checkpoint
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#tutorial-6-managing-multiple-knowledge-packs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1374,6 +1413,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#tutorial-55-checkpoint-save-resume" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tutorial 5.5: Checkpoint Save &amp; Resume
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tutorial 5.5: Checkpoint Save &amp; Resume">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#saving-checkpoints-during-training" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Saving checkpoints during training
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#resuming-from-a-checkpoint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Resuming from a checkpoint
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#tutorial-6-managing-multiple-knowledge-packs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1955,6 +2033,84 @@ When stacking adapters, use <code>train_mode="preserve_trainable"</code> so Engr
 <blockquote>
 <p>[!IMPORTANT]
 In <code>train_mode="full_finetune"</code>, <code>model.save_pretrained(...)</code> still saves only Engram weights and config. Save <code>model.base_model</code> to a separate directory as well if you want a restorable full-finetuned checkpoint.</p>
+</blockquote>
+<h2 id="tutorial-55-checkpoint-save-resume">Tutorial 5.5: Checkpoint Save &amp; Resume</h2>
+<p><code>EngramTrainer</code> supports mid-training checkpointing and seamless resume. Enable
+<code>save_strategy</code> in your <code>TrainingArguments</code> to save checkpoints automatically.</p>
+<h3 id="saving-checkpoints-during-training">Saving checkpoints during training</h3>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrainingArguments</span>
+
+<span class="n">training_args</span> <span class="o">=</span> <span class="n">TrainingArguments</span><span class="p">(</span>
+    <span class="n">output_dir</span><span class="o">=</span><span class="s2">&quot;./output&quot;</span><span class="p">,</span>
+    <span class="n">save_strategy</span><span class="o">=</span><span class="s2">&quot;steps&quot;</span><span class="p">,</span>
+    <span class="n">save_steps</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>        <span class="c1"># Save every 500 steps</span>
+    <span class="n">save_total_limit</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>    <span class="c1"># Keep at most 3 recent checkpoints</span>
+    <span class="n">max_steps</span><span class="o">=</span><span class="mi">2000</span><span class="p">,</span>
+    <span class="o">...</span>
+<span class="p">)</span>
+
+<span class="n">trainer</span> <span class="o">=</span> <span class="n">EngramTrainer</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="n">training_args</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+<span class="n">trainer</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
+</code></pre></div>
+<p>Each checkpoint directory contains:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>adapter_model.safetensors</code></td>
+<td>LoRA adapter weights (if using LoRA+Engram)</td>
+</tr>
+<tr>
+<td><code>engram_adapters.safetensors</code></td>
+<td>Engram hash-table weights</td>
+</tr>
+<tr>
+<td><code>config.json</code></td>
+<td>Engram configuration</td>
+</tr>
+<tr>
+<td><code>optimizer.pt</code></td>
+<td>Optimizer state (Adam momentum/variance)</td>
+</tr>
+<tr>
+<td><code>scheduler.pt</code></td>
+<td>Learning rate scheduler state</td>
+</tr>
+<tr>
+<td><code>trainer_state.json</code></td>
+<td>Step count, epoch, log history</td>
+</tr>
+</tbody>
+</table>
+<h3 id="resuming-from-a-checkpoint">Resuming from a checkpoint</h3>
+<p>To resume after interruption (same script restarted, or a new script):</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Recreate model from the checkpoint</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">engram_peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">EngramModel</span>
+
+<span class="n">model</span> <span class="o">=</span> <span class="n">EngramModel</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span>
+    <span class="n">base_model</span><span class="p">,</span> <span class="s2">&quot;output/checkpoint-1000&quot;</span><span class="p">,</span> <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span>
+<span class="p">)</span>
+
+<span class="n">trainer</span> <span class="o">=</span> <span class="n">EngramTrainer</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="n">training_args</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+<span class="c1"># Auto-detect latest checkpoint, or specify a path directly</span>
+<span class="n">trainer</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">resume_from_checkpoint</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+<p>The trainer restores:
+- Model weights (LoRA adapter + Engram)
+- Optimizer state (momentum, variance — no learning rate spike)
+- LR scheduler position
+- Step / epoch counters</p>
+<p>Training continues seamlessly from where it left off.</p>
+<blockquote>
+<p>[!NOTE]
+<code>EngramModel.from_pretrained(...)</code> loads weights for <strong>inference</strong> without
+touching optimizer/scheduler state. Use <code>resume_from_checkpoint</code> on the
+trainer only when you need to <strong>continue training</strong>.</p>
 </blockquote>
 <hr />
 <h2 id="tutorial-6-managing-multiple-knowledge-packs">Tutorial 6: Managing Multiple Knowledge Packs</h2>

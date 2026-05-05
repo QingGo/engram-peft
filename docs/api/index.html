@@ -1431,6 +1431,20 @@ parameters remain trainable.</p>
 mixed optimizer automatically.</p>
 <p><strong>Notable Args:</strong>
 - <code>optimizer_kwargs</code> (<code>Optional[Dict[str, Any]]</code>): Extra keyword arguments forwarded to <code>model.create_optimizer(...)</code> / <code>get_optimizer(...)</code>. Use this to configure layered optimizer behavior when relying on the trainer's default optimizer creation path.</p>
+<p><strong>Checkpoint Save &amp; Resume:</strong></p>
+<p><code>EngramTrainer</code> saves composite checkpoints containing both LoRA adapter weights
+(<code>adapter_model.safetensors</code>) and Engram weights (<code>engram_adapters.safetensors</code>)
+alongside standard Trainer state (<code>optimizer.pt</code>, <code>scheduler.pt</code>,
+<code>trainer_state.json</code>). Set <code>save_strategy="steps"</code> (or <code>"epoch"</code>) in your
+<code>TrainingArguments</code> to enable automatic checkpointing.</p>
+<p>To resume training from a saved checkpoint:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># After a script restart, recreate model from checkpoint</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">EngramModel</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">base_model</span><span class="p">,</span> <span class="s2">&quot;outputs/checkpoint-1000&quot;</span><span class="p">,</span>
+                                     <span class="n">tokenizer</span><span class="o">=</span><span class="n">tokenizer</span><span class="p">)</span>
+<span class="n">trainer</span> <span class="o">=</span> <span class="n">EngramTrainer</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="n">training_args</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+<span class="n">trainer</span><span class="o">.</span><span class="n">train</span><span class="p">(</span><span class="n">resume_from_checkpoint</span><span class="o">=</span><span class="s2">&quot;outputs/checkpoint-1000&quot;</span><span class="p">)</span>
+<span class="c1"># Or use resume_from_checkpoint=True to auto-detect the latest</span>
+</code></pre></div>
 <p><strong>Example Usage:</strong>
 <div class="highlight"><pre><span></span><code><span class="n">trainer</span> <span class="o">=</span> <span class="n">EngramTrainer</span><span class="p">(</span>
     <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>

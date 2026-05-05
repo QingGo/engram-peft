@@ -964,6 +964,7 @@ engram-peft<span class="w"> </span>config-template<span class="w"> </span>--outp
 <li><strong>跨模型权重迁移</strong>：独有特性（详见 <code>weight_transfer.py</code>），支持通过语料库的字符级对齐，在不同模型（如 Llama 到 Qwen）之间迁移 Engram 权重——实现知识的“回收再利用”。</li>
 <li><strong>零侵入性</strong>：通过 forward hook 注入；无需修改基础模型架构源码。</li>
 <li><strong>类 PEFT API</strong>：提供 <code>print_trainable_parameters()</code> 和 <code>save_pretrained()</code> 等熟悉的方法。</li>
+<li><strong>断点续训 (Checkpoint Resume)</strong>：<code>EngramTrainer</code> 完全支持 <code>trainer.train(resume_from_checkpoint=True)</code> 无缝恢复训练，正确从复合 checkpoint 中恢复 LoRA adapter 和 Engram 权重。</li>
 <li><strong>显式训练模式</strong>：支持 <code>train_mode="engram_only"</code>、<code>"preserve_trainable"</code> 和 <code>"full_finetune"</code>，更易理解和调试。</li>
 <li><strong>联合训练 (LoRA+Engram)</strong>: 支持 Adapter 叠加。可在单个模型中同时注入 LoRA 进行结构微调和 Engram 进行稀疏知识检索。</li>
 <li><strong>分层优化器控制</strong>：可分别为 backbone、Engram dense 层和 Engram sparse embedding 配置不同优化器。</li>
