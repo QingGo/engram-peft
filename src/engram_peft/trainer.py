@@ -1,5 +1,5 @@
 # trainer.py
-# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportAttributeAccessIssue=none, reportIndexIssue=none, reportArgumentType=none
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportAttributeAccessIssue=none, reportIndexIssue=none, reportArgumentType=none, reportCallIssue=none
 import logging
 import os
 from collections.abc import Iterable

@@ -9,7 +9,7 @@ authors = [
 license = "Apache-2.0"
 requires-python = ">=3.10"
 dependencies = [
-    "torch>=2.5.1",
+    "torch>=2.6",
     "transformers>=4.45.0",
     "safetensors>=0.4.0",
     "tokenizers>=0.19.0",
@@ -45,7 +45,7 @@ testpaths = ["tests"]
 
 [[tool.uv.index]]
 name = "pytorch"
-url = "https://download.pytorch.org/whl/cu121"
+url = "https://download.pytorch.org/whl/cu124"
 explicit = true
 
 [tool.uv.sources]
@@ -172,7 +172,7 @@ deepspeed = [
     "deepspeed>=0.15.0",
 ]
 npu = [
-    "torch-npu>=2.5.1",
+    # torch-npu removed temporarily to unblock torch>=2.6 upgrade
 ]
 dev = [
     "datasets>=4.8.4",
