@@ -1,4 +1,4 @@
-# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportUnknownParameterType=none, reportArgumentType=none
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportUnknownParameterType=none, reportArgumentType=none, reportAssignmentType=none
 """
 Engram-PEFT End-to-End GPU Example.
 
@@ -91,7 +91,8 @@ def train_engram(
     train_dataset: Any,
     args: argparse.Namespace,
 ) -> tuple[EngramTrainer, EngramModel, EngramConfig, EngramDataCollator]:
-    print(f"\n>>> Phase 1: Training Engram on {MODEL_NAME}")
+    mode = "Engram + LoRA" if args.use_lora else "Engram Only"
+    print(f"\n>>> Phase 1: Training {mode} on {MODEL_NAME}")
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
 
@@ -105,14 +106,30 @@ def train_engram(
         pad_id=tokenizer.pad_token_id if isinstance(tokenizer.pad_token_id, int) else 0,
     )
 
-    print("Injecting Engram layers and freezing base model...")
-    # base_model is already a PreTrainedModel
+    # Optionally apply LoRA before Engram
+    if args.use_lora:
+        from peft import LoraConfig, get_peft_model
 
+        print("Applying LoRA adapters...")
+        lora_config = LoraConfig(
+            r=8,
+            lora_alpha=16,
+            target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
+            lora_dropout=0.05,
+            bias="none",
+            task_type="CAUSAL_LM",
+        )
+        base_model = get_peft_model(base_model, lora_config)
+        train_mode = "preserve_trainable"
+    else:
+        train_mode = "engram_only"
+
+    print("Injecting Engram layers and freezing base model...")
     model = get_engram_model(
         base_model,
         config,
         wash_tokenizer(tokenizer),
-        train_mode="engram_only",
+        train_mode=train_mode,
     )
 
     collator = EngramDataCollator(tokenizer=wash_tokenizer(tokenizer), config=config)
@@ -166,15 +183,24 @@ def train_engram(
 
 
 def inference_demo(
-    base_model: PreTrainedModel, tokenizer: PreTrainedTokenizerBase
+    base_model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizerBase,
+    args: argparse.Namespace,
 ) -> None:
     print("\n>>> Phase 2: Inference & Dynamic Usage")
 
     # Load trained Engram onto the base model
     print(f"Loading trained Engram from {ENGRAM_WEIGHTS_DIR}")
-    # base_model is already a torch.nn.Module
+    if args.use_lora:
+        from peft import PeftModel
 
-    model = EngramModel.from_pretrained(base_model, ENGRAM_WEIGHTS_DIR)
+        print("  Loading LoRA adapter...")
+        lora_model = PeftModel.from_pretrained(base_model, ENGRAM_WEIGHTS_DIR)
+        model = EngramModel.from_pretrained(
+            lora_model, ENGRAM_WEIGHTS_DIR, tokenizer=wash_tokenizer(tokenizer)
+        )
+    else:
+        model = EngramModel.from_pretrained(base_model, ENGRAM_WEIGHTS_DIR)
 
     prompt = "Once upon a time, there was a little robot named"
     device = model.base_model.device
@@ -235,9 +261,18 @@ def resume_demo(
 
     # Simulate a script restart: load model from the saved checkpoint
     print("Loading model from checkpoint...")
-    resume_model = EngramModel.from_pretrained(
-        base_model, last_ckpt, tokenizer=wash_tokenizer(tokenizer)
-    )
+    if args.use_lora:
+        from peft import PeftModel
+
+        print("  Loading LoRA adapter from checkpoint...")
+        lora_model = PeftModel.from_pretrained(base_model, last_ckpt)
+        resume_model = EngramModel.from_pretrained(
+            lora_model, last_ckpt, tokenizer=wash_tokenizer(tokenizer)
+        )
+    else:
+        resume_model = EngramModel.from_pretrained(
+            base_model, last_ckpt, tokenizer=wash_tokenizer(tokenizer)
+        )
     print("Model loaded from checkpoint successfully.")
 
     resume_max_steps = args.max_steps + args.max_steps // 2
@@ -315,6 +350,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_workers", type=int, default=4, help="Number of dataloader workers"
     )
+    parser.add_argument(
+        "--use_lora",
+        action="store_true",
+        help="Stack LoRA adapters with Engram (LoRA + Engram composite checkpoint)",
+    )
     args = parser.parse_args()
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -342,7 +382,7 @@ if __name__ == "__main__":
     )
 
     # 3. Inference Demo
-    inference_demo(base_model, tokenizer)
+    inference_demo(base_model, tokenizer, args)
 
     # 4. Checkpoint Resume Test
     resume_demo(base_model, tokenizer, train_dataset, collator, args)
