@@ -59,6 +59,7 @@ set_seed(SEED)
 def prepare_dataset(
     tokenizer: PreTrainedTokenizerBase, subset_size: int, max_length: int
 ) -> Any:
+    print("Loading dataset from HF (may be slow without mirror)...")
     dataset = load_dataset("roneneldan/TinyStories", split="train", streaming=True)
 
     def tokenize_function(examples: dict[str, Any]) -> dict[str, Any]:
