@@ -166,3 +166,4 @@ test_out/
 my_experiment.yaml
 .env
 docs/human_plan.md
+outputs
