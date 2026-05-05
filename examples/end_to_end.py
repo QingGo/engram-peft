@@ -22,6 +22,7 @@ load_dotenv()
 import argparse
 import copy
 import os
+import warnings
 from typing import Any, cast
 
 import torch
@@ -179,10 +180,6 @@ def train_engram(
     # Ready for inference
     model.unload_engram()
 
-    # Clean up peft_config injected into base_model by get_peft_model()
-    if args.use_lora and hasattr(base_model, "peft_config"):
-        delattr(base_model, "peft_config")
-
     return trainer, model, config, collator
 
 
@@ -199,7 +196,13 @@ def inference_demo(
         from peft import PeftModel
 
         print("  Loading LoRA adapter...")
-        lora_model = PeftModel.from_pretrained(base_model, ENGRAM_WEIGHTS_DIR)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="Already found a `peft_config`",
+                category=UserWarning,
+            )
+            lora_model = PeftModel.from_pretrained(base_model, ENGRAM_WEIGHTS_DIR)
         model = EngramModel.from_pretrained(
             lora_model, ENGRAM_WEIGHTS_DIR, tokenizer=wash_tokenizer(tokenizer)
         )
@@ -269,7 +272,13 @@ def resume_demo(
         from peft import PeftModel
 
         print("  Loading LoRA adapter from checkpoint...")
-        lora_model = PeftModel.from_pretrained(base_model, last_ckpt)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="Already found a `peft_config`",
+                category=UserWarning,
+            )
+            lora_model = PeftModel.from_pretrained(base_model, last_ckpt)
         resume_model = EngramModel.from_pretrained(
             lora_model, last_ckpt, tokenizer=wash_tokenizer(tokenizer)
         )
