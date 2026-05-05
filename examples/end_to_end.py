@@ -210,6 +210,11 @@ def inference_demo(
 
     print(f"\nPrompt: {prompt}")
 
+    # Diagnostics: check hook state before generation
+    print(f"\n[DEBUG] _engram_enabled={model._engram_enabled}")
+    print(f"[DEBUG] _hooks_registered={model._hooks_registered}")
+    print(f"[DEBUG] _current_hash_indices={'set' if model._current_hash_indices is not None else 'None'}")
+
     # Generate with Engram enabled
     print("Generating with Engram ENABLED...")
     output_engram = model.generate(
@@ -219,15 +224,24 @@ def inference_demo(
         f"Output (Engram): {tokenizer.decode(output_engram[0], skip_special_tokens=True)}"
     )
 
+    # Diagnostics: check state after generation
+    print(f"\n[DEBUG] After generation:")
+    print(f"[DEBUG] _current_hash_indices={'set' if model._current_hash_indices is not None else 'None'}")
+
     # Visualization: Print gates for the target layers
     print("\nCapture Gating Activation (Mean per branch):")
+    any_gate = False
     for layer_id in model.config.target_layers:
         engram_layer = cast("EngramLayer", model.engram_layers[str(layer_id)])
         gate = engram_layer.gating.last_gate  # [B, L, M, 1]
+        print(f"  Layer {layer_id}: last_gate={'None' if gate is None else gate.shape}")
         if gate is not None:
+            any_gate = True
             mean_gates = gate.mean(dim=(0, 1, 3)).cpu().tolist()
             gate_str = " | ".join([f"B{i}: {g:.3f}" for i, g in enumerate(mean_gates)])
-            print(f"Layer {layer_id}: {gate_str}")
+            print(f"  Layer {layer_id}: {gate_str}")
+    if not any_gate:
+        print("  (all gates are None — Engram layers were not called)")
 
     # Dynamic Switching Demo
     print("\nUnloading Engram (Back to Base Model)...")
