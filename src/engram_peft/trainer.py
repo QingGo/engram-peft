@@ -1,5 +1,6 @@
 # trainer.py
-# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none
+# pyright: reportUnknownMemberType=none, reportUnknownVariableType=none, reportUnknownArgumentType=none, reportAttributeAccessIssue=none, reportIndexIssue=none, reportArgumentType=none
+import logging
 import os
 from collections.abc import Iterable
 from typing import Any, cast, override
@@ -9,9 +10,12 @@ import torch.nn as nn
 from torch.optim.optimizer import Optimizer
 from transformers import Trainer
 from transformers.modeling_utils import unwrap_model
-from transformers.trainer import TRAINING_ARGS_NAME
+from transformers.trainer import TRAINING_ARGS_NAME, _is_peft_model
 
 from engram_peft.model import EngramModel
+from engram_peft.saving import load_engram_weights
+
+logger = logging.getLogger(__name__)
 from engram_peft.utils import (
     apply_group_wise_clipping,
     as_dict,
@@ -444,3 +448,42 @@ class EngramTrainer(Trainer):
             return
 
         super()._save(dir_path, state_dict=state_dict)
+
+    @override
+    def _load_from_checkpoint(
+        self, resume_from_checkpoint: str, model: nn.Module | None = None
+    ) -> None:
+        """
+        Override to handle composite checkpoints from EngramModel + PeftModel (LoRA).
+
+        The base Trainer falls through to ``load_sharded_checkpoint`` when the model
+        is neither a PreTrainedModel nor a PeftModel, but EngramModel wraps a PeftModel
+        so neither branch triggers and the load fails.
+        """
+        if model is None:
+            model = cast("nn.Module", self.model)
+        unwrapped = self.accelerator.unwrap_model(model)
+
+        if isinstance(unwrapped, EngramModel):
+            base = unwrapped.base_model
+
+            if _is_peft_model(base):
+                if hasattr(base, "active_adapters") and hasattr(base, "load_adapter"):
+                    active_adapters = base.active_adapters
+                    if len(active_adapters) > 1:
+                        logger.warning(
+                            "Multiple active adapters detected; loading only the first."
+                        )
+                    active_adapter = active_adapters[0]
+                    base.load_adapter(
+                        resume_from_checkpoint, active_adapter, is_trainable=True
+                    )
+                else:
+                    logger.warning(
+                        "Base model is a PeftModel but lacks load_adapter/active_adapters."
+                    )
+
+            load_engram_weights(unwrapped, resume_from_checkpoint)
+            return
+
+        super()._load_from_checkpoint(resume_from_checkpoint, model=model)

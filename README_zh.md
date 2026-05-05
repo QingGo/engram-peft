@@ -130,6 +130,7 @@ engram-peft train --config training_config.yaml --overrides "training_args.learn
 - **跨模型权重迁移**：独有特性（详见 `weight_transfer.py`），支持通过语料库的字符级对齐，在不同模型（如 Llama 到 Qwen）之间迁移 Engram 权重——实现知识的“回收再利用”。
 - **零侵入性**：通过 forward hook 注入；无需修改基础模型架构源码。
 - **类 PEFT API**：提供 `print_trainable_parameters()` 和 `save_pretrained()` 等熟悉的方法。
+- **断点续训 (Checkpoint Resume)**：`EngramTrainer` 完全支持 `trainer.train(resume_from_checkpoint=True)` 无缝恢复训练，正确从复合 checkpoint 中恢复 LoRA adapter 和 Engram 权重。
 - **显式训练模式**：支持 `train_mode="engram_only"`、`"preserve_trainable"` 和 `"full_finetune"`，更易理解和调试。
 - **联合训练 (LoRA+Engram)**: 支持 Adapter 叠加。可在单个模型中同时注入 LoRA 进行结构微调和 Engram 进行稀疏知识检索。
 - **分层优化器控制**：可分别为 backbone、Engram dense 层和 Engram sparse embedding 配置不同优化器。

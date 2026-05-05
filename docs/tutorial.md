@@ -261,6 +261,70 @@ model.base_model.save_pretrained("engram_full_model")
 > [!IMPORTANT]
 > In `train_mode="full_finetune"`, `model.save_pretrained(...)` still saves only Engram weights and config. Save `model.base_model` to a separate directory as well if you want a restorable full-finetuned checkpoint.
 
+## Tutorial 5.5: Checkpoint Save & Resume
+
+`EngramTrainer` supports mid-training checkpointing and seamless resume. Enable
+`save_strategy` in your `TrainingArguments` to save checkpoints automatically.
+
+### Saving checkpoints during training
+
+```python
+from transformers import TrainingArguments
+
+training_args = TrainingArguments(
+    output_dir="./output",
+    save_strategy="steps",
+    save_steps=500,        # Save every 500 steps
+    save_total_limit=3,    # Keep at most 3 recent checkpoints
+    max_steps=2000,
+    ...
+)
+
+trainer = EngramTrainer(model=model, args=training_args, ...)
+trainer.train()
+```
+
+Each checkpoint directory contains:
+
+| File | Content |
+|---|---|
+| `adapter_model.safetensors` | LoRA adapter weights (if using LoRA+Engram) |
+| `engram_adapters.safetensors` | Engram hash-table weights |
+| `config.json` | Engram configuration |
+| `optimizer.pt` | Optimizer state (Adam momentum/variance) |
+| `scheduler.pt` | Learning rate scheduler state |
+| `trainer_state.json` | Step count, epoch, log history |
+
+### Resuming from a checkpoint
+
+To resume after interruption (same script restarted, or a new script):
+
+```python
+# Recreate model from the checkpoint
+from engram_peft import EngramModel
+
+model = EngramModel.from_pretrained(
+    base_model, "output/checkpoint-1000", tokenizer=tokenizer
+)
+
+trainer = EngramTrainer(model=model, args=training_args, ...)
+# Auto-detect latest checkpoint, or specify a path directly
+trainer.train(resume_from_checkpoint=True)
+```
+
+The trainer restores:
+- Model weights (LoRA adapter + Engram)
+- Optimizer state (momentum, variance — no learning rate spike)
+- LR scheduler position
+- Step / epoch counters
+
+Training continues seamlessly from where it left off.
+
+> [!NOTE]
+> `EngramModel.from_pretrained(...)` loads weights for **inference** without
+> touching optimizer/scheduler state. Use `resume_from_checkpoint` on the
+> trainer only when you need to **continue training**.
+
 ---
 
 ## Tutorial 6: Managing Multiple Knowledge Packs

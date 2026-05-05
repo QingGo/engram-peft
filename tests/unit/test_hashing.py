@@ -78,16 +78,17 @@ def test_batch_processing() -> None:
     seq_len = 16
 
     tokens = np.random.randint(0, 10000, size=(batch_size, seq_len))
-    hashes = mapping.hash(tokens)[2]
+    layer_id = mapping.layer_ids[-1]
+    hashes = mapping.hash(tokens)[layer_id]
 
-    # total_heads = (max_ngram_size - 1) * n_head_per_ngram
+    # total_heads = len(ngram_sizes) * n_head_per_ngram
     # Here ngrams are 2, 3 -> 2 orders * 8 = 16
     expected_heads = len(mapping.ngram_sizes) * mapping.n_head_per_ngram
     assert hashes.shape == (batch_size, seq_len, expected_heads)
 
     for b in range(batch_size):
         single_input = tokens[b : b + 1]
-        single_hash = mapping.hash(single_input)[2]
+        single_hash = mapping.hash(single_input)[layer_id]
         np.testing.assert_array_equal(
             hashes[b : b + 1],
             single_hash,

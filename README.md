@@ -130,6 +130,7 @@ engram-peft train --config training_config.yaml --overrides "training_args.learn
 - **Cross-Model Weight Migration**: A unique feature (see `weight_transfer.py`) that allows migrating Engram weights between different models (e.g., Llama to Qwen) using character-level alignment on a corpus—effectively "recycling" learned knowledge.
 - **Zero-Invasive**: Injects via forward hooks; no modification to your base model architecture required.
 - **Peft-like API**: Familiar methods like `print_trainable_parameters()` and `save_pretrained()`.
+- **Checkpoint Resume**: `EngramTrainer` fully supports `trainer.train(resume_from_checkpoint=True)` for seamless mid-training recovery, correctly restoring LoRA adapters and Engram weights from composite checkpoints.
 - **Explicit Training Modes**: `train_mode="engram_only"`, `"preserve_trainable"`, and `"full_finetune"` make backbone behavior predictable.
 - **Combined Training (LoRA+Engram)**: Support for stacking adapters. Injects LoRA for structural fine-tuning and Engram for sparse knowledge retrieval in a single model.
 - **Layered Optimizer Control**: Configure separate optimizers for backbone, Engram dense layers, and Engram sparse embeddings.

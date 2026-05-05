@@ -7,6 +7,7 @@ This script demonstrates the core Engram-PEFT workflow:
 2. Engram Injection: Injecting Context-Aware Hash-tables into a base model.
 3. Focused Training: Updating only the Engram parameters using MixedOptimizer.
 4. Saving & Inference: Persisting weights and demonstrating dynamic loading/generation.
+5. Checkpoint Resume: Save mid-training checkpoint and resume seamlessly.
 
 Usage:
     ```bash
@@ -33,6 +34,7 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
+from transformers.trainer_utils import get_last_checkpoint
 
 from engram_peft import (
     EngramConfig,
@@ -87,7 +89,7 @@ def train_engram(
     tokenizer: PreTrainedTokenizerBase,
     train_dataset: Any,
     args: argparse.Namespace,
-) -> None:
+) -> tuple[EngramTrainer, EngramModel, EngramConfig, EngramDataCollator]:
     print(f"\n>>> Phase 1: Training Engram on {MODEL_NAME}")
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
@@ -118,13 +120,17 @@ def train_engram(
         optimizer, num_training_steps=args.max_steps, warmup_steps=10
     )
 
+    save_steps = max(1, args.max_steps // 3)
+
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=2,
         max_steps=args.max_steps,
         logging_steps=5,
-        save_strategy="no",
+        save_strategy="steps",
+        save_steps=save_steps,
+        save_total_limit=2,
         bf16=torch.cuda.is_bf16_supported(),
         fp16=not torch.cuda.is_bf16_supported() and torch.cuda.is_available(),
         report_to="none",
@@ -142,7 +148,8 @@ def train_engram(
     )
 
     print("Starting Engram training...")
-    trainer.train()
+    result = trainer.train()
+    print(f"Phase 1 complete. Global step: {result.global_step}")
 
     if torch.cuda.is_available():
         peak_mem = torch.cuda.max_memory_allocated() / (1024**3)
@@ -153,6 +160,8 @@ def train_engram(
 
     # Ready for inference
     model.unload_engram()
+
+    return trainer, model, config, collator
 
 
 def inference_demo(
@@ -206,6 +215,82 @@ def inference_demo(
     print("\nEnd-to-end demo completed!")
 
 
+def resume_demo(
+    base_model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizerBase,
+    train_dataset: Any,
+    collator: EngramDataCollator,
+    args: argparse.Namespace,
+) -> None:
+    print("\n>>> Phase 3: Checkpoint Resume Test")
+
+    last_ckpt = get_last_checkpoint(OUTPUT_DIR)
+    if last_ckpt is None:
+        print(f"No checkpoint found in {OUTPUT_DIR}. Skipping resume test.")
+        print("(Make sure save_strategy is set to 'steps' in Phase 1)")
+        return
+
+    print(f"Latest checkpoint: {last_ckpt}")
+
+    # Simulate a script restart: load model from the saved checkpoint
+    print("Loading model from checkpoint...")
+    resume_model = EngramModel.from_pretrained(
+        base_model, last_ckpt, tokenizer=wash_tokenizer(tokenizer)
+    )
+    print("Model loaded from checkpoint successfully.")
+
+    resume_max_steps = args.max_steps + args.max_steps // 2
+
+    optimizer = get_optimizer(resume_model, base_learning_rate=4e-4)
+    scheduler = get_scheduler(
+        optimizer, num_training_steps=resume_max_steps, warmup_steps=10
+    )
+
+    resume_output_dir = os.path.join(OUTPUT_DIR, "resume")
+    resume_args = TrainingArguments(
+        output_dir=resume_output_dir,
+        per_device_train_batch_size=args.batch_size,
+        gradient_accumulation_steps=2,
+        max_steps=resume_max_steps,
+        logging_steps=5,
+        save_strategy="no",
+        bf16=torch.cuda.is_bf16_supported(),
+        fp16=not torch.cuda.is_bf16_supported() and torch.cuda.is_available(),
+        report_to="none",
+        remove_unused_columns=True,
+        dataloader_num_workers=args.num_workers,
+        dataloader_pin_memory=True,
+    )
+
+    resume_trainer = EngramTrainer(
+        model=resume_model,
+        args=resume_args,
+        train_dataset=train_dataset,
+        data_collator=collator,
+        optimizers=(optimizer, scheduler),
+    )
+
+    print(
+        f"Resuming training from checkpoint (target max_steps={resume_max_steps})..."
+    )
+    result = resume_trainer.train(resume_from_checkpoint=last_ckpt)
+    print(f"Resume complete. Global step: {result.global_step}")
+
+    # Verify: after resume, the total steps should reach resume_max_steps
+    if result.global_step >= resume_max_steps:
+        print(
+            "PASSED: Checkpoint resume works correctly. "
+            + f"Reached step {result.global_step} >= {resume_max_steps}."
+        )
+    else:
+        print(
+            f"WARNING: Global step is {result.global_step}, "
+            + f"expected >= {resume_max_steps}. Resume may not have worked as expected."
+        )
+
+    resume_model.unload_engram()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Engram End-to-End Demo")
     parser.add_argument(
@@ -239,8 +324,13 @@ if __name__ == "__main__":
     # 1. Prepare Data
     train_dataset = prepare_dataset(tokenizer, subset_size=args.subset, max_length=128)
 
-    # 2. Train Engram
-    train_engram(base_model, tokenizer, train_dataset, args)
+    # 2. Train Engram (with checkpoint saving enabled)
+    trainer, model, config, collator = train_engram(
+        base_model, tokenizer, train_dataset, args
+    )
 
     # 3. Inference Demo
     inference_demo(base_model, tokenizer)
+
+    # 4. Checkpoint Resume Test
+    resume_demo(base_model, tokenizer, train_dataset, collator, args)

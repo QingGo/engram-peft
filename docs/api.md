@@ -142,6 +142,25 @@ mixed optimizer automatically.
 **Notable Args:**
 - `optimizer_kwargs` (`Optional[Dict[str, Any]]`): Extra keyword arguments forwarded to `model.create_optimizer(...)` / `get_optimizer(...)`. Use this to configure layered optimizer behavior when relying on the trainer's default optimizer creation path.
 
+**Checkpoint Save & Resume:**
+
+`EngramTrainer` saves composite checkpoints containing both LoRA adapter weights
+(`adapter_model.safetensors`) and Engram weights (`engram_adapters.safetensors`)
+alongside standard Trainer state (`optimizer.pt`, `scheduler.pt`,
+`trainer_state.json`). Set `save_strategy="steps"` (or `"epoch"`) in your
+`TrainingArguments` to enable automatic checkpointing.
+
+To resume training from a saved checkpoint:
+
+```python
+# After a script restart, recreate model from checkpoint
+model = EngramModel.from_pretrained(base_model, "outputs/checkpoint-1000",
+                                     tokenizer=tokenizer)
+trainer = EngramTrainer(model=model, args=training_args, ...)
+trainer.train(resume_from_checkpoint="outputs/checkpoint-1000")
+# Or use resume_from_checkpoint=True to auto-detect the latest
+```
+
 **Example Usage:**
 ```python
 trainer = EngramTrainer(

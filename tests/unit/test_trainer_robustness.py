@@ -1,3 +1,4 @@
+import os as _os
 import tempfile
 from unittest.mock import MagicMock, patch
 
@@ -7,6 +8,7 @@ from transformers import TrainingArguments
 
 from engram_peft.model import EngramModel
 from engram_peft.trainer import EngramTrainer
+from engram_peft.utils import safe_save_file
 
 
 def test_trainer_clip_grad_norm_robustness():
@@ -88,3 +90,42 @@ def test_trainer_clip_grad_norm_use_per_group_consistency():
         with patch.object(EngramTrainer, "_compute_total_norm", return_value=None):
             norm = trainer._clip_grad_norm(model, max_norm=1.0)
             assert norm is None
+
+
+def test_load_from_checkpoint_with_engram_peft_composite():
+    """_load_from_checkpoint loads LoRA adapter + Engram weights from composite checkpoint."""
+    with tempfile.TemporaryDirectory() as ckpt_dir:
+        # Create valid checkpoint files simulating Engram + LoRA save
+        dummy_state = {"dummy": torch.zeros(1)}
+        safe_save_file(dummy_state, _os.path.join(ckpt_dir, "adapter_model.safetensors"))
+        safe_save_file(dummy_state, _os.path.join(ckpt_dir, "engram_adapters.safetensors"))
+
+        # Mock PeftModel (the inner base model loaded with LoRA)
+        # Use spec=PeftModel so isinstance checks pass for _is_peft_model
+        from peft import PeftModel as _PeftModel
+
+        mock_peft = MagicMock(spec=_PeftModel)
+        mock_peft.active_adapters = ["default"]
+        mock_peft.load_adapter = MagicMock()
+
+        # Mock EngramModel wrapping the PeftModel
+        mock_engram = MagicMock(spec=EngramModel)
+        mock_engram.base_model = mock_peft
+        mock_engram.engram_layers = MagicMock()
+
+        args = TrainingArguments(output_dir=tempfile.gettempdir())
+        trainer = EngramTrainer.__new__(EngramTrainer)
+        trainer.args = args
+        trainer.model = mock_engram
+        trainer.accelerator = MagicMock()
+        trainer.accelerator.unwrap_model.return_value = mock_engram
+
+        # This should load the checkpoint without error
+        trainer._load_from_checkpoint(ckpt_dir)
+
+        # Verify PeftModel.load_adapter was called to restore LoRA weights
+        mock_peft.load_adapter.assert_called_once_with(
+            ckpt_dir, "default", is_trainable=True
+        )
+        # Verify Engram weights were loaded
+        mock_engram.engram_layers.load_state_dict.assert_called_once()
