@@ -400,7 +400,17 @@ def run_example(args: argparse.Namespace) -> None:
     # KV cache during generation and causes repeated/garbled output.
     model.gradient_checkpointing_disable()
     print("\n>>> Inference Demo (Original Model)")
-    prompt = "<start_of_turn>user\nTell me a short fact about the moon.<end_of_turn>\n<start_of_turn>model\n"
+    messages = [{"role": "user", "content": "Tell me a short fact about the moon."}]
+    prompt = tokenizer.apply_chat_template(
+        messages, 
+        tokenize=False, 
+        add_generation_prompt=True,
+        # enable_thinking=False
+    )
+    
+    #optional↓
+    # prompt = "<|turn>user\nTell me a short fact about the moon.<turn|>\n<|turn>model\n"
+
     # Use hasattr to get the device safely
     if hasattr(model.base_model, "device"):
         target_device = model.base_model.device
@@ -417,7 +427,7 @@ def run_example(args: argparse.Namespace) -> None:
             max_new_tokens=100,
             max_length=None,
             do_sample=False,
-            stop_strings=["<end_of_turn>"],
+            stop_strings=["<turn|>"],
             tokenizer=tokenizer,
         )
     print(f"Response: {tokenizer.decode(output[0], skip_special_tokens=True)}")
