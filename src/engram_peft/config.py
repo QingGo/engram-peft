@@ -210,6 +210,47 @@ class EngramConfig(PreTrainedConfig):
             + "Used only for synthetic/dev tables; real deployments leave None."
         },
     )
+    table_store_path: str | None = field(
+        default=None,
+        metadata={
+            "help": "EngramDB Store-I directory when table_source='engramdb:store'."
+        },
+    )
+    table_model_dir: str | None = field(
+        default=None,
+        metadata={
+            "help": "Model checkpoint directory used to auto-read FP8 weight_scale."
+        },
+    )
+    table_shards: int | None = field(
+        default=None,
+        metadata={"help": "Store shard count; defaults to PLE_QWEN_V1 real layout (128)."},
+    )
+    table_rows_per_shard: int | None = field(
+        default=None,
+        metadata={
+            "help": "Rows per shard; defaults to PLE_QWEN_V1 real layout (2_500_012)."
+        },
+    )
+    table_width: int | None = field(
+        default=None,
+        metadata={"help": "Row width in bytes; defaults to PLE_QWEN_V1 FP8 width (160)."},
+    )
+    table_dtype: str = field(
+        default="float32",
+        metadata={
+            "help": "Store row dtype: 'float32' for synthetic/dev stores, "
+            + "'float8_e4m3fn' for real PLE FP8 stores."
+        },
+    )
+    table_scale: float | None = field(
+        default=None,
+        metadata={"help": "Explicit FP8 weight_scale; auto-read from table_model_dir if omitted."},
+    )
+    table_cache_size: int = field(
+        default=4096,
+        metadata={"help": "LRU cache capacity for the disk-backed MultiHeadEmbedding."},
+    )
 
     def __init__(
         self,
@@ -245,6 +286,14 @@ class EngramConfig(PreTrainedConfig):
         table_spec: str | None = None,
         table_source: str = "memory",
         prime_sizes: list[int] | None = None,
+        table_store_path: str | None = None,
+        table_model_dir: str | None = None,
+        table_shards: int | None = None,
+        table_rows_per_shard: int | None = None,
+        table_width: int | None = None,
+        table_dtype: str = "float32",
+        table_scale: float | None = None,
+        table_cache_size: int = 4096,
         **kwargs: Any,
     ):
         """Constructs EngramConfig."""
@@ -290,6 +339,14 @@ class EngramConfig(PreTrainedConfig):
         self.table_spec = table_spec
         self.table_source = table_source
         self.prime_sizes = prime_sizes
+        self.table_store_path = table_store_path
+        self.table_model_dir = table_model_dir
+        self.table_shards = table_shards
+        self.table_rows_per_shard = table_rows_per_shard
+        self.table_width = table_width
+        self.table_dtype = table_dtype
+        self.table_scale = table_scale
+        self.table_cache_size = table_cache_size
 
         super().__init__(**kwargs)
         # Ensure extra kwargs are set, as PretrainedConfig might miss them in some environments
