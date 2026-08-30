@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 from tqdm import tqdm
 
 from engram_peft.compression import CompressedTokenizer
-from engram_peft.hashing import NgramHashMapping
+from engram_peft.hashing import NgramHashMapping, create_hash_mapping
 from engram_peft.layer import EngramLayer
 from engram_peft.types import jaxtyped
 from engram_peft.utils import safe_tokenizer_from_pretrained
@@ -192,7 +192,7 @@ def remap_weights_from_corpus(
     )
     assert src_mapped_pad_id is not None, "source pad_id must be set"
 
-    src_mapper = NgramHashMapping(
+    src_mapper = create_hash_mapping(
         engram_vocab_size_per_ngram=src_config.engram_vocab_size_per_ngram,
         ngram_sizes=src_config.ngram_sizes,
         n_head_per_ngram=src_config.n_head_per_ngram,
@@ -200,6 +200,9 @@ def remap_weights_from_corpus(
         compressed_vocab_size=src_config.compressed_vocab_size,
         pad_id=src_mapped_pad_id,
         seed=src_config.seed,
+        engine=getattr(src_config, "engine", "deepseek"),
+        table_spec=getattr(src_config, "table_spec", None),
+        prime_sizes=getattr(src_config, "prime_sizes", None),
     )
     # target_model's internal hash_mapping is already initialized
 

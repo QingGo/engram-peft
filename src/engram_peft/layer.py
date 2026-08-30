@@ -9,7 +9,7 @@ from jaxtyping import Float, Int64
 
 from engram_peft.compression import CompressedTokenizer
 from engram_peft.config import EngramConfig
-from engram_peft.hashing import NgramHashMapping
+from engram_peft.hashing import NgramHashMapping, create_hash_mapping
 from engram_peft.types import jaxtyped
 from engram_peft.utils import safe_from_numpy
 
@@ -372,7 +372,7 @@ class EngramLayer(nn.Module):
         assert config.compressed_vocab_size is not None
         assert mapped_pad_id is not None
 
-        self.hash_mapping = NgramHashMapping(
+        self.hash_mapping = create_hash_mapping(
             compressed_vocab_size=config.compressed_vocab_size,
             engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
             ngram_sizes=config.ngram_sizes,
@@ -380,6 +380,9 @@ class EngramLayer(nn.Module):
             layer_ids=[layer_id],
             pad_id=mapped_pad_id,
             seed=config.seed,
+            engine=getattr(config, "engine", "deepseek"),
+            table_spec=getattr(config, "table_spec", None),
+            prime_sizes=getattr(config, "prime_sizes", None),
         )
 
         # 1. MultiHeadEmbedding
@@ -459,12 +462,17 @@ class EngramLayer(nn.Module):
                 raise ValueError(
                     "Either engram_hash_indices or input_ids must be provided."
                 )
-            if self.compressor is None:
+            if getattr(self.config, "engine", "deepseek") == "qwen_ple":
+                # PLE_QWEN_V1 uses the original Qwen token vocabulary directly;
+                # no tokenizer compression is applied in the qwen_ple engine.
+                c_ids = input_ids
+            elif self.compressor is not None:
+                c_ids = self.compressor.compress(input_ids)
+            else:
                 raise ValueError(
-                    "Compressor must be provided to compute hashes from input_ids."
+                    "Compressor must be provided to compute hashes from input_ids "
+                    "unless engine='qwen_ple'."
                 )
-            # Step 1: Compress and hash
-            c_ids = self.compressor.compress(input_ids)
             hashes_np = self.hash_mapping.hash(c_ids)[self.layer_id]
             engram_hash_indices = safe_from_numpy(hashes_np).to(hidden_states.device)
 

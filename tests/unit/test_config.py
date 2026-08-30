@@ -72,6 +72,28 @@ class TestEngramConfig(unittest.TestCase):
         self.assertEqual(config.embedding_dim, 1280)
         self.assertEqual(config.n_head_per_ngram, 8)
 
+    def test_engramdb_store_fields(self) -> None:
+        """测试用例 4：table_source='engramdb:store' 的配置字段。"""
+        config = EngramConfig(
+            table_source="engramdb:store",
+            table_store_path="/tmp/rows",
+            table_model_dir="/tmp/ple-model",
+            table_shards=1,
+            table_rows_per_shard=100,
+            table_width=16,
+            table_dtype="float32",
+            table_cache_size=123,
+        )
+        self.assertEqual(config.table_source, "engramdb:store")
+        self.assertEqual(config.table_store_path, "/tmp/rows")
+        self.assertEqual(config.table_model_dir, "/tmp/ple-model")
+        self.assertEqual(config.table_shards, 1)
+        self.assertEqual(config.table_rows_per_shard, 100)
+        self.assertEqual(config.table_width, 16)
+        self.assertEqual(config.table_dtype, "float32")
+        self.assertEqual(config.table_cache_size, 123)
+
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -15,7 +15,7 @@ from engram_peft import saving
 from engram_peft.compression import CompressedTokenizer
 from engram_peft.config import EngramConfig
 from engram_peft.discovery import ArchitectureResolver
-from engram_peft.hashing import NgramHashMapping
+from engram_peft.hashing import NgramHashMapping, create_hash_mapping
 from engram_peft.layer import EngramLayer
 from engram_peft.types import (
     EngramModelProtocol,
@@ -99,7 +99,25 @@ class EngramModel(nn.Module, GenerationMixin):
 
         # 1. Initialize compressor if needed
         self.compressor = None
-        if config.enable_tokenizer_compression:
+        is_qwen_ple = (
+            getattr(config, "engine", "deepseek") == "qwen_ple"
+            or getattr(config, "table_spec", None) == "PLE_QWEN_V1"
+        )
+        if is_qwen_ple:
+            # PLE_QWEN_V1 hashes the original Qwen token ids directly.
+            config.enable_tokenizer_compression = False
+            if config.compressed_vocab_size is None:
+                model_vocab = getattr(
+                    getattr(base_model, "config", None), "vocab_size", None
+                )
+                tokenizer_vocab = len(tokenizer) if tokenizer is not None else None
+                config.compressed_vocab_size = model_vocab or tokenizer_vocab
+            if config.compressed_vocab_size is None:
+                raise ValueError(
+                    "compressed_vocab_size must be set (or inferred from model/tokenizer) "
+                    "for engine='qwen_ple'."
+                )
+        elif config.enable_tokenizer_compression:
             tokenizer_name = config.tokenizer_name_or_path
             self.compressor = CompressedTokenizer(tokenizer_name, tokenizer=tokenizer)
             # Synchronize the actual compressed vocab size to config
@@ -126,7 +144,7 @@ class EngramModel(nn.Module, GenerationMixin):
         )
         assert mapped_pad_id is not None, "pad_id must be set"
 
-        self.hash_mapping = NgramHashMapping(
+        self.hash_mapping = create_hash_mapping(
             engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
             ngram_sizes=config.ngram_sizes,
             n_head_per_ngram=config.n_head_per_ngram,
@@ -134,6 +152,9 @@ class EngramModel(nn.Module, GenerationMixin):
             compressed_vocab_size=config.compressed_vocab_size,
             pad_id=mapped_pad_id,
             seed=config.seed,
+            engine=getattr(config, "engine", "deepseek"),
+            table_spec=getattr(config, "table_spec", None),
+            prime_sizes=getattr(config, "prime_sizes", None),
         )
 
         # 3. Named adapter management & Initialization
@@ -883,7 +904,7 @@ class EngramModel(nn.Module, GenerationMixin):
         )
 
         # Initialize src_mapper with full target_layers to ensure deterministic prime generation
-        src_mapper = NgramHashMapping(
+        src_mapper = create_hash_mapping(
             engram_vocab_size_per_ngram=src_config.engram_vocab_size_per_ngram,
             ngram_sizes=src_config.ngram_sizes,
             n_head_per_ngram=src_config.n_head_per_ngram,
@@ -891,6 +912,9 @@ class EngramModel(nn.Module, GenerationMixin):
             compressed_vocab_size=src_config.compressed_vocab_size,
             pad_id=getattr(src_config, "pad_id", 2),
             seed=src_config.seed,
+            engine=getattr(src_config, "engine", "deepseek"),
+            table_spec=getattr(src_config, "table_spec", None),
+            prime_sizes=getattr(src_config, "prime_sizes", None),
         )
         target_mapper = self.hash_mapping
 
@@ -991,6 +1015,110 @@ class EngramModel(nn.Module, GenerationMixin):
         logger.info("Corpus-based remapping complete.")
 
 
+def _install_engramdb_table_if_requested(config: EngramConfig) -> None:
+    """Automatically consume ``table_source="engramdb:store"``.
+
+    This is the EngramDB-side convenience path: callers only need to set
+    ``table_source`` plus the store/table metadata in ``EngramConfig``; no
+    manual ``install_disk_multi_head_embedding`` import is required.
+    """
+    table_source = getattr(config, "table_source", "memory") or "memory"
+    if table_source == "memory":
+        return
+    if table_source != "engramdb:store":
+        raise NotImplementedError(
+            f"table_source={table_source!r} is not implemented in engram-peft yet "
+            "(supported: 'memory', 'engramdb:store')"
+        )
+
+    try:
+        import engramdb
+        from engramdb.integrations import (
+            install_disk_multi_head_embedding,
+            install_real_qwen_ple_embedding,
+        )
+    except ImportError as exc:  # pragma: no cover - optional runtime dependency
+        raise ImportError(
+            "engramdb-python is required when table_source='engramdb:store'"
+        ) from exc
+
+    store_path = (
+        getattr(config, "table_store_path", None)
+        or getattr(config, "store_path", None)
+    )
+    if not store_path:
+        raise ValueError(
+            "table_source='engramdb:store' requires table_store_path (or store_path)"
+        )
+
+    is_ple = (
+        getattr(config, "table_spec", None) == "PLE_QWEN_V1"
+        or getattr(config, "engine", "deepseek") == "qwen_ple"
+    )
+    if is_ple:
+        default_shards: int | None = 128
+        default_rows_per_shard: int | None = 2_500_012
+        default_width: int | None = 160
+    else:
+        default_shards = None
+        default_rows_per_shard = None
+        default_width = None
+
+    shards = getattr(config, "table_shards", None) or default_shards
+    rows_per_shard = (
+        getattr(config, "table_rows_per_shard", None) or default_rows_per_shard
+    )
+    width = getattr(config, "table_width", None) or default_width
+    if shards is None or rows_per_shard is None or width is None:
+        raise ValueError(
+            "table_source='engramdb:store' requires table_shards, "
+            "table_rows_per_shard, and table_width (or set table_spec='PLE_QWEN_V1' "
+            "to use the real 128x2_500_012x160 layout)."
+        )
+
+    store = engramdb.Store(
+        str(store_path),
+        int(shards),
+        int(rows_per_shard),
+        int(width),
+    )
+    cache_size = int(getattr(config, "table_cache_size", 4096))
+    scale = getattr(config, "table_scale", None)
+    model_dir = getattr(config, "table_model_dir", None)
+
+    if is_ple and (model_dir is not None or scale is not None):
+        logger.info(
+            "[Engram-PEFT] auto installing real PLE FP8 disk table from %s",
+            store_path,
+        )
+        install_real_qwen_ple_embedding(
+            store,
+            scale=scale,
+            model_dir=model_dir,
+            cache_size=cache_size,
+        )
+    else:
+        dtype_name = getattr(config, "table_dtype", "float32")
+        dtype = {
+            "float32": torch.float32,
+            "float16": torch.float16,
+            "bfloat16": torch.bfloat16,
+            "float8_e4m3fn": torch.float8_e4m3fn,
+        }.get(dtype_name, torch.float32)
+        logger.info(
+            "[Engram-PEFT] auto installing disk table from %s (dtype=%s)",
+            store_path,
+            dtype_name,
+        )
+        install_disk_multi_head_embedding(
+            store,
+            cache_size=cache_size,
+            dtype=dtype,
+            scale=float(scale) if scale is not None else 1.0,
+            output_dtype=torch.float32 if scale is not None else None,
+        )
+
+
 def get_engram_model(
     model: PreTrainedModel | nn.Module,
     config: EngramConfig | dict[str, Any],
@@ -1085,6 +1213,13 @@ def get_engram_model(
     engram_config.pad_id = metadata.pad_token_id
     engram_config.layer_container_path = metadata.layer_container_path
 
+    # PLE_QWEN_V1 hashes the original Qwen token ids directly.
+    if (
+        getattr(engram_config, "engine", "deepseek") == "qwen_ple"
+        or getattr(engram_config, "table_spec", None) == "PLE_QWEN_V1"
+    ):
+        engram_config.enable_tokenizer_compression = False
+
     # If compression is disabled, the 'compressed' size is just the original vocab size
     if not engram_config.enable_tokenizer_compression:
         engram_config.compressed_vocab_size = metadata.original_vocab_size
@@ -1094,6 +1229,9 @@ def get_engram_model(
             "[Engram-PEFT] Detected existing PEFT config (e.g. LoRA). "
             + "Initializing composite adapter mode."
         )
+
+    # Auto-consume table_source='engramdb:store' before EngramLayer construction.
+    _install_engramdb_table_if_requested(engram_config)
 
     engram_model = EngramModel(model, engram_config, tokenizer)
     engram_model.train_mode = resolved_train_mode

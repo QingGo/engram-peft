@@ -7,7 +7,7 @@ from typing_extensions import override
 
 from engram_peft.compression import CompressedTokenizer
 from engram_peft.config import EngramConfig
-from engram_peft.hashing import NgramHashMapping
+from engram_peft.hashing import NgramHashMapping, create_hash_mapping
 from engram_peft.types import TokenizerProtocol
 from engram_peft.utils import safe_from_numpy
 
@@ -66,7 +66,7 @@ class EngramDataCollator(DataCollatorForLanguageModeling):
         assert mapped_pad_id is not None
 
         # Initialize the global hashing mapping
-        self.hash_mapping = NgramHashMapping(
+        self.hash_mapping = create_hash_mapping(
             engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
             ngram_sizes=config.ngram_sizes,
             n_head_per_ngram=config.n_head_per_ngram,
@@ -74,6 +74,9 @@ class EngramDataCollator(DataCollatorForLanguageModeling):
             compressed_vocab_size=config.compressed_vocab_size,
             pad_id=mapped_pad_id,
             seed=config.seed,
+            engine=getattr(config, "engine", "deepseek"),
+            table_spec=getattr(config, "table_spec", None),
+            prime_sizes=getattr(config, "prime_sizes", None),
         )
 
     @override
