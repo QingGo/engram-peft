@@ -184,6 +184,25 @@ class EngramConfig(PreTrainedConfig):
         default=False,
         metadata={"help": "Whether the base model is a PEFT model."},
     )
+    engine: str = field(
+        default="deepseek",
+        metadata={
+            "help": "Engine implementation: 'deepseek' (paper-aligned default, unchanged) "
+            + "or 'qwen_ple' (PLE-lite for Qwen3.5 + Flash-Next table)."
+        },
+    )
+    table_spec: str | None = field(
+        default=None,
+        metadata={
+            "help": "Table row semantics id: 'PLE_QWEN_V1', 'ENG_DEEPSEEK_V1', or None."
+        },
+    )
+    table_source: str = field(
+        default="memory",
+        metadata={
+            "help": "Table source: 'memory', 'engramdb:store', or 'engramdb:view'."
+        },
+    )
 
     def __init__(
         self,
@@ -215,6 +234,9 @@ class EngramConfig(PreTrainedConfig):
         engram_version: str = "1.2.4",
         train_mode: str | None = None,
         wrap_peft: bool = False,
+        engine: str = "deepseek",
+        table_spec: str | None = None,
+        table_source: str = "memory",
         **kwargs: Any,
     ):
         """Constructs EngramConfig."""
@@ -256,6 +278,9 @@ class EngramConfig(PreTrainedConfig):
         self.engram_version = engram_version
         self.train_mode = train_mode
         self.wrap_peft = wrap_peft
+        self.engine = engine
+        self.table_spec = table_spec
+        self.table_source = table_source
 
         super().__init__(**kwargs)
         # Ensure extra kwargs are set, as PretrainedConfig might miss them in some environments

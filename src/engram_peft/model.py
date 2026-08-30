@@ -15,7 +15,7 @@ from engram_peft import saving
 from engram_peft.compression import CompressedTokenizer
 from engram_peft.config import EngramConfig
 from engram_peft.discovery import ArchitectureResolver
-from engram_peft.hashing import NgramHashMapping
+from engram_peft.hashing import NgramHashMapping, create_hash_mapping
 from engram_peft.layer import EngramLayer
 from engram_peft.types import (
     EngramModelProtocol,
@@ -99,7 +99,25 @@ class EngramModel(nn.Module, GenerationMixin):
 
         # 1. Initialize compressor if needed
         self.compressor = None
-        if config.enable_tokenizer_compression:
+        is_qwen_ple = (
+            getattr(config, "engine", "deepseek") == "qwen_ple"
+            or getattr(config, "table_spec", None) == "PLE_QWEN_V1"
+        )
+        if is_qwen_ple:
+            # PLE_QWEN_V1 hashes the original Qwen token ids directly.
+            config.enable_tokenizer_compression = False
+            if config.compressed_vocab_size is None:
+                model_vocab = getattr(
+                    getattr(base_model, "config", None), "vocab_size", None
+                )
+                tokenizer_vocab = len(tokenizer) if tokenizer is not None else None
+                config.compressed_vocab_size = model_vocab or tokenizer_vocab
+            if config.compressed_vocab_size is None:
+                raise ValueError(
+                    "compressed_vocab_size must be set (or inferred from model/tokenizer) "
+                    "for engine='qwen_ple'."
+                )
+        elif config.enable_tokenizer_compression:
             tokenizer_name = config.tokenizer_name_or_path
             self.compressor = CompressedTokenizer(tokenizer_name, tokenizer=tokenizer)
             # Synchronize the actual compressed vocab size to config
@@ -126,7 +144,7 @@ class EngramModel(nn.Module, GenerationMixin):
         )
         assert mapped_pad_id is not None, "pad_id must be set"
 
-        self.hash_mapping = NgramHashMapping(
+        self.hash_mapping = create_hash_mapping(
             engram_vocab_size_per_ngram=config.engram_vocab_size_per_ngram,
             ngram_sizes=config.ngram_sizes,
             n_head_per_ngram=config.n_head_per_ngram,
@@ -134,6 +152,8 @@ class EngramModel(nn.Module, GenerationMixin):
             compressed_vocab_size=config.compressed_vocab_size,
             pad_id=mapped_pad_id,
             seed=config.seed,
+            engine=getattr(config, "engine", "deepseek"),
+            table_spec=getattr(config, "table_spec", None),
         )
 
         # 3. Named adapter management & Initialization
@@ -883,7 +903,7 @@ class EngramModel(nn.Module, GenerationMixin):
         )
 
         # Initialize src_mapper with full target_layers to ensure deterministic prime generation
-        src_mapper = NgramHashMapping(
+        src_mapper = create_hash_mapping(
             engram_vocab_size_per_ngram=src_config.engram_vocab_size_per_ngram,
             ngram_sizes=src_config.ngram_sizes,
             n_head_per_ngram=src_config.n_head_per_ngram,
@@ -891,6 +911,8 @@ class EngramModel(nn.Module, GenerationMixin):
             compressed_vocab_size=src_config.compressed_vocab_size,
             pad_id=getattr(src_config, "pad_id", 2),
             seed=src_config.seed,
+            engine=getattr(src_config, "engine", "deepseek"),
+            table_spec=getattr(src_config, "table_spec", None),
         )
         target_mapper = self.hash_mapping
 
@@ -1084,6 +1106,13 @@ def get_engram_model(
     engram_config.hidden_size = metadata.hidden_size
     engram_config.pad_id = metadata.pad_token_id
     engram_config.layer_container_path = metadata.layer_container_path
+
+    # PLE_QWEN_V1 hashes the original Qwen token ids directly.
+    if (
+        getattr(engram_config, "engine", "deepseek") == "qwen_ple"
+        or getattr(engram_config, "table_spec", None) == "PLE_QWEN_V1"
+    ):
+        engram_config.enable_tokenizer_compression = False
 
     # If compression is disabled, the 'compressed' size is just the original vocab size
     if not engram_config.enable_tokenizer_compression:
