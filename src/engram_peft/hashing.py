@@ -343,6 +343,7 @@ def create_hash_mapping(
     seed: int,
     engine: str = "deepseek",
     table_spec: str | None = None,
+    prime_sizes: list[int] | None = None,
 ) -> NgramHashMapping | QwenPleHashMapping:
     """Factory selecting the deepseek or qwen_ple production hash mapping."""
     if engine == "qwen_ple" or table_spec == "PLE_QWEN_V1":
@@ -355,6 +356,7 @@ def create_hash_mapping(
             pad_id=pad_id,
             seed=seed,
             table_spec=table_spec or "PLE_QWEN_V1",
+            prime_sizes=prime_sizes,
         )
     return NgramHashMapping(
         compressed_vocab_size=compressed_vocab_size,

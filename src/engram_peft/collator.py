@@ -76,6 +76,7 @@ class EngramDataCollator(DataCollatorForLanguageModeling):
             seed=config.seed,
             engine=getattr(config, "engine", "deepseek"),
             table_spec=getattr(config, "table_spec", None),
+            prime_sizes=getattr(config, "prime_sizes", None),
         )
 
     @override

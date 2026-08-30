@@ -203,6 +203,13 @@ class EngramConfig(PreTrainedConfig):
             "help": "Table source: 'memory', 'engramdb:store', or 'engramdb:view'."
         },
     )
+    prime_sizes: list[int] | None = field(
+        default=None,
+        metadata={
+            "help": "Optional explicit 16 head prime sizes for PLE_QWEN_V1. "
+            + "Used only for synthetic/dev tables; real deployments leave None."
+        },
+    )
 
     def __init__(
         self,
@@ -237,6 +244,7 @@ class EngramConfig(PreTrainedConfig):
         engine: str = "deepseek",
         table_spec: str | None = None,
         table_source: str = "memory",
+        prime_sizes: list[int] | None = None,
         **kwargs: Any,
     ):
         """Constructs EngramConfig."""
@@ -281,6 +289,7 @@ class EngramConfig(PreTrainedConfig):
         self.engine = engine
         self.table_spec = table_spec
         self.table_source = table_source
+        self.prime_sizes = prime_sizes
 
         super().__init__(**kwargs)
         # Ensure extra kwargs are set, as PretrainedConfig might miss them in some environments

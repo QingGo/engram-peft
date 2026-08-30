@@ -154,6 +154,7 @@ class EngramModel(nn.Module, GenerationMixin):
             seed=config.seed,
             engine=getattr(config, "engine", "deepseek"),
             table_spec=getattr(config, "table_spec", None),
+            prime_sizes=getattr(config, "prime_sizes", None),
         )
 
         # 3. Named adapter management & Initialization
@@ -913,6 +914,7 @@ class EngramModel(nn.Module, GenerationMixin):
             seed=src_config.seed,
             engine=getattr(src_config, "engine", "deepseek"),
             table_spec=getattr(src_config, "table_spec", None),
+            prime_sizes=getattr(src_config, "prime_sizes", None),
         )
         target_mapper = self.hash_mapping
 

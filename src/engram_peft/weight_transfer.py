@@ -202,6 +202,7 @@ def remap_weights_from_corpus(
         seed=src_config.seed,
         engine=getattr(src_config, "engine", "deepseek"),
         table_spec=getattr(src_config, "table_spec", None),
+        prime_sizes=getattr(src_config, "prime_sizes", None),
     )
     # target_model's internal hash_mapping is already initialized
 
