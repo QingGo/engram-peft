@@ -1351,7 +1351,19 @@
 - <code>enable_telemetry</code> (<code>bool</code>, default: <code>False</code>): Enables detailed metric logging (norms, drift, max values).
 - <code>entropy_loss_weight</code> (<code>float</code>, default: <code>0.0</code>): Weight for the gating entropy penalty loss.
 - <code>backbone_freeze_steps</code> (<code>int</code>, default: <code>0</code>): Initial steps where backbone is frozen (Adapter-First warm-up).
-- <code>engram_dtype</code> (<code>Optional[str]</code>, default: <code>None</code>): Explicit precision for Engram layers (e.g., <code>"float32"</code>, <code>"float16"</code>, <code>"bfloat16"</code>). If <code>None</code>, it's auto-detected from the backbone's <code>compute_dtype</code>.</p>
+- <code>engram_dtype</code> (<code>Optional[str]</code>, default: <code>None</code>): Explicit precision for Engram layers (e.g., <code>"float32"</code>, <code>"float16"</code>, <code>"bfloat16"</code>). If <code>None</code>, it's auto-detected from the backbone's <code>compute_dtype</code>.
+- <code>engine</code> (<code>str</code>, default: <code>"deepseek"</code>): Engine implementation. <code>"deepseek"</code> keeps the legacy paper-aligned path; <code>"qwen_ple"</code> enables the Qwen PLE disk-table path.
+- <code>table_spec</code> (<code>Optional[str]</code>, default: <code>None</code>): Table row semantics id, e.g. <code>"PLE_QWEN_V1"</code>, <code>"ENG_DEEPSEEK_V1"</code>, or <code>None</code> for memory-only mode.
+- <code>table_source</code> (<code>str</code>, default: <code>"memory"</code>): Table source: <code>"memory"</code>, <code>"engramdb:store"</code>, or <code>"engramdb:view"</code>.
+- <code>prime_sizes</code> (<code>Optional[List[int]]</code>, default: <code>None</code>): Optional explicit 16 head prime sizes for <code>PLE_QWEN_V1</code>; only needed for synthetic/dev tables.
+- <code>table_store_path</code> (<code>Optional[str]</code>, default: <code>None</code>): EngramDB Store-I directory when <code>table_source="engramdb:store"</code>.
+- <code>table_model_dir</code> (<code>Optional[str]</code>, default: <code>None</code>): Model checkpoint directory used to auto-read FP8 <code>weight_scale</code>.
+- <code>table_shards</code> (<code>Optional[int]</code>, default: <code>None</code>): Store shard count; defaults to <code>PLE_QWEN_V1</code> real layout (<code>128</code>).
+- <code>table_rows_per_shard</code> (<code>Optional[int]</code>, default: <code>None</code>): Rows per shard; defaults to <code>PLE_QWEN_V1</code> real layout (<code>2_500_012</code>).
+- <code>table_width</code> (<code>Optional[int]</code>, default: <code>None</code>): Row width in bytes; defaults to <code>PLE_QWEN_V1</code> FP8 width (<code>160</code>).
+- <code>table_dtype</code> (<code>str</code>, default: <code>"float32"</code>): Store row dtype: <code>"float32"</code> for synthetic/dev stores, <code>"float8_e4m3fn"</code> for real PLE FP8 stores.
+- <code>table_scale</code> (<code>Optional[float]</code>, default: <code>None</code>): Explicit FP8 <code>weight_scale</code>; auto-read from <code>table_model_dir</code> if omitted.
+- <code>table_cache_size</code> (<code>int</code>, default: <code>4096</code>): LRU cache capacity for the disk-backed <code>MultiHeadEmbedding</code>.</p>
 <p><strong>Example Usage:</strong>
 <div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">engram_peft</span><span class="w"> </span><span class="kn">import</span> <span class="n">EngramConfig</span>
 
