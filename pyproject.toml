@@ -48,10 +48,25 @@ name = "pytorch"
 url = "https://download.pytorch.org/whl/cu124"
 explicit = true
 
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
 [tool.uv.sources]
-torch = { index = "pytorch" }
-torchvision = { index = "pytorch" }
-torchaudio = { index = "pytorch" }
+torch = [
+  { url = "https://github.com/QingGo/pytorch/releases/download/torch-2.9.1-macos15-py3.12-accelerate/torch-2.9.1a0+gitd38164a-cp312-cp312-macosx_10_15_x86_64.whl", marker = "sys_platform == 'darwin' and platform_machine == 'x86_64' and python_version == '3.12'" },
+  { index = "pytorch-cpu", marker = "(python_full_version != '3.12.*' and sys_platform == 'darwin') or (platform_machine != 'x86_64' and sys_platform == 'darwin') or sys_platform == 'win32'" },
+  { index = "pytorch", marker = "sys_platform == 'linux'" },
+]
+torchvision = [
+  { index = "pytorch-cpu", marker = "(python_full_version != '3.12.*' and sys_platform == 'darwin') or (platform_machine != 'x86_64' and sys_platform == 'darwin') or sys_platform == 'win32'" },
+  { index = "pytorch", marker = "sys_platform == 'linux'" },
+]
+torchaudio = [
+  { index = "pytorch-cpu", marker = "(python_full_version != '3.12.*' and sys_platform == 'darwin') or (platform_machine != 'x86_64' and sys_platform == 'darwin') or sys_platform == 'win32'" },
+  { index = "pytorch", marker = "sys_platform == 'linux'" },
+]
 
 [tool.mypy]
 python_version = "3.10"

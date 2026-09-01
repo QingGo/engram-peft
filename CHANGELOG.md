@@ -23,6 +23,9 @@
   Qwen token ids directly.
 - Route `EngramLayer`, `EngramModel`, data collator, and weight transfer through
   the new hash-mapping factory.
+- Add uv platform-conditioned torch sources: use the QingGo PyTorch wheel for
+  macOS x86_64 + Python 3.12, PyTorch CPU index for other Darwin/Windows, and the
+  existing cu124 index on Linux.
 
 ### Fixed
 - Make `examples/engram_knowledge_memory.py` use CPU when CUDA is unavailable,
