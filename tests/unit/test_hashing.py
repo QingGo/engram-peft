@@ -2,7 +2,11 @@ import numpy as np
 from scipy.stats import chisquare
 from sympy import isprime
 
-from engram_peft.hashing import NgramHashMapping
+from engram_peft.hashing import (
+    NgramHashMapping,
+    QwenPleHashMapping,
+    create_hash_mapping,
+)
 
 
 def test_hash_table_sizes_are_prime() -> None:
@@ -108,3 +112,68 @@ def test_layer_independence() -> None:
 
     # they should be entirely different due to distinct random multipliers and prime tables
     assert not np.array_equal(h1, h2), "Hashes from different layers should differ"
+
+
+def test_qwen_ple_default_prime_table() -> None:
+    """测试用例 6：PLE_QWEN_V1 默认 16 个 head prime 全部为质数。"""
+    mapping = QwenPleHashMapping(compressed_vocab_size=100)
+    primes = [p for heads in mapping.prime_tables[1] for p in heads]
+
+    assert len(primes) == 16
+    assert all(isprime(p) for p in primes)
+    # PLE 使用 bigram 8 heads + trigram 8 heads
+    assert [len(heads) for heads in mapping.prime_tables[1]] == [8, 8]
+
+
+def test_qwen_ple_hash_shape_and_determinism() -> None:
+    """测试用例 7：qwen_ple 哈希输出 shape 正确且可复现。"""
+    tokens = np.array([[1, 2, 3, 4, 5], [6, 7, 8, 9, 10]], dtype=np.int64)
+
+    mapping1 = QwenPleHashMapping(compressed_vocab_size=100)
+    mapping2 = QwenPleHashMapping(compressed_vocab_size=100)
+
+    hashes1 = mapping1.hash(tokens)
+    hashes2 = mapping2.hash(tokens)
+
+    assert set(hashes1) == {1}
+    assert hashes1[1].shape == (2, 5, 16)
+    np.testing.assert_array_equal(hashes1[1], hashes2[1])
+    # 本地索引应落在对应 head prime 范围内
+    for head_idx, prime in enumerate(sum(mapping1.prime_tables[1], [])):
+        assert hashes1[1][..., head_idx].max() < prime
+
+
+def test_create_hash_mapping_defaults_to_deepseek() -> None:
+    """测试用例 8：不设置 engine/table_spec 时必须保持旧 deepseek 路径。"""
+    mapping = create_hash_mapping(
+        compressed_vocab_size=100,
+        engram_vocab_size_per_ngram=[100, 100],
+        ngram_sizes=[2, 3],
+        n_head_per_ngram=8,
+        layer_ids=[1],
+        pad_id=2,
+        seed=0,
+    )
+    assert isinstance(mapping, NgramHashMapping)
+    assert not isinstance(mapping, QwenPleHashMapping)
+
+
+def test_create_hash_mapping_qwen_ple_selection() -> None:
+    """测试用例 9：engine='qwen_ple' 或 table_spec='PLE_QWEN_V1' 选择新映射。"""
+    kwargs = dict(
+        compressed_vocab_size=100,
+        engram_vocab_size_per_ngram=[100, 100],
+        ngram_sizes=[2, 3],
+        n_head_per_ngram=8,
+        layer_ids=[1],
+        pad_id=2,
+        seed=0,
+    )
+    assert isinstance(
+        create_hash_mapping(**kwargs, engine="qwen_ple"),
+        QwenPleHashMapping,
+    )
+    assert isinstance(
+        create_hash_mapping(**kwargs, table_spec="PLE_QWEN_V1"),
+        QwenPleHashMapping,
+    )

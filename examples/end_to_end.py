@@ -110,7 +110,7 @@ def train_engram(
 
     # Optionally apply LoRA before Engram
     if args.use_lora:
-        from peft import LoraConfig, get_peft_model
+        from peft import LoraConfig, get_peft_model  # noqa: PLC0415
 
         print("Applying LoRA adapters...")
         lora_config = LoraConfig(
@@ -194,7 +194,7 @@ def inference_demo(
     # Load trained Engram onto the base model
     print(f"Loading trained Engram from {ENGRAM_WEIGHTS_DIR}")
     if args.use_lora:
-        from peft import PeftModel
+        from peft import PeftModel  # noqa: PLC0415
 
         print("  Loading LoRA adapter...")
         with warnings.catch_warnings():
@@ -270,7 +270,7 @@ def resume_demo(
     # Simulate a script restart: load model from the saved checkpoint
     print("Loading model from checkpoint...")
     if args.use_lora:
-        from peft import PeftModel
+        from peft import PeftModel  # noqa: PLC0415
 
         print("  Loading LoRA adapter from checkpoint...")
         with warnings.catch_warnings():
@@ -321,9 +321,7 @@ def resume_demo(
         optimizers=(optimizer, scheduler),
     )
 
-    print(
-        f"Resuming training from checkpoint (target max_steps={resume_max_steps})..."
-    )
+    print(f"Resuming training from checkpoint (target max_steps={resume_max_steps})...")
     result = resume_trainer.train(resume_from_checkpoint=last_ckpt)
     print(f"Resume complete. Global step: {result.global_step}")
 
@@ -376,9 +374,7 @@ if __name__ == "__main__":
         tokenizer.pad_token = tokenizer.eos_token
 
     print("Loading Base Model...")
-    base_model = AutoModelForCausalLM.from_pretrained(
-        MODEL_NAME, dtype=torch.float16
-    )
+    base_model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, dtype=torch.float16)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     base_model = base_model.to(device)
 

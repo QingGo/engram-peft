@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any, Literal, cast
 
 import torch
+import wandb
 from omegaconf import OmegaConf
 from transformers import (
     AutoModelForCausalLM,
@@ -16,7 +17,6 @@ from transformers import (
 )
 
 import examples.benchmarks.methods as methods
-import wandb
 from engram_peft.utils import evaluate_model_loss
 from engram_peft.utils.device import ensure_single_gpu
 from examples.benchmarks.data import prepare_dataset

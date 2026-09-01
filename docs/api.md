@@ -39,6 +39,18 @@ Configuration class for Engram PEFT module. Inherits from `transformers.Pretrain
 - `entropy_loss_weight` (`float`, default: `0.0`): Weight for the gating entropy penalty loss.
 - `backbone_freeze_steps` (`int`, default: `0`): Initial steps where backbone is frozen (Adapter-First warm-up).
 - `engram_dtype` (`Optional[str]`, default: `None`): Explicit precision for Engram layers (e.g., `"float32"`, `"float16"`, `"bfloat16"`). If `None`, it's auto-detected from the backbone's `compute_dtype`.
+- `engine` (`str`, default: `"deepseek"`): Engine implementation. `"deepseek"` keeps the legacy paper-aligned path; `"qwen_ple"` enables the Qwen PLE disk-table path.
+- `table_spec` (`Optional[str]`, default: `None`): Table row semantics id, e.g. `"PLE_QWEN_V1"`, `"ENG_DEEPSEEK_V1"`, or `None` for memory-only mode.
+- `table_source` (`str`, default: `"memory"`): Table source: `"memory"`, `"engramdb:store"`, or `"engramdb:view"`.
+- `prime_sizes` (`Optional[List[int]]`, default: `None`): Optional explicit 16 head prime sizes for `PLE_QWEN_V1`; only needed for synthetic/dev tables.
+- `table_store_path` (`Optional[str]`, default: `None`): EngramDB Store-I directory when `table_source="engramdb:store"`.
+- `table_model_dir` (`Optional[str]`, default: `None`): Model checkpoint directory used to auto-read FP8 `weight_scale`.
+- `table_shards` (`Optional[int]`, default: `None`): Store shard count; defaults to `PLE_QWEN_V1` real layout (`128`).
+- `table_rows_per_shard` (`Optional[int]`, default: `None`): Rows per shard; defaults to `PLE_QWEN_V1` real layout (`2_500_012`).
+- `table_width` (`Optional[int]`, default: `None`): Row width in bytes; defaults to `PLE_QWEN_V1` FP8 width (`160`).
+- `table_dtype` (`str`, default: `"float32"`): Store row dtype: `"float32"` for synthetic/dev stores, `"float8_e4m3fn"` for real PLE FP8 stores.
+- `table_scale` (`Optional[float]`, default: `None`): Explicit FP8 `weight_scale`; auto-read from `table_model_dir` if omitted.
+- `table_cache_size` (`int`, default: `4096`): LRU cache capacity for the disk-backed `MultiHeadEmbedding`.
 
 **Example Usage:**
 ```python

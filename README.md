@@ -139,6 +139,7 @@ engram-peft train --config training_config.yaml --overrides "training_args.learn
 - **YAML-Driven CLI**: Fully declarative training workflow via YAML configurations with dynamic parameter overrides.
 - **Automated Inference Generation**: Progress-tracking CLI that automatically creates ready-to-run `inference.py` scripts for immediate verification.
 - **Mainstream Model Templates**: Out-of-the-box scripts for **Qwen 3.5-4B**, **Ministral-3-3B**, and **Gemma-4-E2B** with quantization support.
+- **Qwen PLE / EngramDB Disk Tables**: Native support for `engine="qwen_ple"` and `table_spec="PLE_QWEN_V1"`, including deterministic Qwen PLE hashing and automatic EngramDB Store-I disk-table installation via `table_source="engramdb:store"`.
 - **Multimodal & Hybrid Architecture Support**: Native support for recursive layer discovery in complex wrappers and synchronization of nested `text_config` attributes for state-of-the-art models.
 - **Hugging Face Hub Integration**: Support for pushing adapters via `push_to_hub` and loading directly from Hub IDs via `from_pretrained`, fully aligned with the PEFT ecosystem.
 - **TRL & SFTTrainer Compatibility**: Native `EngramCompatibleSFTTrainer` that handles model preparation, hash precomputation, and **sparse gradient clipping** automatically for seamless instruction tuning.

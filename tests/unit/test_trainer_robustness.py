@@ -97,8 +97,12 @@ def test_load_from_checkpoint_with_engram_peft_composite():
     with tempfile.TemporaryDirectory() as ckpt_dir:
         # Create valid checkpoint files simulating Engram + LoRA save
         dummy_state = {"dummy": torch.zeros(1)}
-        safe_save_file(dummy_state, _os.path.join(ckpt_dir, "adapter_model.safetensors"))
-        safe_save_file(dummy_state, _os.path.join(ckpt_dir, "engram_adapters.safetensors"))
+        safe_save_file(
+            dummy_state, _os.path.join(ckpt_dir, "adapter_model.safetensors")
+        )
+        safe_save_file(
+            dummy_state, _os.path.join(ckpt_dir, "engram_adapters.safetensors")
+        )
 
         # Mock PeftModel (the inner base model loaded with LoRA)
         # Use spec=PeftModel so isinstance checks pass for _is_peft_model

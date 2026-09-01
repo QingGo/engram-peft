@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 from tqdm import tqdm
 
 from engram_peft.compression import CompressedTokenizer
-from engram_peft.hashing import NgramHashMapping
+from engram_peft.hashing import HashMapping, create_hash_mapping
 from engram_peft.layer import EngramLayer
 from engram_peft.types import jaxtyped
 from engram_peft.utils import safe_tokenizer_from_pretrained
@@ -75,8 +75,8 @@ def align_embedding_table(
     target_config: EngramConfig,
     src_layer_id: int,
     target_layer_id: int,
-    target_mapper: NgramHashMapping,
-    src_mapper: NgramHashMapping,
+    target_mapper: HashMapping,
+    src_mapper: HashMapping,
 ) -> Float[torch.Tensor, "target_capacity dim"]:
     """
     Slices and pads the embedding table between different configurations.
@@ -192,7 +192,7 @@ def remap_weights_from_corpus(
     )
     assert src_mapped_pad_id is not None, "source pad_id must be set"
 
-    src_mapper = NgramHashMapping(
+    src_mapper = create_hash_mapping(
         engram_vocab_size_per_ngram=src_config.engram_vocab_size_per_ngram,
         ngram_sizes=src_config.ngram_sizes,
         n_head_per_ngram=src_config.n_head_per_ngram,
@@ -200,6 +200,9 @@ def remap_weights_from_corpus(
         compressed_vocab_size=src_config.compressed_vocab_size,
         pad_id=src_mapped_pad_id,
         seed=src_config.seed,
+        engine=getattr(src_config, "engine", "deepseek"),
+        table_spec=getattr(src_config, "table_spec", None),
+        prime_sizes=getattr(src_config, "prime_sizes", None),
     )
     # target_model's internal hash_mapping is already initialized
 
@@ -335,7 +338,7 @@ def _update_index_maps(
     src_hashes: dict[int, np.ndarray],
     target_hashes: dict[int, np.ndarray],
     src_state_dict: dict[str, torch.Tensor],
-    src_mapper: NgramHashMapping,
+    src_mapper: HashMapping,
     _target_config: EngramConfig,
 ) -> None:
     """Helper to update index_maps from hashes."""
@@ -385,7 +388,7 @@ def _get_aligned_hashes(
     text: str,
     src_tokenizer: Any,
     target_tokenizer: Any,
-    src_mapper: NgramHashMapping,
+    src_mapper: HashMapping,
     target_model: EngramModelProtocol,
 ) -> tuple[dict[int, np.ndarray], dict[int, np.ndarray]]:
     """

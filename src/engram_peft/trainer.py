@@ -14,8 +14,6 @@ from transformers.trainer import TRAINING_ARGS_NAME, _is_peft_model
 
 from engram_peft.model import EngramModel
 from engram_peft.saving import load_engram_weights
-
-logger = logging.getLogger(__name__)
 from engram_peft.utils import (
     apply_group_wise_clipping,
     as_dict,
@@ -27,6 +25,8 @@ from engram_peft.utils import (
     iter_parameters,
 )
 from engram_peft.utils.compat import get_config_attr, wash_model
+
+logger = logging.getLogger(__name__)
 
 
 def _is_deepspeed_enabled(args: Any) -> bool:
