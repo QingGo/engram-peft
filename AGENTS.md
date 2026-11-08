@@ -27,7 +27,7 @@
 ├─ 处理HF Trainer集成或generate()生成 → 强制加载：hf-ecosystem-integration
 ├─ 遇到不确定的第三方API或未知底层异常 → 强制加载：api-source-tracing
 ├─ 修改公开API/新增功能 → 强制加载：docs-sync
-├─ 更新agent记忆/会话收尾/记录踩坑/熔断排错 → 强制加载：memory-update
+├─ 更新agent记忆/会话收尾/记录踩坑/熔断排错 → 强制加载：short-term-memory
 └─ 复杂任务（如修复生成报错）→ 按依赖顺序加载多个技能
 ```
 
@@ -108,7 +108,7 @@ uv run env SPRINTEST_TARGET_PKG=engram_peft stest tests/unit --cov=src/engram_pe
 代码与文档必须保持同步，以下情况必须同步更新文档：
 1. 修改了任何公开API的参数、返回值或行为 → 更新 `docs/api/`
 2. 新增了训练模式、功能或使用方法 → 更新 `docs/tutorials/`
-3. 变更了性能基准或架构设计 → 更新 `docs/performance.md` 或 `docs/paper_alignment.md`
+3. 变更了性能基准或架构设计 → 更新 `docs/paper_alignment.md`（性能/架构对齐）
 4. README.md 和 README_zh.md 必须与代码变更同步更新
 
 详细规范见 `docs-sync` 技能包。
@@ -142,10 +142,10 @@ uv run env SPRINTEST_TARGET_PKG=engram_peft stest tests/unit --cov=src/engram_pe
 - 模板依赖：不存在则自动基于 `.agent_memory.template.md` 创建
 
 ### 10.1 读机制
-每次开启新复杂任务/跨文件重构前，**必须先读取 `memory-update` 技能规范 + 主动读取 `.agent_memory.md`** 恢复上下文，不依赖全局索引。
+每次开启新复杂任务/跨文件重构前，**必须先读取 `short-term-memory` 技能规范 + 主动读取 `.agent_memory.md`** 恢复上下文，不依赖全局索引。
 
 ### 10.2 强制写入场景（短期+长期）
-以下情况**必须执行记忆更新**，且严格遵循 `memory-update` 技能规范：
+以下情况**必须执行记忆更新**，且严格遵循 `short-term-memory` 技能规范：
 1. 短期：当前会话产生新临时TODO、即时踩坑、未解决问题
 2. 短期：会话即将结束，需归档当前上下文
 3. 长期：核心架构决策、人类否决/确认方案
@@ -183,7 +183,7 @@ uv run env SPRINTEST_TARGET_PKG=engram_peft stest tests/unit --cov=src/engram_pe
 当系统性错误发生时，你必须主动阻断无效的试错。请严格遵守 **3 次重试法则**：
 - **触发条件**：修复同一个 Bug，连续 **3 次** 运行测试仍报同类错误，**立即停止编码**
 - **必做操作**：输出《排错总结》，包含：报错信息、3次尝试方案+失败原因、底层故障猜想
-- **强制记忆更新**：熔断后**必须通过 `memory-update` 技能**，将排错过程写入 `.agent_memory.md` 短期记忆
+- **强制记忆更新**：熔断后**必须通过 `short-term-memory` 技能**，将排错过程写入 `.agent_memory.md` 短期记忆
 - 等待人类指令/架构指导后再继续
 
 ---
